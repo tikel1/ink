@@ -76,7 +76,14 @@ cp .env.example .env
 | `DATA_DIR` | SQLite + images location |
 
 ## Deploy
-Any always-on host: `docker build -t artframe . && docker run -p 8000:8000 -v artframe-data:/data --env-file .env artframe`, behind HTTPS (Caddy/Nginx + Let's Encrypt). Set the firmware's `backend_base` to your `PUBLIC_BASE_URL` — see [FIRMWARE.md](FIRMWARE.md).
+**Render (one click):** New + → Blueprint → pick this repo (`render.yaml` is
+included). After the first deploy, set `PLATFORM_OPENAI_API_KEY`, a
+`MASTER_ENCRYPTION_KEY` (`python -m backend.crypto`), and `PUBLIC_BASE_URL` (the
+URL Render gives you) in the service's Environment tab.
+
+**Any other host:** `docker build -t ink . && docker run -p 8000:8000 -v ink-data:/data --env-file .env ink`, behind HTTPS.
+
+Then set the firmware's `backend_base` to your `PUBLIC_BASE_URL` — see [FIRMWARE.md](FIRMWARE.md).
 
 ## Flipping a user to their own key (remote)
 ```bash
