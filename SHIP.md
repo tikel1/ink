@@ -21,8 +21,9 @@ generation. Estimated time: ~1–2 hours the first time.
 - [ ] A USB‑C cable and the **Seeed TRMNL 7.5" kit(s)** (1–3 of them)
 
 **Per frame, before flashing — know these**
-- [ ] The friend's **timezone** (e.g. `Asia/Jerusalem`) and desired **wake hour**
-- [ ] (Location is set later in the app, not at flash time)
+- [ ] The friend's **timezone** (e.g. `Asia/Jerusalem`)
+- [ ] (Location and the daily generation hour are set later in the app, not at
+      flash time)
 
 ---
 
@@ -107,14 +108,15 @@ For each kit, edit the substitutions at the top of
 ```yaml
 substitutions:
   backend_base: "https://your-box.tailnet.ts.net"   # SAME as PUBLIC_BASE_URL
-  wake_hour: "6"
   timezone:  "Asia/Jerusalem"
+  # idle_minutes / powered_voltage / powered_refresh_minutes have sane defaults
 ```
 ```bash
 esphome run firmware/trmnl-artframe.yaml
 ```
 All frames can use the same `backend_base`; each is identified automatically by
-its WiFi MAC. Set `timezone`/`wake_hour` per friend.
+its WiFi MAC. On USB power a frame stays on; on battery it sleeps and wakes on
+the button (KEY1).
 
 ---
 
@@ -124,11 +126,12 @@ For each frame:
 1. Power it on → it shows "Join WiFi: Ink Frame".
 2. Hold the button → join the **Ink Frame** hotspot on your phone → enter the
    WiFi it will use (your WiFi for testing; the friend's WiFi if you know it).
-3. The frame shows a **6‑digit code**.
-4. Open `https://<your-url>/app/` → **Get started** (or restore your account) →
-   **Pair frame** → enter the code → set the friend's **location** and interests.
+3. The frame shows a **QR + 6‑digit code**.
+4. **Scan the QR** with your phone camera (opens the app and pairs in one tap),
+   or open `https://<your-url>/app/` → **Get started** → **Pair frame** → enter
+   the code. Then set the friend's **location**, **wake hour**, and interests.
 5. Tap **Regenerate** → in ~20–30s the app shows the first artwork. Press **KEY1**
-   on the frame to pull it immediately (otherwise it appears at the next wake).
+   on the frame to pull it immediately (on USB power it also refreshes on its own).
 
 ---
 

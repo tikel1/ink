@@ -276,15 +276,38 @@ function wireAccount() {
 function flash(id, text) { const el = $(id); el.textContent = text; el.hidden = false; }
 function showError(id, e) { const el = $(id); el.textContent = e.message; el.hidden = false; }
 
+// Scanning the QR on the frame opens /app/?code=NNNNNN — pair in one tap.
+async function syncByCode(code) {
+  try {
+    const dev = await api("/devices/pair", { method: "POST", body: { pairing_code: code } });
+    await showDevices();
+    await openDevice(dev.id);
+    flash("action-msg", "Frame connected. Set its location below.");
+  } catch (e) {
+    await showDevices();
+    $("pair-code").value = code;
+    showError("pair-error", e);
+  }
+}
+
 async function init() {
   wireWelcome(); wirePairing(); wireEditor(); wireAccount();
   const code = new URLSearchParams(location.search).get("code");
-  if (token()) {
-    try {
-      await showDevices();
-      if (code && /^\d{6}$/.test(code)) $("pair-code").value = code;
-    } catch { localStorage.removeItem(TOKEN_KEY); showScreen("welcome"); }
-  } else {
+  const valid = code && /^\d{6}$/.test(code);
+  try {
+    // QR scanned with no account yet → create one silently, then pair.
+    if (!token() && valid) {
+      const { token: t } = await api("/account", { method: "POST", auth: false });
+      localStorage.setItem(TOKEN_KEY, t);
+    }
+    if (token()) {
+      if (valid) await syncByCode(code);
+      else await showDevices();
+    } else {
+      showScreen("welcome");
+    }
+  } catch {
+    localStorage.removeItem(TOKEN_KEY);
     showScreen("welcome");
   }
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});

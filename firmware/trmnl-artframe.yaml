@@ -4,20 +4,27 @@
 # Every frame runs the SAME firmware and points at the SAME backend; the device
 # identifies itself by its WiFi MAC, so there is nothing per-device to flash.
 #
-# Onboarding:   power on -> hold button -> join "Ink Frame" WiFi ->
-#               enter home WiFi -> the frame shows a 6-digit pairing code ->
-#               add it in the Ink app.
-# Buttons:      KEY1 = refresh / wake, KEY2 = stay awake,
-#               KEY3 = short press: sleep · hold 5s: factory reset (WiFi+prefs).
+# Behavior:
+#   • No WiFi saved  -> shows "Join WiFi: Ink Frame" + hosts an onboarding hotspot.
+#   • WiFi, unpaired -> shows a QR + 6-digit code; scan/enter it in the Ink app.
+#   • Paired:
+#       - On USB power -> stays ON, refreshes the art periodically.
+#       - On battery   -> sleeps; press KEY1 to wake + refresh, then sleeps again
+#                         after `idle_minutes` of no interaction.
+#   Buttons: KEY1 = wake/refresh, KEY2 = stay awake, KEY3 = tap: sleep · hold 5s:
+#   factory reset (clears WiFi + pairing).
 #
-# Set `backend_base` to your deployed backend URL before flashing.
+# Set `backend_base` before flashing. `timezone` is for the clock; the daily
+# generation hour is set per frame in the app.
 # ---------------------------------------------------------------------------
 substitutions:
   device_name: ink-frame
   friendly_name: "Ink Frame"
   backend_base: "https://frames.example.com"
-  wake_hour: "6"
   timezone: "Asia/Jerusalem"
+  idle_minutes: "10"               # battery: sleep after this much idle time
+  powered_voltage: "4.15"          # >= this reads as "on USB power" (calibrate)
+  powered_refresh_minutes: "60"    # powered: how often to re-fetch the art
 
 esphome:
   name: ${device_name}
@@ -51,7 +58,7 @@ logger:
   baud_rate: 115200
 
 http_request:
-  useragent: esphome/housekaplan
+  useragent: esphome/ink
   timeout: 30s
   verify_ssl: false
 
@@ -67,17 +74,18 @@ globals:
   - id: image_loaded
     type: bool
     initial_value: "false"
+  - id: is_powered
+    type: bool
+    initial_value: "false"
 
 deep_sleep:
   id: deep_sleep_component
   wakeup_pin:
-    number: GPIO2
+    number: GPIO2            # KEY1 wakes the frame from deep sleep
     inverted: true
     mode: INPUT_PULLUP
     allow_other_uses: true
 
-# Official ESPHome factory reset: erases all saved preferences (incl. WiFi) and
-# reboots into the onboarding captive portal.
 button:
   - platform: factory_reset
     id: factory_reset_button
@@ -86,30 +94,31 @@ button:
 
 binary_sensor:
   - platform: gpio
-    name: "KEY1 refresh"
+    name: "KEY1 wake/refresh"
     internal: true
     pin: { number: GPIO2, mode: INPUT_PULLUP, inverted: true, allow_other_uses: true }
     on_press:
       - globals.set: { id: is_sleeping_icon, value: "false" }
-      - component.update: online_artwork
+      - script.execute: idle_timer        # reset the idle countdown
+      - component.update: online_artwork   # pull the latest art
 
   - platform: gpio
     name: "KEY2 stay awake"
     internal: true
     pin: { number: GPIO3, mode: INPUT_PULLUP, inverted: true }
     on_press:
-      - script.stop: safety_timer
+      - script.stop: idle_timer
 
   - platform: gpio
     name: "KEY3"
     internal: true
     pin: { number: GPIO5, mode: INPUT_PULLUP, inverted: true }
     on_multi_click:
-      - timing:           # quick tap -> sleep now
+      - timing:                            # quick tap -> sleep now
           - ON for at most 1s
         then:
           - script.execute: go_to_sleep
-      - timing:           # hold 5s -> factory reset (re-assign WiFi + account)
+      - timing:                            # hold 5s -> factory reset
           - ON for at least 5s
         then:
           - logger.log: "Factory reset (held 5s)"
@@ -118,6 +127,7 @@ binary_sensor:
 sensor:
   - platform: adc
     pin: GPIO1
+    id: batt
     name: "Battery Voltage"
     update_interval: 60s
     attenuation: 12db
@@ -129,8 +139,17 @@ font:
     id: roboto
     size: 28
 
+# Powered mode: re-fetch the art periodically (guarded so battery mode ignores it).
+interval:
+  - interval: ${powered_refresh_minutes}min
+    then:
+      - if:
+          condition:
+            lambda: "return id(is_powered);"
+          then:
+            - component.update: online_artwork
+
 online_image:
-  # URL is set at runtime to <backend>/media/current/<mac>.png (see boot_sequence).
   url: "${backend_base}/media/current/placeholder.png"
   id: online_artwork
   format: png
@@ -139,9 +158,7 @@ online_image:
   update_interval: never
   on_download_finished:
     then:
-      - script.stop: safety_timer
-      - script.execute: safety_timer
-      - lambda: 'if (id(online_artwork).get_width() > 0) { id(image_loaded) = true; }'
+      - lambda: "if (id(online_artwork).get_width() > 0) { id(image_loaded) = true; }"
       - component.update: my_display
 
 spi:
@@ -178,37 +195,43 @@ display:
 script:
   - id: boot_sequence
     then:
-      - wait_until: wifi.connected   # stays awake through captive-portal onboarding
+      - wait_until: wifi.connected    # stays awake through captive-portal onboarding
       - delay: 3s
       - wait_until:
           condition:
             lambda: "return id(sntp_time).now().is_valid();"
           timeout: 30s
-      # Point the image at this device's per-MAC URL on the backend.
       - lambda: |-
           std::string url = "${backend_base}/media/current/" +
                             get_mac_address() + ".png";
           id(online_artwork).set_url(url.c_str());
       - component.update: online_artwork
-      - script.execute: safety_timer
+      - delay: 2s
+      # Decide power mode from the battery rail voltage.
+      - component.update: batt
+      - delay: 400ms
+      - lambda: "id(is_powered) = (id(batt).state >= ${powered_voltage});"
+      - if:
+          condition:
+            lambda: "return id(is_powered);"
+          then:
+            - logger.log: "On USB power - staying awake"
+          else:
+            - logger.log: "On battery - will sleep when idle"
+            - script.execute: idle_timer
 
-  - id: safety_timer
+  # Battery idle timer: any KEY1 press restarts it; KEY2 stops it.
+  - id: idle_timer
+    mode: restart
     then:
-      - delay: 30min
+      - delay: ${idle_minutes}min
       - script.execute: go_to_sleep
 
   - id: go_to_sleep
     then:
+      - logger.log: "Sleeping (wake with KEY1)"
       - globals.set: { id: is_sleeping_icon, value: "true" }
       - component.update: my_display
       - delay: 3s
-      - lambda: |-
-          auto t = id(sntp_time).now();
-          int sleep_sec = 3600;
-          if (t.is_valid()) {
-            int target = ${wake_hour} * 3600;
-            int now = t.hour * 3600 + t.minute * 60 + t.second;
-            sleep_sec = (now < target) ? (target - now) : (86400 - now + target);
-          }
-          id(deep_sleep_component).set_sleep_duration((long long)sleep_sec * 1000);
-          id(deep_sleep_component).begin_sleep();
+      # No sleep duration -> wakes only on the KEY1 pin.
+      - lambda: "id(deep_sleep_component).begin_sleep();"

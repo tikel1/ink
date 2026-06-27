@@ -9,32 +9,40 @@ by its WiFi MAC, and account binding happens later via a pairing code.
 ```yaml
 substitutions:
   backend_base: "https://frames.example.com"   # your PUBLIC_BASE_URL
-  wake_hour: "6"
   timezone:  "Asia/Jerusalem"
+  idle_minutes: "10"               # battery: sleep after this much idle time
+  powered_voltage: "4.15"          # >= this reads as "on USB power" (calibrate)
+  powered_refresh_minutes: "60"    # powered: how often to re-fetch the art
 ```
-Flash with `esphome run firmware/trmnl-artframe.yaml`.
+The daily generation *hour* is set per frame in the app, not here. Flash with
+`esphome run firmware/trmnl-artframe.yaml`.
 
 ## How it works
 - On boot the frame waits for WiFi (captive-portal onboarding), then sets its
   image URL to `<backend_base>/media/current/<mac>.png` at runtime and fetches.
-- The backend auto-registers an unknown MAC and returns a **pairing-code splash**
-  until the frame is added to an account.
-- Once paired, the backend returns the daily artwork and a `refresh_rate` equal
-  to seconds-until-`wake_hour`, so the frame deep-sleeps until morning.
+- The backend auto-registers an unknown MAC and returns a **QR + pairing-code
+  splash** until the frame is added to an account.
+- **Power-aware behavior** (decided each boot from the battery rail voltage):
+  - **On USB power** → the frame stays **on** and re-fetches the art every
+    `powered_refresh_minutes`.
+  - **On battery** → it shows the current art, then **deep-sleeps after
+    `idle_minutes`** of no button activity. Press **KEY1** to wake; it re-fetches
+    today's art, shows it, and sleeps again after the idle window. (KEY1 is the
+    wake pin, so the frame is fully off in between — maximal battery life.)
 
 ## Onboarding (what the user does)
 1. Power on → screen shows `Join WiFi: Ink Frame`.
 2. Hold the button ~5s → the frame becomes the `Ink Frame` hotspot.
 3. Join it on a phone → captive portal → enter home WiFi.
-4. The frame connects and shows a **6-digit pairing code + QR**.
-5. In the Ink app: create an account, **Add a frame**, enter the code,
-   set location / interests / etc. The first artwork appears on the next wake or
-   a KEY1 press.
+4. The frame connects and shows a **QR + 6-digit pairing code**.
+5. **Scan the QR** (opens the Ink app and pairs in one tap), or open the app and
+   type the code. Then set location / interests. The first artwork appears on the
+   next refresh or a **KEY1** press.
 
 ## Buttons
 | Button | Pin | Action |
 |---|---|---|
-| KEY1 | GPIO2 | Refresh now (and wakes from deep sleep) |
+| KEY1 | GPIO2 | Wake from sleep + refresh now |
 | KEY2 | GPIO3 | Stay awake (cancel auto-sleep) |
 | KEY3 | GPIO5 | Tap = sleep now · **hold 5s = factory reset** |
 
@@ -52,4 +60,10 @@ Flash with `esphome run firmware/trmnl-artframe.yaml`.
 ## Notes
 - **HTTPS** required (`verify_ssl: false` skips cert pinning for the public
   image). `ota: platform: esphome` allows WiFi firmware updates later.
-- **Battery**: one wake/day ≈ months per charge; voltage is logged from GPIO1.
+- **Power detection is a voltage heuristic** (battery rail ≥ `powered_voltage`
+  reads as "plugged in"). The XIAO board has no clean USB-sense pin, so calibrate
+  `powered_voltage` against a real device — a freshly charged battery can read
+  high while unplugged. Adjust if a battery frame won't sleep or a powered frame
+  sleeps.
+- **Battery life**: on battery it only wakes on KEY1, so it sips power between
+  presses; expect months of standby on the 2000 mAh cell.
