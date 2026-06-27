@@ -1,6 +1,6 @@
 // App-shell cache so the PWA installs and opens offline.
 // API + media always hit the network.
-const CACHE = "ink-app-v5";
+const CACHE = "ink-app-v6";
 const SHELL = ["./", "index.html", "app.js", "styles.css", "manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {
