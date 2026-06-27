@@ -1,0 +1,214 @@
+# ---------------------------------------------------------------------------
+# Ink — product firmware (ESPHome, multi-tenant backend).
+#
+# Every frame runs the SAME firmware and points at the SAME backend; the device
+# identifies itself by its WiFi MAC, so there is nothing per-device to flash.
+#
+# Onboarding:   power on -> hold button -> join "Ink Frame" WiFi ->
+#               enter home WiFi -> the frame shows a 6-digit pairing code ->
+#               add it in the Ink app.
+# Buttons:      KEY1 = refresh / wake, KEY2 = stay awake,
+#               KEY3 = short press: sleep · hold 5s: factory reset (WiFi+prefs).
+#
+# Set `backend_base` to your deployed backend URL before flashing.
+# ---------------------------------------------------------------------------
+substitutions:
+  device_name: ink-frame
+  friendly_name: "Ink Frame"
+  backend_base: "https://frames.example.com"
+  wake_hour: "6"
+  timezone: "Asia/Jerusalem"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  on_boot:
+    priority: 600
+    then:
+      - globals.set: { id: is_sleeping_icon, value: "false" }
+      - script.execute: boot_sequence
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  framework:
+    type: arduino
+
+wifi:
+  power_save_mode: light
+  ap:
+    ssid: ${friendly_name}   # onboarding hotspot when no WiFi is saved
+  on_connect:
+    - logger.log: "WiFi connected"
+
+captive_portal:
+
+ota:
+  - platform: esphome
+
+logger:
+  level: INFO
+  baud_rate: 115200
+
+http_request:
+  useragent: esphome/housekaplan
+  timeout: 30s
+  verify_ssl: false
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: ${timezone}
+
+globals:
+  - id: is_sleeping_icon
+    type: bool
+    initial_value: "false"
+  - id: image_loaded
+    type: bool
+    initial_value: "false"
+
+deep_sleep:
+  id: deep_sleep_component
+  wakeup_pin:
+    number: GPIO2
+    inverted: true
+    mode: INPUT_PULLUP
+    allow_other_uses: true
+
+# Official ESPHome factory reset: erases all saved preferences (incl. WiFi) and
+# reboots into the onboarding captive portal.
+button:
+  - platform: factory_reset
+    id: factory_reset_button
+    name: "Factory Reset"
+    internal: true
+
+binary_sensor:
+  - platform: gpio
+    name: "KEY1 refresh"
+    internal: true
+    pin: { number: GPIO2, mode: INPUT_PULLUP, inverted: true, allow_other_uses: true }
+    on_press:
+      - globals.set: { id: is_sleeping_icon, value: "false" }
+      - component.update: online_artwork
+
+  - platform: gpio
+    name: "KEY2 stay awake"
+    internal: true
+    pin: { number: GPIO3, mode: INPUT_PULLUP, inverted: true }
+    on_press:
+      - script.stop: safety_timer
+
+  - platform: gpio
+    name: "KEY3"
+    internal: true
+    pin: { number: GPIO5, mode: INPUT_PULLUP, inverted: true }
+    on_multi_click:
+      - timing:           # quick tap -> sleep now
+          - ON for at most 1s
+        then:
+          - script.execute: go_to_sleep
+      - timing:           # hold 5s -> factory reset (re-assign WiFi + account)
+          - ON for at least 5s
+        then:
+          - logger.log: "Factory reset (held 5s)"
+          - button.press: factory_reset_button
+
+sensor:
+  - platform: adc
+    pin: GPIO1
+    name: "Battery Voltage"
+    update_interval: 60s
+    attenuation: 12db
+    filters:
+      - multiply: 1.1
+
+font:
+  - file: "gfonts://Roboto"
+    id: roboto
+    size: 28
+
+online_image:
+  # URL is set at runtime to <backend>/media/current/<mac>.png (see boot_sequence).
+  url: "${backend_base}/media/current/placeholder.png"
+  id: online_artwork
+  format: png
+  resize: 800x480
+  type: BINARY
+  update_interval: never
+  on_download_finished:
+    then:
+      - script.stop: safety_timer
+      - script.execute: safety_timer
+      - lambda: 'if (id(online_artwork).get_width() > 0) { id(image_loaded) = true; }'
+      - component.update: my_display
+
+spi:
+  clk_pin: GPIO7
+  mosi_pin: GPIO9
+
+display:
+  - platform: waveshare_epaper
+    id: my_display
+    cs_pin: GPIO44
+    dc_pin: GPIO10
+    reset_pin: GPIO38
+    busy_pin: { number: GPIO4, inverted: true }
+    model: 7.50inv2
+    update_interval: never
+    lambda: |-
+      if (id(image_loaded) && id(online_artwork).get_width() > 0) {
+        it.image(0, 0, id(online_artwork), Color::BLACK, Color::WHITE);
+      } else {
+        it.fill(Color::WHITE);
+        it.print(400, 210, id(roboto), Color::BLACK, TextAlign::CENTER, "Setting up...");
+        it.print(400, 260, id(roboto), Color::BLACK, TextAlign::CENTER,
+                 "Join WiFi: ${friendly_name}");
+      }
+      it.filled_rectangle(0, 0, 16, 16, Color::BLACK);
+      if (id(is_sleeping_icon)) {
+        it.filled_circle(8, 8, 6, Color::WHITE);
+        it.filled_circle(11, 5, 6, Color::BLACK);
+      } else {
+        it.line(3, 8, 7, 13, Color::WHITE);
+        it.line(7, 13, 14, 3, Color::WHITE);
+      }
+
+script:
+  - id: boot_sequence
+    then:
+      - wait_until: wifi.connected   # stays awake through captive-portal onboarding
+      - delay: 3s
+      - wait_until:
+          condition:
+            lambda: "return id(sntp_time).now().is_valid();"
+          timeout: 30s
+      # Point the image at this device's per-MAC URL on the backend.
+      - lambda: |-
+          std::string url = "${backend_base}/media/current/" +
+                            get_mac_address() + ".png";
+          id(online_artwork).set_url(url.c_str());
+      - component.update: online_artwork
+      - script.execute: safety_timer
+
+  - id: safety_timer
+    then:
+      - delay: 30min
+      - script.execute: go_to_sleep
+
+  - id: go_to_sleep
+    then:
+      - globals.set: { id: is_sleeping_icon, value: "true" }
+      - component.update: my_display
+      - delay: 3s
+      - lambda: |-
+          auto t = id(sntp_time).now();
+          int sleep_sec = 3600;
+          if (t.is_valid()) {
+            int target = ${wake_hour} * 3600;
+            int now = t.hour * 3600 + t.minute * 60 + t.second;
+            sleep_sec = (now < target) ? (target - now) : (86400 - now + target);
+          }
+          id(deep_sleep_component).set_sleep_duration((long long)sleep_sec * 1000);
+          id(deep_sleep_component).begin_sleep();

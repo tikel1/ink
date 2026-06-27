@@ -1,0 +1,1 @@
+"""Daily artwork generation pipeline."""

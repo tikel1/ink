@@ -1,0 +1,84 @@
+"""Daily-artwork persistence (kept separate from device/account repo)."""
+from __future__ import annotations
+
+import sqlite3
+from dataclasses import dataclass
+from typing import Optional
+
+from .db import get_connection
+from .repositories import now_iso
+
+READY = "ready"
+FAILED = "failed"
+
+
+@dataclass(frozen=True)
+class DailyArtwork:
+    device_id: str
+    date: str
+    image_path: Optional[str]
+    archive_path: Optional[str]
+    event_text_en: Optional[str]
+    event_text_he: Optional[str]
+    weather_summary: Optional[str]
+    status: str
+    created_at: str
+
+    @staticmethod
+    def from_row(row: sqlite3.Row) -> "DailyArtwork":
+        return DailyArtwork(**{k: row[k] for k in row.keys()})
+
+
+def upsert(artwork: DailyArtwork) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """INSERT INTO daily_artwork
+               (device_id, date, image_path, archive_path, event_text_en,
+                event_text_he, weather_summary, status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(device_id, date) DO UPDATE SET
+                 image_path = excluded.image_path,
+                 archive_path = excluded.archive_path,
+                 event_text_en = excluded.event_text_en,
+                 event_text_he = excluded.event_text_he,
+                 weather_summary = excluded.weather_summary,
+                 status = excluded.status""",
+            (
+                artwork.device_id, artwork.date, artwork.image_path,
+                artwork.archive_path, artwork.event_text_en, artwork.event_text_he,
+                artwork.weather_summary, artwork.status, artwork.created_at,
+            ),
+        )
+
+
+def get(device_id: str, date: str) -> Optional[DailyArtwork]:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM daily_artwork WHERE device_id = ? AND date = ?",
+            (device_id, date),
+        ).fetchone()
+        return DailyArtwork.from_row(row) if row else None
+
+
+def latest_ready(device_id: str) -> Optional[DailyArtwork]:
+    with get_connection() as conn:
+        row = conn.execute(
+            """SELECT * FROM daily_artwork WHERE device_id = ? AND status = ?
+               ORDER BY date DESC LIMIT 1""",
+            (device_id, READY),
+        ).fetchone()
+        return DailyArtwork.from_row(row) if row else None
+
+
+def list_archive(device_id: str, limit: int = 30) -> list[DailyArtwork]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """SELECT * FROM daily_artwork WHERE device_id = ? AND status = ?
+               ORDER BY date DESC LIMIT ?""",
+            (device_id, READY, limit),
+        ).fetchall()
+        return [DailyArtwork.from_row(r) for r in rows]
+
+
+def make_now() -> str:
+    return now_iso()

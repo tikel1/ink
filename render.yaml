@@ -1,0 +1,28 @@
+# Render Blueprint — one-click deploy of the Ink backend from this repo.
+# In Render: New + → Blueprint → pick this repo. Then set the secrets marked
+# `sync: false` (PUBLIC_BASE_URL after the first deploy gives you the URL, and
+# your PLATFORM_OPENAI_API_KEY). Generate MASTER_ENCRYPTION_KEY locally with
+# `python -m backend.crypto` and paste it.
+services:
+  - type: web
+    name: ink
+    runtime: docker
+    plan: starter            # 'free' works too, but has no persistent disk
+    healthCheckPath: /healthz
+    envVars:
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: PLATFORM_OPENAI_API_KEY
+        sync: false
+      - key: MASTER_ENCRYPTION_KEY
+        sync: false
+      - key: ADMIN_TOKEN
+        generateValue: true
+      - key: OPENAI_IMAGE_MODEL
+        value: gpt-image-1
+      - key: OPENAI_TEXT_MODEL
+        value: gpt-4o-mini
+    disk:
+      name: ink-data
+      mountPath: /data
+      sizeGB: 1
