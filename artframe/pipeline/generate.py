@@ -6,6 +6,7 @@ caller's job (so this stays easy to test).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import date as date_cls
@@ -34,20 +35,27 @@ async def generate_artwork(settings: Settings, config: DeviceConfig) -> ArtworkR
     today = now_in_tz(config.tz).date()
     date_str = today.isoformat()
 
-    wx = await weather.fetch_weather(config.lat, config.lon)
-    holiday_ctx = await holidays.fetch_holidays(
-        today,
-        want_jewish=config.holiday_jewish,
-        want_israeli=config.holiday_israeli,
-        want_global=config.holiday_global,
+    # Weather + holidays are independent — fetch concurrently.
+    wx, holiday_ctx = await asyncio.gather(
+        weather.fetch_weather(config.lat, config.lon),
+        holidays.fetch_holidays(
+            today,
+            want_jewish=config.holiday_jewish,
+            want_israeli=config.holiday_israeli,
+            want_global=config.holiday_global,
+        ),
     )
 
     event = await _select_event(settings, config, today, holiday_ctx)
     image_prompt = _build_image_prompt(config, wx, today, event)
-    raw_png = await generation_client.generate_image(settings, image_prompt)
-    dithered = imaging.to_eink_image(raw_png, fmt="PNG")
 
-    narration_en, narration_he = await _narrate(settings, config, event)
+    # The image render dominates latency; run narration alongside it so the
+    # app-triggered path is as quick as the image call itself.
+    raw_png, (narration_en, narration_he) = await asyncio.gather(
+        generation_client.generate_image(settings, image_prompt),
+        _narrate(settings, config, event),
+    )
+    dithered = imaging.to_eink_image(raw_png, fmt="PNG")
 
     return ArtworkResult(
         device_id=config.id,
@@ -90,15 +98,13 @@ async def _narrate(
 ) -> tuple[str | None, str | None]:
     """Best-effort narration text; failures degrade to None."""
     try:
-        en = await generation_client.generate_text(
-            settings, prompts.NARRATION_EN_PROMPT.format(event=event)
-        )
-        he = None
+        tasks = [generation_client.generate_text(
+            settings, prompts.NARRATION_EN_PROMPT.format(event=event))]
         if config.language == "he":
-            he = await generation_client.generate_text(
-                settings, prompts.NARRATION_HE_PROMPT.format(event=event)
-            )
-        return en, he
+            tasks.append(generation_client.generate_text(
+                settings, prompts.NARRATION_HE_PROMPT.format(event=event)))
+        results = await asyncio.gather(*tasks)
+        return results[0], (results[1] if len(results) > 1 else None)
     except Exception:  # noqa: BLE001
         logger.warning("narration generation failed", exc_info=True)
         return None, None

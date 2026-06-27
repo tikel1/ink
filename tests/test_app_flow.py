@@ -66,6 +66,22 @@ def test_key_lifecycle_and_required_flag():
     assert blocked.status_code == 409
 
 
+def test_regenerate_tracks_job_status(monkeypatch):
+    async def fake_gen(device):
+        return True
+    monkeypatch.setattr("backend.app_api.generate_for_device", fake_gen)
+
+    token = _account_token()
+    client.get("/api/setup", headers={"ID": DEVICE})
+    code = repositories.get_device(DEVICE).pairing_code
+    client.post("/api/app/devices/pair", json={"pairing_code": code}, headers=_auth(token))
+
+    res = client.post(f"/api/app/devices/{DEVICE}/regenerate", headers=_auth(token))
+    assert res.status_code == 200
+    status = client.get(f"/api/app/devices/{DEVICE}/generation", headers=_auth(token)).json()
+    assert status["state"] == "done"
+
+
 def test_unpaired_device_display_and_splash():
     client.get("/api/setup", headers={"ID": DEVICE})
     disp = client.get("/api/display", headers={"ID": DEVICE}).json()

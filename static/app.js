@@ -183,14 +183,49 @@ function wireEditor() {
   });
   $("loc-btn").addEventListener("click", geocode);
   $("regen-btn").addEventListener("click", async () => {
-    const r = await api(`/devices/${editing}/regenerate`, { method: "POST" });
-    flash("action-msg", r.note);
+    const id = editing;
+    setBusy(true);
+    try {
+      await api(`/devices/${id}/regenerate`, { method: "POST" });
+      await pollGeneration(id);
+    } catch (e) {
+      flash("action-msg", e.message);
+    }
+    setBusy(false);
   });
   $("remove-btn").addEventListener("click", async () => {
     if (!confirm("Remove this frame and clear its settings?")) return;
     await api(`/devices/${editing}/unbind`, { method: "POST" });
     await showDevices();
   });
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function setBusy(on) {
+  $("regen-btn").disabled = on;
+  $("regen-btn").textContent = on ? "Creating…" : "Regenerate";
+  document.querySelector(".artframe").classList.toggle("busy", on);
+}
+
+// Poll generation status (~2 min max) and reveal the result when done.
+async function pollGeneration(id) {
+  flash("action-msg", "Creating today's art… (about 20–30s)");
+  for (let i = 0; i < 48; i++) {
+    await sleep(2500);
+    let s;
+    try { s = await api(`/devices/${id}/generation`); } catch { continue; }
+    if (s.state === "done") {
+      if (id === editing) {
+        $("preview-img").src = `/media/current/${id}.png?t=${Date.now()}`;
+        await loadPlacard(id, $("signature").value);
+      }
+      flash("action-msg", "Updated. The frame shows it on its next wake or KEY1 press.");
+      return;
+    }
+    if (s.state === "error") { flash("action-msg", s.detail || "Generation failed."); return; }
+  }
+  flash("action-msg", "Still working… check back in a moment.");
 }
 
 async function geocode() {

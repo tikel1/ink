@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from . import artwork_repo, auth, crypto, keys, repositories, storage
+from . import artwork_repo, auth, crypto, jobs, keys, repositories, storage
 from .config import get_settings
 from .generation import generate_for_device
 from .models import Account, Device
@@ -119,9 +119,28 @@ async def archive(device_id: str, limit: int = 30, account: Account = auth.Accou
 async def regenerate(device_id: str, background: BackgroundTasks,
                      account: Account = auth.AccountDep):
     device = _owned(device_id, account)
-    background.add_task(generate_for_device, device)
-    return {"status": "scheduled",
-            "note": "The frame updates on its next wake or KEY1 press."}
+    jobs.set_state(device.id, jobs.RUNNING)
+    background.add_task(_run_generation, device)
+    return {"status": jobs.RUNNING,
+            "note": "Creating today's art…"}
+
+
+@router.get("/devices/{device_id}/generation")
+async def generation_status(device_id: str, account: Account = auth.AccountDep):
+    _owned(device_id, account)
+    return jobs.get(device_id)
+
+
+async def _run_generation(device: Device) -> None:
+    try:
+        ok = await generate_for_device(device)
+        jobs.set_state(
+            device.id,
+            jobs.DONE if ok else jobs.ERROR,
+            "" if ok else "Couldn't generate — check the API key and try again.",
+        )
+    except Exception:  # noqa: BLE001
+        jobs.set_state(device.id, jobs.ERROR, "Generation failed — try again.")
 
 
 @router.post("/devices/{device_id}/unbind")
