@@ -14,10 +14,21 @@
     <!-- Welcome / onboarding entry -->
     <section id="screen-welcome" class="screen center">
       <div class="inkmark inkmark-lg" aria-hidden="true">
-        <svg viewBox="0 0 120 120">
-          <path class="ink-blob b1" d="M34 84c-10-18 2-46 24-55 17-7 37 0 42 15 5 15-6 28-23 35-18 7-33 22-43 5z"/>
-          <path class="ink-blob b2" d="M70 96c-14-6-18-30-6-44 9-11 30-12 40 0 9 11 4 30-10 39-12 8-19 9-24 5z"/>
-          <circle class="ink-dot" cx="86" cy="38" r="9"/>
+        <svg viewBox="0 0 160 160">
+          <defs>
+            <filter id="goo">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="b" />
+              <feColorMatrix in="b" mode="matrix"
+                values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" />
+            </filter>
+          </defs>
+          <g filter="url(#goo)" fill="#1b1813">
+            <circle class="bl b1" cx="80" cy="80" r="24" />
+            <circle class="bl b2" cx="80" cy="80" r="17" />
+            <circle class="bl b3" cx="80" cy="80" r="13" />
+            <circle class="bl b4" cx="80" cy="80" r="19" />
+            <circle class="bl b5" cx="80" cy="80" r="10" />
+          </g>
         </svg>
       </div>
       <h1 class="word">Ink</h1>
