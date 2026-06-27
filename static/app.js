@@ -213,8 +213,13 @@ function wireEditor() {
     setBusy(false);
   });
   $("remove-btn").addEventListener("click", async () => {
-    if (!confirm("Remove this frame and clear its settings?")) return;
+    if (!confirm(
+      "Disconnect and forget this frame?\n\n" +
+      "Its settings are cleared and it returns to onboarding — it will show a " +
+      "pairing QR again the next time it's online."
+    )) return;
     await api(`/devices/${editing}/unbind`, { method: "POST" });
+    alert("Frame forgotten. It will show a pairing QR on its next wake.");
     await showDevices();
   });
 }

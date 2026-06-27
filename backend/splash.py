@@ -52,12 +52,13 @@ def connect_splash(ap_name: str) -> bytes:
 
 def pairing_splash(code: str, pair_url: str) -> bytes:
     img, draw = _canvas()
-    draw.text((_MARGIN, _MARGIN), "Almost there!", font=_font(40), fill=0)
-    draw.text((_MARGIN, 150), "Pairing code", font=_font(26), fill=0)
-    draw.text((_MARGIN, 188), code, font=_font(78), fill=0)
-    draw.text((_MARGIN, 300), "Add this frame in the", font=_font(26), fill=0)
-    draw.text((_MARGIN, 332), "Ink app, or", font=_font(26), fill=0)
-    draw.text((_MARGIN, 364), "scan the QR code.", font=_font(26), fill=0)
+    draw.text((_MARGIN, _MARGIN), "Not paired", font=_font(40), fill=0)
+    draw.text((_MARGIN, 110), "No app is connected to", font=_font(22), fill=0)
+    draw.text((_MARGIN, 138), "this frame yet.", font=_font(22), fill=0)
+    draw.text((_MARGIN, 196), "Pairing code", font=_font(24), fill=0)
+    draw.text((_MARGIN, 230), code, font=_font(76), fill=0)
+    draw.text((_MARGIN, 330), "Scan the QR, or enter", font=_font(24), fill=0)
+    draw.text((_MARGIN, 360), "this code in the Ink app.", font=_font(24), fill=0)
 
     qr = qrcode.QRCode(box_size=_QR_BOX, border=2)
     qr.add_data(pair_url)

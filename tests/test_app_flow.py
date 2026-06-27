@@ -82,6 +82,31 @@ def test_regenerate_tracks_job_status(monkeypatch):
     assert status["state"] == "done"
 
 
+def test_forget_returns_frame_to_onboarding():
+    token = _account_token()
+    client.get("/api/setup", headers={"ID": DEVICE})
+    code = repositories.get_device(DEVICE).pairing_code
+    client.post("/api/app/devices/pair", json={"pairing_code": code}, headers=_auth(token))
+    assert repositories.get_device(DEVICE).status == "paired"
+
+    # Forget it from the app.
+    res = client.post(f"/api/app/devices/{DEVICE}/unbind", headers=_auth(token))
+    assert res.status_code == 200
+
+    dev = repositories.get_device(DEVICE)
+    assert dev.status == "unpaired"
+    assert dev.account_id is None
+    assert dev.pairing_code  # a fresh code was issued
+
+    # It's gone from the account...
+    listing = client.get("/api/app/devices", headers=_auth(token)).json()
+    assert DEVICE not in [d["id"] for d in listing["devices"]]
+
+    # ...and the frame's next fetch shows the (unpaired) pairing splash again.
+    img = client.get(f"/media/current/{DEVICE}.png")
+    assert img.status_code == 200 and img.content[:8].startswith(b"\x89PNG")
+
+
 def test_unpaired_device_display_and_splash():
     client.get("/api/setup", headers={"ID": DEVICE})
     disp = client.get("/api/display", headers={"ID": DEVICE}).json()
