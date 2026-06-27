@@ -1,6 +1,6 @@
 // App-shell cache so the PWA installs and opens offline.
 // API + media always hit the network.
-const CACHE = "ink-app-v8";
+const CACHE = "ink-app-v9";
 const SHELL = ["./", "index.html", "app.js", "styles.css", "manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {
@@ -17,6 +17,8 @@ self.addEventListener("activate", (e) => {
 });
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
+  // Ignore cross-origin (fonts) and API/media — only the app shell is cached.
+  if (url.origin !== location.origin) return;
   if (url.pathname.startsWith("/api") || url.pathname.startsWith("/media")) return;
   e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request)));
 });

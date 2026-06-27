@@ -26,15 +26,26 @@ function showScreen(name) {
   }
 }
 
-async function api(path, { method = "GET", body, auth = true } = {}) {
+async function api(path, { method = "GET", body, auth = true, timeout = 9000 } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (auth && token()) headers.Authorization = `Bearer ${token()}`;
-  const res = await fetch(serverBase() + "/api/app" + path, {
-    method, headers, body: body ? JSON.stringify(body) : undefined,
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeout);
+  let res;
+  try {
+    res = await fetch(serverBase() + "/api/app" + path, {
+      method, headers, body: body ? JSON.stringify(body) : undefined, signal: ctrl.signal,
+    });
+  } catch (e) {
+    throw new Error(e.name === "AbortError" ? "Server didn't respond — check the server address." : "Can't reach the server.");
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) {
     const d = await res.json().catch(() => ({}));
-    throw new Error(d.detail || `Error ${res.status}`);
+    const err = new Error(d.detail || `Error ${res.status}`);
+    err.status = res.status;
+    throw err;
   }
   return res.status === 204 ? null : res.json();
 }
@@ -105,7 +116,14 @@ async function showDevices() {
   showScreen("devices");
   const list = $("device-list");
   list.innerHTML = '<p class="hint">Loading…</p>';
-  const { devices } = await api("/devices");
+  let devices;
+  try {
+    ({ devices } = await api("/devices"));
+  } catch (e) {
+    if (e.status === 401) { localStorage.removeItem(TOKEN_KEY); return showScreen("welcome"); }
+    list.innerHTML = `<p class="error">${e.message}</p>`;
+    return;
+  }
   list.innerHTML = devices.length ? "" : '<p class="hint">No frames yet — connect one below.</p>';
   for (const d of devices) list.appendChild(deviceTile(d));
 }
@@ -343,23 +361,29 @@ async function init() {
   if (server) setServer(server);
   const code = params.get("code");
   const valid = code && /^\d{6}$/.test(code);
-  try {
-    // QR scanned with no account yet → create one silently, then pair.
-    if (!token() && valid) {
+
+  if (token()) {
+    // Render immediately; data loads after (non-blocking first paint).
+    if (valid) syncByCode(code);
+    else showDevices();
+  } else if (valid) {
+    // QR scanned with no account yet → create one, then pair.
+    showScreen("welcome");
+    try {
       const { token: t } = await api("/account", { method: "POST", auth: false });
       localStorage.setItem(TOKEN_KEY, t);
+      syncByCode(code);
+    } catch (e) {
+      showError("welcome-error", e);
+      $("server-details").open = true;
     }
-    if (token()) {
-      if (valid) await syncByCode(code);
-      else await showDevices();
-    } else {
-      showScreen("welcome");
-    }
-  } catch {
-    localStorage.removeItem(TOKEN_KEY);
+  } else {
     showScreen("welcome");
   }
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  // Register the service worker after first paint so it never delays load.
+  if ("serviceWorker" in navigator) {
+    addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  }
 }
 
 init();
