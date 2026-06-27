@@ -52,10 +52,10 @@ async def generate_artwork(settings: Settings, config: DeviceConfig) -> ArtworkR
     # The image render dominates latency; run narration alongside it so the
     # app-triggered path is as quick as the image call itself.
     raw_png, (narration_en, narration_he) = await asyncio.gather(
-        generation_client.generate_image(settings, image_prompt),
+        generation_client.generate_image(settings, image_prompt, config.orientation),
         _narrate(settings, config, event),
     )
-    dithered = imaging.to_eink_image(raw_png, fmt="PNG")
+    dithered = imaging.to_eink_image(raw_png, fmt="PNG", orientation=config.orientation)
 
     return ArtworkResult(
         device_id=config.id,
@@ -84,13 +84,24 @@ async def _select_event(
 
 def _build_image_prompt(config: DeviceConfig, wx, today: date_cls, event: str) -> str:
     template = config.custom_prompt_override or prompts.ARTWORK_PROMPT
-    return template.format(
-        condition=wx.condition,
-        temperature=wx.temperature(config.temp_unit),
-        date=today.strftime("%a, %b %d"),
-        event=event,
-        signature=config.signature,
+    symbol = "°F" if config.temp_unit == "f" else "°C"
+    temp_str = f"{wx.temperature(config.temp_unit)}{symbol}"
+    date_str = today.strftime("%a, %b %d")
+    data_block = prompts.build_data_block(
+        config.show_weather, config.show_date, wx.condition, temp_str, date_str
     )
+    resolution = ("480x800 (vertical)" if config.orientation == "portrait"
+                  else "800x480 (horizontal)")
+    tokens = {
+        "event": event, "signature": config.signature, "data_block": data_block,
+        "resolution": resolution, "condition": wx.condition,
+        "temperature": temp_str, "date": date_str,
+    }
+    # Token replacement (not str.format) so custom prompts with literal braces
+    # and partial placeholders never raise.
+    for key, value in tokens.items():
+        template = template.replace("{" + key + "}", str(value))
+    return template
 
 
 async def _narrate(

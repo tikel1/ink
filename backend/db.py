@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS devices (
     holiday_jewish  INTEGER NOT NULL DEFAULT 1,
     holiday_israeli INTEGER NOT NULL DEFAULT 1,
     holiday_global  INTEGER NOT NULL DEFAULT 1,
+    orientation     TEXT NOT NULL DEFAULT 'landscape',
+    show_date       INTEGER NOT NULL DEFAULT 1,
+    show_weather    INTEGER NOT NULL DEFAULT 1,
     custom_prompt_override TEXT,
     enabled      INTEGER NOT NULL DEFAULT 1,
     last_seen    TEXT,
@@ -59,9 +62,21 @@ CREATE TABLE IF NOT EXISTS daily_artwork (
 """
 
 
+# Columns added after the first release — applied to existing DBs on startup.
+_MIGRATIONS = {
+    "orientation": "TEXT NOT NULL DEFAULT 'landscape'",
+    "show_date": "INTEGER NOT NULL DEFAULT 1",
+    "show_weather": "INTEGER NOT NULL DEFAULT 1",
+}
+
+
 def init_db() -> None:
     with get_connection() as conn:
         conn.executescript(SCHEMA)
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(devices)")}
+        for column, ddl in _MIGRATIONS.items():
+            if column not in existing:
+                conn.execute(f"ALTER TABLE devices ADD COLUMN {column} {ddl}")
 
 
 @contextmanager

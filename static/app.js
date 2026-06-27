@@ -154,15 +154,26 @@ function renderStatus(d) {
   $("status-sub").textContent = s.sub;
 }
 
+const INTEREST_FIELDS = ["science", "history", "sports", "astronomy", "art"];
+
 function fillForm(d) {
   $("lat").value = d.lat; $("lon").value = d.lon; $("tz").value = d.tz;
   $("wake").value = d.wake_hour; $("language").value = d.language;
-  $("temp_unit").value = d.temp_unit; $("interests").value = d.interests;
+  $("temp_unit").value = d.temp_unit;
+  $("orientation").value = d.orientation || "landscape";
+  $("show_date").checked = d.show_date !== false;
+  $("show_weather").checked = d.show_weather !== false;
   $("signature").value = d.signature;
   $("h-jewish").checked = d.holiday_jewish;
   $("h-israeli").checked = d.holiday_israeli;
   $("h-global").checked = d.holiday_global;
   $("enabled").checked = d.enabled;
+
+  // Split the stored interests string into known chips + free-text "other".
+  const tokens = (d.interests || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const known = new Set(INTEREST_FIELDS);
+  document.querySelectorAll(".interest").forEach((cb) => { cb.checked = tokens.includes(cb.value); });
+  $("interest-other").value = tokens.filter((t) => !known.has(t)).join(", ");
 }
 
 async function loadPlacard(id, signature) {
@@ -182,11 +193,16 @@ async function loadPlacard(id, signature) {
 }
 
 function formBody() {
+  const chips = [...document.querySelectorAll(".interest:checked")].map((cb) => cb.value);
+  const other = $("interest-other").value.split(",").map((s) => s.trim()).filter(Boolean);
+  const interests = [...chips, ...other].join(", ");
   return {
     lat: parseFloat($("lat").value), lon: parseFloat($("lon").value),
     tz: $("tz").value.trim(), wake_hour: parseInt($("wake").value, 10),
     language: $("language").value, temp_unit: $("temp_unit").value,
-    interests: $("interests").value.trim(),
+    orientation: $("orientation").value,
+    show_date: $("show_date").checked, show_weather: $("show_weather").checked,
+    interests,
     signature: $("signature").value.trim() || "House Kaplan",
     holiday_jewish: $("h-jewish").checked, holiday_israeli: $("h-israeli").checked,
     holiday_global: $("h-global").checked, enabled: $("enabled").checked,

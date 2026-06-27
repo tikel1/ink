@@ -31,8 +31,9 @@ async def test_generate_artwork_produces_panel_png(monkeypatch):
         captured["text_prompts"].append(prompt)
         return "Apollo 11 lands on the Moon"
 
-    async def fake_image(settings, prompt):
+    async def fake_image(settings, prompt, orientation="landscape"):
         captured["image_prompt"] = prompt
+        captured["orientation"] = orientation
         return _fake_png()
 
     monkeypatch.setattr(gen.weather, "fetch_weather", fake_weather)

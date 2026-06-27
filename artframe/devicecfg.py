@@ -10,7 +10,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .constants import LANGUAGES, TEMP_UNITS
+from .constants import LANGUAGES, ORIENTATIONS, TEMP_UNITS
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,9 @@ class DeviceConfig:
     holiday_jewish: bool = True
     holiday_israeli: bool = True
     holiday_global: bool = True
+    orientation: str = "landscape"
+    show_date: bool = True
+    show_weather: bool = True
     custom_prompt_override: str | None = None
     enabled: bool = True
 
@@ -36,6 +39,8 @@ class DeviceConfig:
             raise ValueError(f"{self.id}: language must be one of {LANGUAGES}")
         if self.temp_unit not in TEMP_UNITS:
             raise ValueError(f"{self.id}: temp_unit must be one of {TEMP_UNITS}")
+        if self.orientation not in ORIENTATIONS:
+            raise ValueError(f"{self.id}: orientation must be one of {ORIENTATIONS}")
         if not (-90 <= self.lat <= 90 and -180 <= self.lon <= 180):
             raise ValueError(f"{self.id}: lat/lon out of range")
         if not (0 <= self.wake_hour <= 23):

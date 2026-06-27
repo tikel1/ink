@@ -49,6 +49,9 @@ class Device:
     holiday_jewish: bool
     holiday_israeli: bool
     holiday_global: bool
+    orientation: str
+    show_date: bool
+    show_weather: bool
     custom_prompt_override: Optional[str]
     enabled: bool
     last_seen: Optional[str]
@@ -76,6 +79,9 @@ class Device:
             holiday_jewish=bool(row["holiday_jewish"]),
             holiday_israeli=bool(row["holiday_israeli"]),
             holiday_global=bool(row["holiday_global"]),
+            orientation=row["orientation"],
+            show_date=bool(row["show_date"]),
+            show_weather=bool(row["show_weather"]),
             custom_prompt_override=row["custom_prompt_override"],
             enabled=bool(row["enabled"]),
             last_seen=row["last_seen"],
@@ -101,6 +107,9 @@ class Device:
             holiday_jewish=self.holiday_jewish,
             holiday_israeli=self.holiday_israeli,
             holiday_global=self.holiday_global,
+            orientation=self.orientation,
+            show_date=self.show_date,
+            show_weather=self.show_weather,
             custom_prompt_override=self.custom_prompt_override,
             enabled=self.enabled,
         )

@@ -79,19 +79,7 @@ If the viewer can instantly read everything → it is too literal.
 
 ### Crucially Integrated Dynamic Data (Dissolved Negative Space):
 
-The date, weather icon, and temperature must be **carved out of the black shapes
-as negative space**, fully integrated into their form. They must follow the
-exact curvature of the shape, be warped unevenly, partially cropped or
-fragmented, and feel hand-cut — like a calligram dissolving into abstraction.
-
-### 1. Weather & Date (Embedded and Distorted):
-
-- Weather icon: "{condition}" → a naive, irregular, possibly incomplete symbol,
-  stretched and bent to the shape
-- Temperature: "{temperature}°" → digits elongated, compressed, or fused
-- Date: "{date}" → broken into uneven fragments, curved along the inner contour
-
-All three must feel like they are being absorbed into the black mass.
+{data_block}
 
 ### 2. Event Symbol (Extremely Abstract):
 
@@ -113,7 +101,7 @@ All three must feel like they are being absorbed into the black mass.
 
 ### Technical Constraints:
 
-- Resolution: 800x480 (horizontal)
+- Resolution: {resolution}
 - Low detail, high contrast
 - Focus on shape language, negative space, and tactile imperfection
 
@@ -141,6 +129,33 @@ NARRATION_HE_PROMPT = """יש פה פירוט על אירוע:
 תרחיב עליו ב-25-45 מילים בעברית עבור תסריט לקריינות לקהל הצעיר. תן רק הסבר על
 האירוע בלי הקדמה. אם זה אירוע היסטורי, תציין את התאריך שבו הוא קרה. חשוב! לא
 לחרוג מ-250 תווים."""
+
+
+def build_data_block(
+    show_weather: bool, show_date: bool, condition: str, temperature: str, date_str: str
+) -> str:
+    """The dynamic-data directives injected into the artwork prompt.
+
+    Reflects the device's show-date / show-weather toggles so the configuration
+    visibly changes what the model is told to embed.
+    """
+    if not show_weather and not show_date:
+        return ("Embed no text, numbers, or symbols at all. Keep the composition "
+                "purely abstract with no readable information.")
+    lines = [
+        "The following must be carved out of the black shapes as negative space —",
+        "warped unevenly, partially cropped, hand-cut, like a calligram dissolving",
+        "into abstraction (abstract first, information second):",
+    ]
+    if show_weather:
+        lines.append(f'- Weather: a naive, irregular icon for "{condition}", '
+                     "stretched and bent to the shape.")
+        lines.append(f'- Temperature: "{temperature}" — digits elongated, '
+                     "compressed, or fused.")
+    if show_date:
+        lines.append(f'- Date: "{date_str}" — broken into uneven fragments, '
+                     "curved along the inner contour.")
+    return "\n".join(lines)
 
 
 def format_holiday_context(jewish: list[str], israeli: list[str], glob: list[str]) -> str:

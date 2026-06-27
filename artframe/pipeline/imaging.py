@@ -14,23 +14,28 @@ from PIL import Image
 from ..constants import DISPLAY_HEIGHT, DISPLAY_WIDTH
 
 
-def to_eink_image(source: bytes, fmt: str = "PNG") -> bytes:
-    """Return 1-bit image bytes sized exactly DISPLAY_WIDTH x DISPLAY_HEIGHT.
+def to_eink_image(source: bytes, fmt: str = "PNG", orientation: str = "landscape") -> bytes:
+    """Return 1-bit bytes sized exactly DISPLAY_WIDTH x DISPLAY_HEIGHT (the panel).
 
-    `fmt` is "PNG" (served to the ESPHome frame) or "BMP". Floyd-Steinberg
-    dithering to pure black & white gives a crisp panel render.
+    The panel is physically 800x480. For a portrait-mounted frame we compose the
+    art at 480x800, dither, then rotate 90° into the 800x480 buffer so it reads
+    upright when the frame hangs vertically. `fmt` is "PNG" (frame) or "BMP".
     """
     with Image.open(io.BytesIO(source)) as raw:
-        landscape = _orient_landscape(raw.convert("RGB"))
-        fitted = _fit_to_panel(landscape)
-        dithered = fitted.convert("1")  # Pillow default = Floyd-Steinberg
+        rgb = raw.convert("RGB")
+        if orientation == "portrait":
+            fitted = _fit(rgb, DISPLAY_HEIGHT, DISPLAY_WIDTH)  # 480x800
+            panel = fitted.convert("1").rotate(90, expand=True)  # -> 800x480
+        else:
+            fitted = _fit(_orient_landscape(rgb), DISPLAY_WIDTH, DISPLAY_HEIGHT)
+            panel = fitted.convert("1")  # Pillow default = Floyd-Steinberg
         out = io.BytesIO()
-        dithered.save(out, format=fmt)
+        panel.save(out, format=fmt)
         return out.getvalue()
 
 
 def to_eink_bmp(source: bytes) -> bytes:
-    """Backwards-compatible 1-bit BMP helper."""
+    """Backwards-compatible 1-bit BMP helper (landscape)."""
     return to_eink_image(source, fmt="BMP")
 
 
@@ -41,22 +46,18 @@ def _orient_landscape(image: Image.Image) -> Image.Image:
     return image
 
 
-def _fit_to_panel(image: Image.Image) -> Image.Image:
-    """Cover-fit to the panel: scale to fill, center-crop the overflow."""
-    target_ratio = DISPLAY_WIDTH / DISPLAY_HEIGHT
+def _fit(image: Image.Image, width: int, height: int) -> Image.Image:
+    """Cover-fit to width x height: scale to fill, center-crop the overflow."""
+    target_ratio = width / height
     source_ratio = image.width / image.height
-
-    if source_ratio > target_ratio:
-        scale = DISPLAY_HEIGHT / image.height
-    else:
-        scale = DISPLAY_WIDTH / image.width
+    scale = (height / image.height) if source_ratio > target_ratio else (width / image.width)
 
     new_size = (round(image.width * scale), round(image.height * scale))
     scaled = image.resize(new_size, Image.LANCZOS)
 
-    left = (scaled.width - DISPLAY_WIDTH) // 2
-    top = (scaled.height - DISPLAY_HEIGHT) // 2
-    return scaled.crop((left, top, left + DISPLAY_WIDTH, top + DISPLAY_HEIGHT))
+    left = (scaled.width - width) // 2
+    top = (scaled.height - height) // 2
+    return scaled.crop((left, top, left + width, top + height))
 
 
 def save_image(image_bytes: bytes, path: Path) -> Path:

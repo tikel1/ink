@@ -133,10 +133,28 @@
           <h3>Artwork</h3>
           <div class="row">
             <label>Language<select id="language"><option value="en">English</option><option value="he">Hebrew</option></select></label>
-            <label>Temperature<select id="temp_unit"><option value="c">°C</option><option value="f">°F</option></select></label>
+            <label>Orientation<select id="orientation"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></label>
           </div>
-          <label>Interests<input id="interests" placeholder="science, art, space" /></label>
+
+          <fieldset>
+            <legend>Interests</legend>
+            <label class="check"><input type="checkbox" class="interest" value="science" /> Science</label>
+            <label class="check"><input type="checkbox" class="interest" value="history" /> History</label>
+            <label class="check"><input type="checkbox" class="interest" value="sports" /> Sports</label>
+            <label class="check"><input type="checkbox" class="interest" value="astronomy" /> Astronomy</label>
+            <label class="check"><input type="checkbox" class="interest" value="art" /> Art</label>
+            <label>Other<input id="interest-other" placeholder="anything else, comma separated" /></label>
+          </fieldset>
+
           <label>Signature<input id="signature" placeholder="House Kaplan" /></label>
+
+          <fieldset>
+            <legend>Show on the artwork</legend>
+            <label class="check"><input type="checkbox" id="show_date" /> Date</label>
+            <label class="check"><input type="checkbox" id="show_weather" /> Weather</label>
+            <label>Units<select id="temp_unit"><option value="c">°C</option><option value="f">°F</option></select></label>
+          </fieldset>
+
           <fieldset>
             <legend>Holidays</legend>
             <label class="check"><input type="checkbox" id="h-jewish" /> Jewish</label>

@@ -33,5 +33,11 @@ LANGUAGES = ("en", "he")
 # Temperature units.
 TEMP_UNITS = ("c", "f")
 
+# Frame orientation (affects composition, generation size, and panel rotation).
+ORIENTATIONS = ("landscape", "portrait")
+
+# Curated interest fields offered in the app (plus free-text "other").
+INTEREST_FIELDS = ("science", "history", "sports", "astronomy", "art")
+
 # Holiday source toggles.
 HOLIDAY_SOURCES = ("jewish", "israeli", "global")

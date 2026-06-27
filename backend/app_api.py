@@ -37,6 +37,9 @@ class ConfigUpdate(BaseModel):
     holiday_jewish: bool | None = None
     holiday_israeli: bool | None = None
     holiday_global: bool | None = None
+    orientation: str | None = Field(default=None, pattern=r"^(landscape|portrait)$")
+    show_date: bool | None = None
+    show_weather: bool | None = None
     custom_prompt_override: str | None = None
     enabled: bool | None = None
 
@@ -192,6 +195,9 @@ def _device_payload(device: Device) -> dict:
         "holiday_jewish": device.holiday_jewish,
         "holiday_israeli": device.holiday_israeli,
         "holiday_global": device.holiday_global,
+        "orientation": device.orientation,
+        "show_date": device.show_date,
+        "show_weather": device.show_weather,
         "custom_prompt_override": device.custom_prompt_override,
         "enabled": device.enabled,
         "battery": device.battery,

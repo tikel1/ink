@@ -32,3 +32,11 @@ def test_bmp_format_still_supported():
     with Image.open(io.BytesIO(out)) as img:
         assert img.format == "BMP"
         assert img.size == (DISPLAY_WIDTH, DISPLAY_HEIGHT)
+
+
+def test_portrait_renders_into_landscape_panel():
+    # Portrait source composes 480x800 then rotates into the 800x480 panel.
+    out = to_eink_image(_png(1024, 1536), fmt="PNG", orientation="portrait")
+    with Image.open(io.BytesIO(out)) as img:
+        assert img.mode == "1"
+        assert img.size == (DISPLAY_WIDTH, DISPLAY_HEIGHT)

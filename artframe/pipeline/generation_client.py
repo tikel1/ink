@@ -12,9 +12,9 @@ from openai import AsyncOpenAI
 from ..constants import DISPLAY_HEIGHT, DISPLAY_WIDTH
 from ..settings import Settings
 
-# gpt-image only accepts a fixed set of sizes; pick the closest landscape one
-# and let the imaging step crop to the exact panel geometry afterwards.
-_OPENAI_IMAGE_SIZE = "1536x1024"
+# gpt-image only accepts a fixed set of sizes; pick the closest one per
+# orientation and let the imaging step crop to the exact panel geometry.
+_OPENAI_IMAGE_SIZE = {"landscape": "1536x1024", "portrait": "1024x1536"}
 
 
 class GenerationError(RuntimeError):
@@ -42,8 +42,10 @@ async def generate_text(settings: Settings, prompt: str) -> str:
     return text
 
 
-async def generate_image(settings: Settings, prompt: str) -> bytes:
-    """Return raw PNG bytes for the given prompt."""
+async def generate_image(
+    settings: Settings, prompt: str, orientation: str = "landscape"
+) -> bytes:
+    """Return raw PNG bytes for the given prompt, sized per orientation."""
     if settings.image_provider != "openai":
         raise NotImplementedError(f"image provider {settings.image_provider}")
 
@@ -51,7 +53,7 @@ async def generate_image(settings: Settings, prompt: str) -> bytes:
     response = await client.images.generate(
         model=settings.openai_image_model,
         prompt=prompt,
-        size=_OPENAI_IMAGE_SIZE,
+        size=_OPENAI_IMAGE_SIZE.get(orientation, _OPENAI_IMAGE_SIZE["landscape"]),
         n=1,
     )
     payload = response.data[0]
