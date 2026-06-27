@@ -103,7 +103,11 @@ details > summary { margin-top: 4px; }
 .dot.s-sleep { background: var(--sleep); }
 .dot.s-off { background: var(--off); }
 .dot.s-setup { background: var(--muted); }
-.status { display: flex; align-items: center; gap: 9px; margin: 2px 2px 14px; }
+.status {
+  display: inline-flex; align-items: center; gap: 8px; margin: 2px 0 16px;
+  padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--cream); box-shadow: var(--shadow);
+}
 .status-text { font-weight: 600; }
 .status-sub { color: var(--muted); font-size: 0.85rem; }
 

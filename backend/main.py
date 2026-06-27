@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import app_api, device_api, media_api
@@ -36,6 +37,17 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Ink", lifespan=lifespan)
+
+# Allow the app to be hosted on a different origin (e.g. GitHub Pages) and still
+# call this API. Auth is via bearer token in a header (not cookies), so a wide
+# origin policy is safe here.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(device_api.router)
 app.include_router(media_api.router)
 app.include_router(app_api.router)

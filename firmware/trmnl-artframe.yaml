@@ -137,7 +137,15 @@ sensor:
 font:
   - file: "gfonts://Roboto"
     id: roboto
-    size: 28
+    size: 34
+  - file: "gfonts://Roboto"
+    id: roboto_small
+    size: 22
+
+# QR that encodes "join my open Wi-Fi hotspot" — phone cameras join on scan.
+qr_code:
+  - id: wifi_qr
+    value: "WIFI:S:${friendly_name};T:nopass;;"
 
 # Powered mode: re-fetch the art periodically (guarded so battery mode ignores it).
 interval:
@@ -178,10 +186,18 @@ display:
       if (id(image_loaded) && id(online_artwork).get_width() > 0) {
         it.image(0, 0, id(online_artwork), Color::BLACK, Color::WHITE);
       } else {
+        // Pairing mode: instructions on the left, a "join my Wi-Fi" QR on the right.
         it.fill(Color::WHITE);
-        it.print(400, 210, id(roboto), Color::BLACK, TextAlign::CENTER, "Setting up...");
-        it.print(400, 260, id(roboto), Color::BLACK, TextAlign::CENTER,
-                 "Join WiFi: ${friendly_name}");
+        it.print(60, 90, id(roboto), Color::BLACK, TextAlign::TOP_LEFT, "Pairing mode");
+        it.print(60, 150, id(roboto_small), Color::BLACK, TextAlign::TOP_LEFT,
+                 "1. Scan this QR, or join");
+        it.print(60, 182, id(roboto_small), Color::BLACK, TextAlign::TOP_LEFT,
+                 "   Wi-Fi: ${friendly_name}");
+        it.print(60, 230, id(roboto_small), Color::BLACK, TextAlign::TOP_LEFT,
+                 "2. Pick your home Wi-Fi");
+        it.print(60, 262, id(roboto_small), Color::BLACK, TextAlign::TOP_LEFT,
+                 "   on the page that opens.");
+        it.qr_code(540, 150, id(wifi_qr), Color::BLACK, 5);
       }
       it.filled_rectangle(0, 0, 16, 16, Color::BLACK);
       if (id(is_sleeping_icon)) {
