@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111111" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <title>Ink</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main id="app">
+
+    <!-- Welcome -->
+    <section id="screen-welcome" class="screen center">
+      <div class="mark">
+        <svg viewBox="0 0 120 120" aria-hidden="true">
+          <path d="M30 88c-9-18 3-44 22-54 16-8 36-3 42 12 6 14-3 28-20 35-18 8-36 18-44 7z" fill="#111"/>
+          <circle cx="86" cy="40" r="10" fill="#111"/>
+        </svg>
+        <h1 class="word">Ink</h1>
+        <p class="tagline">A new piece of art on your wall, every morning.</p>
+      </div>
+      <button id="start-btn">Get started</button>
+      <details>
+        <summary>I already have an account</summary>
+        <label>Account token<input id="restore-token" placeholder="paste token" /></label>
+        <button id="restore-btn" class="secondary">Restore</button>
+      </details>
+      <p id="welcome-error" class="error" hidden></p>
+    </section>
+
+    <!-- Devices -->
+    <section id="screen-devices" class="screen" hidden>
+      <header class="topbar">
+        <span class="brand">Ink</span>
+        <button class="link" id="account-btn">Account</button>
+      </header>
+      <h2 class="section-title">Your frames</h2>
+      <div id="device-list" class="device-list"></div>
+      <form class="card pair" id="pair-form">
+        <h3>Add a frame</h3>
+        <p class="hint">Enter the 6-digit code shown on the frame.</p>
+        <input id="pair-code" inputmode="numeric" maxlength="6" placeholder="000000" class="code-input" />
+        <button type="submit">Pair frame</button>
+        <p id="pair-error" class="error" hidden></p>
+      </form>
+    </section>
+
+    <!-- Editor -->
+    <section id="screen-edit" class="screen" hidden>
+      <header class="topbar">
+        <button class="link" id="back-btn">‹ Frames</button>
+        <span class="brand" id="edit-title">Frame</span>
+        <span></span>
+      </header>
+
+      <!-- Gallery preview -->
+      <figure class="frame">
+        <div class="mat"><img id="preview-img" alt="latest artwork" /></div>
+      </figure>
+
+      <!-- Today's event -->
+      <section class="card today">
+        <div class="today-head">
+          <h3>Today</h3>
+          <span id="ev-meta" class="meta">—</span>
+        </div>
+        <p id="ev-text" class="event-en">No artwork generated yet.</p>
+        <p id="ev-text-he" class="event-he" dir="rtl" hidden></p>
+      </section>
+
+      <div class="actions">
+        <button id="regen-btn" type="button" class="secondary">Regenerate today</button>
+        <button id="remove-btn" type="button" class="danger">Remove frame</button>
+      </div>
+      <p id="action-msg" class="ok" hidden></p>
+
+      <!-- Preferences -->
+      <form class="card" id="edit-form">
+        <h3>Location &amp; schedule</h3>
+        <label>Location
+          <div class="row"><input id="loc-search" placeholder="City, country" />
+          <button type="button" id="loc-btn" class="secondary inline">Find</button></div>
+        </label>
+        <div class="row">
+          <label>Latitude<input id="lat" type="number" step="0.0001" required /></label>
+          <label>Longitude<input id="lon" type="number" step="0.0001" required /></label>
+        </div>
+        <label>Timezone<input id="tz" required /></label>
+        <label>Wake hour (0–23)<input id="wake" type="number" min="0" max="23" required /></label>
+
+        <h3>Artwork</h3>
+        <div class="row">
+          <label>Language<select id="language"><option value="en">English</option><option value="he">Hebrew</option></select></label>
+          <label>Temperature<select id="temp_unit"><option value="c">°C</option><option value="f">°F</option></select></label>
+        </div>
+        <label>Interests<input id="interests" placeholder="science, art, space" /></label>
+        <label>Signature<input id="signature" placeholder="House Kaplan" /></label>
+        <fieldset>
+          <legend>Holidays</legend>
+          <label class="check"><input type="checkbox" id="h-jewish" /> Jewish</label>
+          <label class="check"><input type="checkbox" id="h-israeli" /> Israeli</label>
+          <label class="check"><input type="checkbox" id="h-global" /> Global</label>
+        </fieldset>
+        <label class="check"><input type="checkbox" id="enabled" /> Generate daily</label>
+        <button type="submit">Save preferences</button>
+        <p id="save-msg" class="ok" hidden></p>
+      </form>
+    </section>
+
+    <!-- Account -->
+    <section id="screen-account" class="screen" hidden>
+      <header class="topbar">
+        <button class="link" id="acct-back">‹ Frames</button>
+        <span class="brand">Account</span>
+        <span></span>
+      </header>
+      <div class="card">
+        <h3>OpenAI API key</h3>
+        <p id="key-status" class="hint">—</p>
+        <p id="key-required-note" class="error" hidden>
+          Your own API key is now required for this account. Please add one below.
+        </p>
+        <label>Your API key<input id="api-key" type="password" placeholder="sk-..." /></label>
+        <button id="save-key-btn">Use my key</button>
+        <button id="clear-key-btn" class="secondary">Use the default key</button>
+        <p id="key-msg" class="ok" hidden></p>
+        <p id="key-err" class="error" hidden></p>
+      </div>
+      <div class="card">
+        <h3>Account token</h3>
+        <p class="hint">Save this to use your account on another device. Keep it secret.</p>
+        <input id="token-display" readonly />
+      </div>
+    </section>
+
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
