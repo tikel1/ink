@@ -144,13 +144,6 @@ details > summary { margin-top: 4px; }
 .artframe.busy .mat { animation: breathe 1.6s ease-in-out infinite; }
 @keyframes breathe { 0%,100% { opacity: 1; } 50% { opacity: 0.62; } }
 @media (prefers-reduced-motion: reduce) { .artframe.busy .mat { animation: none; } }
-.seal { position: absolute; top: -16px; right: -12px; width: 88px; height: 88px; padding: 7px; color: var(--ink); background: var(--cream); border-radius: 50%; transform: rotate(8deg); box-shadow: 0 8px 20px rgba(40,32,18,0.28); }
-.seal svg { width: 100%; height: 100%; }
-.seal text { text-anchor: middle; fill: currentColor; }
-.seal-ring { fill: none; stroke: currentColor; stroke-width: 1.4; }
-.seal-ring.thin { stroke-width: 0.6; }
-.seal-t { font-family: var(--sans); font-size: 10px; letter-spacing: 1.6px; }
-.seal-star { font-size: 26px; }
 
 /* ---- Wall label ---- */
 .placard { background: var(--cream); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; margin: 0 0 18px; box-shadow: 0 1px 0 var(--line); }
