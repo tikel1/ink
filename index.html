@@ -23,6 +23,12 @@
       <h1 class="word">Ink</h1>
       <p class="tagline">A new piece of art on your wall, every morning.</p>
       <button id="start-btn">Get started</button>
+      <details id="server-details">
+        <summary>Ink server address</summary>
+        <label>Server URL<input id="server-url" placeholder="https://your-ink-server" /></label>
+        <button id="server-save" type="button" class="secondary">Save server</button>
+        <p id="server-msg" class="ok" hidden></p>
+      </details>
       <details>
         <summary>I already have an account</summary>
         <label>Account token<input id="restore-token" placeholder="paste token" /></label>
@@ -41,18 +47,24 @@
       <h2 class="section-title">Your frames</h2>
       <div id="device-list" class="device-list"></div>
 
-      <form class="card onboard" id="pair-form">
+      <div class="card onboard">
         <h3>Connect a frame</h3>
         <ol class="steps">
-          <li>Power on your Ink frame.</li>
-          <li>Hold the button, then join the <b>“Ink Frame”</b> Wi‑Fi.</li>
-          <li>Enter your home Wi‑Fi — the frame then shows a QR + 6‑digit code.</li>
-          <li><b>Scan the QR</b> with your phone, or type the code below.</li>
+          <li><b>Pairing mode.</b> A new frame is ready on first power‑on. To
+            re‑pair one, hold <b>KEY3</b> ~5s — the screen shows “Pairing mode”.</li>
+          <li><b>Join the frame's Wi‑Fi.</b> In your phone's Wi‑Fi settings, join
+            <b>“Ink Frame”</b> (or scan the QR on the screen). A setup page opens
+            on its own.</li>
+          <li><b>Pick your home Wi‑Fi</b> on that page and enter its password.
+            The frame connects, then shows a pairing QR + 6‑digit code.</li>
+          <li><b>Pair.</b> Scan that QR, or type the code here:</li>
         </ol>
-        <input id="pair-code" inputmode="numeric" maxlength="6" placeholder="000000" class="code-input" />
-        <button type="submit">Pair frame</button>
-        <p id="pair-error" class="error" hidden></p>
-      </form>
+        <form id="pair-form">
+          <input id="pair-code" inputmode="numeric" maxlength="6" placeholder="000000" class="code-input" />
+          <button type="submit">Pair frame</button>
+          <p id="pair-error" class="error" hidden></p>
+        </form>
+      </div>
     </section>
 
     <!-- Frame detail -->
@@ -147,6 +159,13 @@
         <h3>Account token</h3>
         <p class="hint">Save this to use your account on another device. Keep it secret.</p>
         <input id="token-display" readonly />
+      </div>
+      <div class="card">
+        <h3>Ink server</h3>
+        <p class="hint">The backend this app talks to.</p>
+        <label>Server URL<input id="acct-server-url" placeholder="https://your-ink-server" /></label>
+        <button id="acct-server-save" class="secondary">Save server</button>
+        <p id="acct-server-msg" class="ok" hidden></p>
       </div>
     </section>
 

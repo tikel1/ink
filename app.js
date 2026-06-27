@@ -3,11 +3,22 @@
 // Ink — premium control app. Served by the backend (same-origin API).
 
 const TOKEN_KEY = "ink.token";
+const SERVER_KEY = "ink.server";
 const $ = (id) => document.getElementById(id);
 
 let editing = null; // device id being edited
 
 const token = () => localStorage.getItem(TOKEN_KEY);
+
+// Backend base URL. Empty = same-origin (when the app is served by the backend
+// at /app). Set explicitly when the app is hosted elsewhere (e.g. GitHub Pages).
+const serverBase = () => (localStorage.getItem(SERVER_KEY) || "").replace(/\/+$/, "");
+const setServer = (v) => {
+  const clean = (v || "").trim().replace(/\/+$/, "");
+  if (clean) localStorage.setItem(SERVER_KEY, clean);
+  else localStorage.removeItem(SERVER_KEY);
+};
+const mediaUrl = (path) => `${serverBase()}${path}`;
 
 function showScreen(name) {
   for (const s of ["welcome", "devices", "edit", "account"]) {
@@ -18,7 +29,7 @@ function showScreen(name) {
 async function api(path, { method = "GET", body, auth = true } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (auth && token()) headers.Authorization = `Bearer ${token()}`;
-  const res = await fetch("/api/app" + path, {
+  const res = await fetch(serverBase() + "/api/app" + path, {
     method, headers, body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
@@ -63,12 +74,20 @@ function statusInfo(d) {
 // Account lifecycle
 // --------------------------------------------------------------------------
 function wireWelcome() {
+  $("server-url").value = serverBase();
+  $("server-save").addEventListener("click", () => {
+    setServer($("server-url").value);
+    flash("server-msg", "Saved. Now tap Get started.");
+  });
   $("start-btn").addEventListener("click", async () => {
     try {
       const { token: t } = await api("/account", { method: "POST", auth: false });
       localStorage.setItem(TOKEN_KEY, t);
       await showDevices();
-    } catch (e) { showError("welcome-error", e); }
+    } catch (e) {
+      showError("welcome-error", e);
+      $("server-details").open = true;   // likely need to set the server URL
+    }
   });
   $("restore-btn").addEventListener("click", async () => {
     const t = $("restore-token").value.trim();
@@ -217,7 +236,7 @@ async function pollGeneration(id) {
     try { s = await api(`/devices/${id}/generation`); } catch { continue; }
     if (s.state === "done") {
       if (id === editing) {
-        $("preview-img").src = `/media/current/${id}.png?t=${Date.now()}`;
+        $("preview-img").src = mediaUrl(`/media/current/${id}.png?t=${Date.now()}`);
         await loadPlacard(id, $("signature").value);
       }
       flash("action-msg", "Updated. The frame shows it on its next wake or KEY1 press.");
@@ -246,6 +265,7 @@ async function geocode() {
 async function showAccount() {
   showScreen("account");
   $("token-display").value = token();
+  $("acct-server-url").value = serverBase();
   const a = await api("/account");
   const labels = {
     platform: "Using the default (shared) key.",
@@ -260,6 +280,10 @@ async function showAccount() {
 function wireAccount() {
   $("account-btn").addEventListener("click", showAccount);
   $("acct-back").addEventListener("click", showDevices);
+  $("acct-server-save").addEventListener("click", () => {
+    setServer($("acct-server-url").value);
+    flash("acct-server-msg", "Saved.");
+  });
   $("save-key-btn").addEventListener("click", async () => {
     try {
       await api("/account/key", { method: "PUT", body: { openai_api_key: $("api-key").value.trim() } });
