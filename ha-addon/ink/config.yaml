@@ -1,0 +1,26 @@
+name: Ink
+version: "1.0.0"
+slug: ink
+description: Daily AI art backend for Ink e-ink frames
+url: https://github.com/tikel1/ink
+arch:
+  - aarch64
+  - amd64
+  - armv7
+init: false
+ports:
+  "8000/tcp": 8000
+ports_description:
+  "8000/tcp": Ink backend (device API + app + media)
+options:
+  platform_openai_api_key: ""
+  master_encryption_key: ""
+  admin_token: ""
+  public_base_url: ""
+  app_url: "https://tikel1.github.io/ink"
+schema:
+  platform_openai_api_key: password
+  master_encryption_key: password
+  admin_token: password
+  public_base_url: str
+  app_url: str
