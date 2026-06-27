@@ -6,6 +6,10 @@
   <meta name="theme-color" content="#e7dfce" />
   <link rel="manifest" href="manifest.webmanifest" />
   <title>Ink</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,800;1,9..144,400&display=swap" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -31,11 +35,12 @@
           </g>
         </svg>
       </div>
+      <p class="exhibit-eyebrow">The Daily Exhibition</p>
       <h1 class="word">Ink</h1>
       <hr class="rule" />
-      <p class="edition">Daily edition</p>
-      <p class="tagline">A new work on your wall, every morning.</p>
-      <button id="start-btn">Get started</button>
+      <p class="edition">No. 1 · Première</p>
+      <p class="tagline">A new work, curated and hung on your wall each morning.</p>
+      <button id="start-btn">Enter the exhibition</button>
       <details id="server-details">
         <summary>Ink server address</summary>
         <label>Server URL<input id="server-url" placeholder="https://your-ink-server" /></label>
@@ -95,17 +100,31 @@
         <span class="status-sub" id="status-sub"></span>
       </div>
 
-      <!-- Picture frame -->
+      <!-- Picture frame with award seal -->
       <figure class="artframe">
         <div class="mat"><img id="preview-img" alt="current artwork" /></div>
+        <div class="seal" aria-hidden="true">
+          <svg viewBox="0 0 120 120">
+            <defs>
+              <path id="arc-top" d="M60 60 m-40,0 a40,40 0 1,1 80,0" />
+              <path id="arc-bot" d="M60 60 m40,0 a40,40 0 0,1 -80,0" />
+            </defs>
+            <circle cx="60" cy="60" r="55" class="seal-ring" />
+            <circle cx="60" cy="60" r="49" class="seal-ring thin" />
+            <text class="seal-t"><textPath href="#arc-top" startOffset="50%">FIRST PRIZE</textPath></text>
+            <text class="seal-t"><textPath href="#arc-bot" startOffset="50%">DAILY EXHIBITION</textPath></text>
+            <text x="60" y="72" text-anchor="middle" class="seal-star">★</text>
+          </svg>
+        </div>
       </figure>
 
-      <!-- Museum placard -->
+      <!-- Museum wall label -->
       <section class="placard">
         <p class="placard-eyebrow" id="ev-meta">On view today</p>
         <p class="placard-body" id="ev-text">No artwork generated yet.</p>
         <p class="placard-body he" id="ev-text-he" dir="rtl" hidden></p>
         <p class="placard-sign" id="ev-sign" hidden></p>
+        <p class="placard-credit">Ink · The Daily Exhibition · generated daily</p>
       </section>
 
       <div class="actions">
@@ -136,32 +155,32 @@
             <label>Orientation<select id="orientation"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></label>
           </div>
 
-          <fieldset>
+          <fieldset class="chips">
             <legend>Interests</legend>
-            <label class="check"><input type="checkbox" class="interest" value="science" /> Science</label>
-            <label class="check"><input type="checkbox" class="interest" value="history" /> History</label>
-            <label class="check"><input type="checkbox" class="interest" value="sports" /> Sports</label>
-            <label class="check"><input type="checkbox" class="interest" value="astronomy" /> Astronomy</label>
-            <label class="check"><input type="checkbox" class="interest" value="art" /> Art</label>
-            <label>Other<input id="interest-other" placeholder="anything else, comma separated" /></label>
+            <label class="chip"><input type="checkbox" class="interest" value="science" /><span>Science</span></label>
+            <label class="chip"><input type="checkbox" class="interest" value="history" /><span>History</span></label>
+            <label class="chip"><input type="checkbox" class="interest" value="sports" /><span>Sports</span></label>
+            <label class="chip"><input type="checkbox" class="interest" value="astronomy" /><span>Astronomy</span></label>
+            <label class="chip"><input type="checkbox" class="interest" value="art" /><span>Art</span></label>
+            <label class="other">Other<input id="interest-other" placeholder="anything else, comma separated" /></label>
           </fieldset>
 
           <label>Signature<input id="signature" placeholder="House Kaplan" /></label>
 
           <fieldset>
             <legend>Show on the artwork</legend>
-            <label class="check"><input type="checkbox" id="show_date" /> Date</label>
-            <label class="check"><input type="checkbox" id="show_weather" /> Weather</label>
+            <label class="toggle"><span>Date</span><input type="checkbox" id="show_date" /><i></i></label>
+            <label class="toggle"><span>Weather</span><input type="checkbox" id="show_weather" /><i></i></label>
             <label>Units<select id="temp_unit"><option value="c">°C</option><option value="f">°F</option></select></label>
           </fieldset>
 
           <fieldset>
             <legend>Holidays</legend>
-            <label class="check"><input type="checkbox" id="h-jewish" /> Jewish</label>
-            <label class="check"><input type="checkbox" id="h-israeli" /> Israeli</label>
-            <label class="check"><input type="checkbox" id="h-global" /> Global</label>
+            <label class="toggle"><span>Jewish</span><input type="checkbox" id="h-jewish" /><i></i></label>
+            <label class="toggle"><span>Israeli</span><input type="checkbox" id="h-israeli" /><i></i></label>
+            <label class="toggle"><span>Global</span><input type="checkbox" id="h-global" /><i></i></label>
           </fieldset>
-          <label class="check"><input type="checkbox" id="enabled" /> Generate daily</label>
+          <label class="toggle standalone"><span>Generate daily</span><input type="checkbox" id="enabled" /><i></i></label>
           <button type="submit">Save preferences</button>
           <p id="save-msg" class="ok" hidden></p>
         </form>
