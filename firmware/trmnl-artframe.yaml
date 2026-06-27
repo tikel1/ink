@@ -20,7 +20,7 @@
 substitutions:
   device_name: ink-frame
   friendly_name: "Ink Frame"
-  backend_base: "http://10.0.0.26:8000"
+  backend_base: "https://frames.example.com"
   timezone: "Asia/Jerusalem"
   idle_minutes: "10"               # battery: sleep after this much idle time
   powered_voltage: "4.15"          # >= this reads as "on USB power" (calibrate)
