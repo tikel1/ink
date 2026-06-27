@@ -321,7 +321,11 @@ async function syncByCode(code) {
 
 async function init() {
   wireWelcome(); wirePairing(); wireEditor(); wireAccount();
-  const code = new URLSearchParams(location.search).get("code");
+  const params = new URLSearchParams(location.search);
+  // The frame's QR can carry the backend address so the app self-configures.
+  const server = params.get("server");
+  if (server) setServer(server);
+  const code = params.get("code");
   const valid = code && /^\d{6}$/.test(code);
   try {
     // QR scanned with no account yet → create one silently, then pair.

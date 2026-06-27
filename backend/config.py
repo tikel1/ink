@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     )
 
     public_base_url: str = "http://localhost:8000"
+    # Where the QR on the frame sends people to get/open the app. Empty = use
+    # this backend's own /app. For production set it to the installable app URL
+    # (e.g. https://tikel1.github.io/ink).
+    app_url: str = ""
 
     # Generation provider + YOUR platform key (the default payer).
     image_provider: str = "openai"

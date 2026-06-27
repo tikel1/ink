@@ -1,6 +1,8 @@
 """Serve the bytes a device fetches: real artwork, or a splash by device state."""
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from fastapi import APIRouter
 from fastapi.responses import FileResponse, Response
 
@@ -18,8 +20,12 @@ def _png(data: bytes) -> Response:
 
 
 def _pair_url(code: str) -> str:
-    base = get_settings().public_base_url.rstrip("/")
-    return f"{base}/app/?code={code}"
+    """Where the frame's QR sends the phone: the install/open app URL, carrying
+    the backend address + pairing code so one scan installs/opens and pairs."""
+    settings = get_settings()
+    app = (settings.app_url or (settings.public_base_url.rstrip("/") + "/app")).rstrip("/")
+    server = quote(settings.public_base_url.rstrip("/"), safe="")
+    return f"{app}/?code={code}&server={server}"
 
 
 @router.get("/current/{device_id}.png")
