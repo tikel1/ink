@@ -235,7 +235,7 @@ async function openFrame(id) {
   $("ev-meta").textContent = "On view today";
   $("ev-text").textContent = "Loading…";
   loadArtwork($("preview-img"), $("img-skeleton"), id, () => {
-    $("ev-text").textContent = "No artwork generated yet. Tap Regenerate to create today's work.";
+    $("ev-text").textContent = "Today's work hasn't been created yet — tap Regenerate.";
   });
   try {
     currentDevice = await api(`/devices/${id}`);
@@ -252,7 +252,7 @@ async function loadPlacard(id, signature) {
   try {
     const { items } = await api(`/devices/${id}/archive?limit=1`);
     const m = items[0];
-    if (!m) { eyebrow.textContent = "On view today"; en.textContent = "No artwork generated yet."; return; }
+    if (!m) { eyebrow.textContent = "On view today"; en.textContent = "Today's work hasn't been created yet."; return; }
     eyebrow.textContent = [m.date, m.weather_summary].filter(Boolean).join("  ·  ");
     en.textContent = m.event_text_en || "—";
     if (m.event_text_he) { he.textContent = m.event_text_he; he.hidden = false; }
@@ -264,12 +264,12 @@ async function loadPlacard(id, signature) {
 
 function setBusy(on) {
   $("regen-btn").disabled = on;
-  $("regen-btn").textContent = on ? "Creating…" : "Regenerate";
+  $("regen-btn").textContent = on ? "Painting…" : "Regenerate";
   document.querySelector(".artframe").classList.toggle("busy", on);
 }
 
 async function pollGeneration(id) {
-  flash("action-msg", "Creating today's art… (about 20–30s)");
+  flash("action-msg", "Painting today's work… (about 20–30 s)");
   for (let i = 0; i < 48; i++) {
     await sleep(2500);
     let s;
@@ -279,7 +279,7 @@ async function pollGeneration(id) {
         loadArtwork($("preview-img"), $("img-skeleton"), id);
         await loadPlacard(id, currentDevice && currentDevice.signature);
       }
-      flash("action-msg", "Updated. The frame shows it on its next wake or KEY2 press.");
+      flash("action-msg", "Done — your frame shows it on its next refresh, or press KEY1.");
       return;
     }
     if (s.state === "error") { flash("action-msg", s.detail || "Generation failed.", true); return; }
