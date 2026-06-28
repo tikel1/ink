@@ -217,35 +217,81 @@ function wireConnect() {
 // --------------------------------------------------------------------------
 // Frame detail
 // --------------------------------------------------------------------------
+let frameItems = [];           // last N generations shown in the gallery
+
 async function openFrame(id) {
   currentId = id; go("frame");
-  $("ev-meta").textContent = "On view today"; $("ev-text").textContent = "Loading…";
-  loadArtwork($("preview-img"), $("img-skeleton"), id, () => { $("ev-text").textContent = "Today's work hasn't been created yet — tap Regenerate."; });
+  $("ev-meta").textContent = ""; $("ev-text").textContent = "Loading…"; $("ev-sign").hidden = true;
+  $("gallery").innerHTML = ""; $("gallery-dots").innerHTML = "";
   try {
     currentDevice = await api(`/devices/${id}`);
     const st = frameState(currentDevice);
     $("fr-dot").className = `dot ${st.cls}`;
     $("fr-status").textContent = `${st.label} · ${st.sub}`;
-    await loadPlacard(id, currentDevice.signature);
   } catch (e) { showError("action-msg", e); }
+  await loadGallery(id);
 }
 
-async function loadPlacard(id, signature) {
+function friendlyDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00"); const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((today - d) / DAY);
+  if (diff === 0) return "Today"; if (diff === 1) return "Yesterday";
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+function slideCard(portrait, inner) {
+  return `<div class="slide"><div class="art-card${portrait ? " is-portrait" : ""}"><div class="art-card-inner">${inner}</div></div></div>`;
+}
+
+async function loadGallery(id) {
+  let items = [];
+  try { ({ items } = await api(`/devices/${id}/archive?limit=10`)); } catch {}
+  frameItems = items || [];
+  const portrait = currentDevice && currentDevice.orientation === "portrait";
+  const g = $("gallery");
+  if (!frameItems.length) {
+    g.innerHTML = slideCard(portrait, `<div class="art-empty">No artwork yet —<br>tap Regenerate to create today's work.</div>`);
+    setPlacard(null); renderDots(0, 0); return;
+  }
+  g.innerHTML = frameItems.map(() => slideCard(portrait, `<img alt="artwork" />`)).join("");
+  g.querySelectorAll(".slide img").forEach((img, i) => {
+    img.onload = () => img.classList.add("loaded");
+    img.src = serverBase() + frameItems[i].image_url + `?t=${Date.now()}`;
+  });
+  g.scrollLeft = 0;
+  setPlacard(frameItems[0]); renderDots(0, frameItems.length);
+}
+
+function setPlacard(m) {
   const eyebrow = $("ev-meta"), en = $("ev-text"), sign = $("ev-sign");
-  sign.hidden = true;
-  try {
-    const { items } = await api(`/devices/${id}/archive?limit=1`);
-    const m = items[0];
-    if (!m) { eyebrow.textContent = "On view today"; en.textContent = "Today's work hasn't been created yet."; return; }
-    eyebrow.textContent = [m.date, m.weather_summary].filter(Boolean).join("  ·  ");
-    en.textContent = m.event_text_en || "—";
-    if (signature) { sign.textContent = `— ${signature}`; sign.hidden = false; }
-  } catch { eyebrow.textContent = "On view today"; en.textContent = "—"; }
+  if (!m) { eyebrow.textContent = "On view today"; en.textContent = "Today's work hasn't been created yet."; sign.hidden = true; return; }
+  eyebrow.textContent = [friendlyDate(m.date), m.weather_summary].filter(Boolean).join("  ·  ");
+  en.textContent = m.event_text_en || "—";
+  const sig = currentDevice && currentDevice.signature;
+  if (sig) { sign.textContent = `— ${sig}`; sign.hidden = false; } else sign.hidden = true;
+}
+
+function renderDots(active, total) {
+  const el = $("gallery-dots");
+  if (total < 2) { el.innerHTML = ""; return; }
+  el.innerHTML = Array.from({ length: total }, (_, i) =>
+    `<span class="dot-i${i === active ? " on" : ""}"></span>`).join("");
+}
+
+let galleryRAF = null;
+function onGalleryScroll() {
+  const g = $("gallery");
+  cancelAnimationFrame(galleryRAF);
+  galleryRAF = requestAnimationFrame(() => {
+    const i = Math.round(g.scrollLeft / g.clientWidth);
+    if (frameItems[i]) { setPlacard(frameItems[i]); renderDots(i, frameItems.length); }
+  });
 }
 
 function setBusy(on) {
   $("regen-btn").disabled = on; $("regen-btn").textContent = on ? "Painting…" : "Regenerate";
-  $("frame-fig").classList.toggle("busy", on);
+  $("gallery").classList.toggle("busy", on);
 }
 async function pollGeneration(id) {
   flash("action-msg", "Painting today's work… (about 20–30 s)");
@@ -253,7 +299,7 @@ async function pollGeneration(id) {
     await sleep(2500);
     let s; try { s = await api(`/devices/${id}/generation`); } catch { continue; }
     if (s.state === "done") {
-      if (id === currentId) { loadArtwork($("preview-img"), $("img-skeleton"), id); await loadPlacard(id, currentDevice && currentDevice.signature); }
+      if (id === currentId) await loadGallery(id);
       flash("action-msg", "Done — your frame shows it on its next refresh, or press KEY1."); return;
     }
     if (s.state === "error") { flash("action-msg", s.detail || "Generation failed.", true); return; }
@@ -267,10 +313,10 @@ function wireFrame() {
   $("goto-settings").addEventListener("click", openSettings);
   $("home-art-btn").addEventListener("click", () => openFrame(currentId));
   $("home-more").addEventListener("click", () => openFrame(currentId));
+  $("gallery").addEventListener("scroll", onGalleryScroll, { passive: true });
   $("refresh-btn").addEventListener("click", async () => {
     $("refresh-btn").disabled = true;
-    loadArtwork($("preview-img"), $("img-skeleton"), currentId);
-    await loadPlacard(currentId, currentDevice && currentDevice.signature);
+    await loadGallery(currentId);
     $("refresh-btn").disabled = false; toast("Refreshed");
   });
   $("regen-btn").addEventListener("click", async () => {
