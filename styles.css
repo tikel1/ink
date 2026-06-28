@@ -434,6 +434,31 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
                        color: var(--ink-soft); cursor: pointer; }
 .frame-switch button.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 
+/* ── Frame screen: swipeable gallery of recent works ─────────────────── */
+.gallery { display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory;
+           -webkit-overflow-scrolling: touch; scrollbar-width: none; margin: 6px -20px 0; padding: 8px 0; }
+.gallery::-webkit-scrollbar { display: none; }
+.gallery.busy .art-card img { filter: grayscale(1) opacity(.4); }
+.slide { flex: 0 0 100%; scroll-snap-align: center; display: flex; justify-content: center;
+         align-items: center; padding: 0 20px; }
+/* Each work on a clean white card with a soft drop shadow. */
+.art-card { position: relative; background: #fff; padding: clamp(12px, 4vw, 20px); border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(27,24,19,.10), 0 22px 44px -18px rgba(27,24,19,.45); }
+.art-card-inner { position: relative; }
+.art-card img { display: block; opacity: 0; transition: opacity .4s var(--ease); border-radius: 2px; }
+.art-card img.loaded { opacity: 1; }
+/* Landscape works: cap by width + height. */
+.art-card:not(.is-portrait) img { width: auto; height: auto; max-width: min(78vw, 420px); max-height: 50dvh; }
+/* Portrait works: served PNG is the panel buffer (landscape px) — rotate upright. */
+.art-card.is-portrait { container-type: size; aspect-ratio: 480 / 800; height: 56dvh; }
+.art-card.is-portrait .art-card-inner { position: static; }
+.art-card.is-portrait img { position: absolute; top: 50%; left: 50%; width: 100cqh; height: 100cqw;
+            max-width: none; transform: translate(-50%, -50%) rotate(90deg); transform-origin: center; }
+.art-empty { color: var(--muted); text-align: center; font-size: 14px; line-height: 1.6; padding: 40px 18px; }
+.dots { display: flex; justify-content: center; gap: 6px; margin: 10px 0 4px; min-height: 6px; }
+.dot-i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: all .25s var(--ease); }
+.dot-i.on { background: var(--ink); width: 18px; border-radius: 3px; }
+
 /* ── Frame screen tweaks (compact, less scrolling) ───────────────────── */
 .frame-screen .artframe { margin: 4px 0 12px; }
 .status-line { display: flex; align-items: center; justify-content: center; gap: 8px;
