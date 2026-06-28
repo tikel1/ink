@@ -109,9 +109,11 @@ function wireWelcome() {
   $("server-url").value = serverBase();
   $("server-save").addEventListener("click", () => { setServer($("server-url").value); flash("server-msg", "Saved. Now tap Get started."); });
   $("start-btn").addEventListener("click", async () => {
-    try { const { token: t } = await api("/account", { method: "POST", auth: false }); localStorage.setItem(TOKEN_KEY, t); await showHome(); }
+    if (!confirm("Create a NEW Ink account?\n\nIf you've set up a frame before, tap Cancel and use “I already have an account” to restore it — a new account won't show your existing frame.")) return;
+    try { const { token: t } = await api("/account", { method: "POST", auth: false }); localStorage.setItem(TOKEN_KEY, t); toast("New account created"); await showHome(); }
     catch (e) { showError("welcome-error", e); $("server-details").open = true; }
   });
+  $("restore-open").addEventListener("click", () => { $("restore-details").open = true; $("restore-token").focus(); });
   $("restore-btn").addEventListener("click", async () => {
     const t = $("restore-token").value.trim(); if (!t) return;
     localStorage.setItem(TOKEN_KEY, t);
