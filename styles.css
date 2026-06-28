@@ -387,8 +387,13 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
     inset 0 2px 3px rgba(255,255,255,.20),   /* top molding highlight */
     inset 0 -4px 8px rgba(0,0,0,.45),         /* bottom molding shade (rounded look) */
     inset 0 0 0 1px rgba(0,0,0,.35),          /* crisp outer edge */
-    18px 28px 48px -16px rgba(27,24,19,.55),  /* soft wall shadow, cast down-right */
-    0 6px 16px -8px rgba(27,24,19,.4);
+    /* Realistic cast shadow: tight contact shadow + softening layers, falling
+       downward as if lit from above. Each layer larger + fainter. */
+    0 1px 2px rgba(27,24,19,.20),
+    0 3px 5px rgba(27,24,19,.16),
+    0 8px 14px rgba(27,24,19,.13),
+    0 17px 28px -4px rgba(27,24,19,.15),
+    0 30px 50px -12px rgba(27,24,19,.20);
 }
 /* Wide white mat inside the molding. */
 .gframe-mat {
@@ -455,7 +460,11 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
          align-items: center; padding: 0 20px; }
 /* Each work on a clean white card with a soft drop shadow. */
 .art-card { position: relative; background: #fff; padding: clamp(12px, 4vw, 20px); border-radius: 5px;
-            box-shadow: 0 1px 3px rgba(27,24,19,.10), 0 22px 44px -18px rgba(27,24,19,.45); }
+            box-shadow:
+              0 1px 2px rgba(27,24,19,.16),
+              0 3px 6px rgba(27,24,19,.12),
+              0 8px 16px rgba(27,24,19,.11),
+              0 18px 34px -10px rgba(27,24,19,.17); }
 .art-card-inner { position: relative; }
 .art-card img { display: block; opacity: 0; transition: opacity .4s var(--ease); border-radius: 2px; }
 .art-card img.loaded { opacity: 1; }
