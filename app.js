@@ -186,8 +186,9 @@ function wireConnect() {
       const dev = await api("/devices/pair", { method: "POST", body: { pairing_code: $("pair-code").value.trim() } });
       const nm = $("pair-name").value.trim();
       if (nm) { try { await api(`/devices/${dev.id}/config`, { method: "PUT", body: { name: nm } }); } catch {} }
-      $("pair-code").value = ""; $("pair-name").value = ""; toast("Frame connected");
-      await showHome(dev.id);
+      $("pair-code").value = ""; $("pair-name").value = ""; toast("Paired!");
+      await openFrame(dev.id);
+      flash("action-msg", "Paired! Go ahead and tap Regenerate to create your first artwork.");
     } catch (e2) { showError("pair-error", e2); }
   });
 }
@@ -517,8 +518,11 @@ function wireInstall() {
 // QR deep-link pairing
 // --------------------------------------------------------------------------
 async function syncByCode(code) {
-  try { const dev = await api("/devices/pair", { method: "POST", body: { pairing_code: code } }); toast("Frame connected"); await showHome(dev.id); }
-  catch (e) { await showHome(); go("connect"); $("pair-code").value = code; showError("pair-error", e); }
+  try {
+    const dev = await api("/devices/pair", { method: "POST", body: { pairing_code: code } });
+    toast("Paired!"); await openFrame(dev.id);
+    flash("action-msg", "Paired! Go ahead and tap Regenerate to create your first artwork.");
+  } catch (e) { await showHome(); go("connect"); $("pair-code").value = code; showError("pair-error", e); }
 }
 
 function init() {
