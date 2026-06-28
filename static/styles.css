@@ -46,7 +46,9 @@ body::before {
 
 /* ── Screen transitions ───────────────────────────────────────────────── */
 .screen { animation: rise .42s var(--ease) both; }
-.screen[hidden] { display: none; }
+/* Must beat later equal-specificity rules like `.screen.center { display:flex }`,
+   otherwise a hidden screen (e.g. welcome) keeps rendering under the active one. */
+.screen[hidden] { display: none !important; }
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .screen.center { min-height: 86dvh; display: flex; flex-direction: column;
                  align-items: center; justify-content: center; text-align: center; }
@@ -399,6 +401,11 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
   width: 100cqh; height: 100cqw; max-width: none;
   transform: translate(-50%, -50%) rotate(-90deg); transform-origin: center;
 }
+/* The orientation rules above set opacity:0 and outrank the generic
+   `.gframe-mat img.loaded` rule, so the loaded image never faded in. Re-assert
+   opacity:1 at higher specificity for both orientations. */
+.home-frame:not(.is-portrait) .gframe-mat img.loaded,
+.home-frame.is-portrait .gframe-mat img.loaded { opacity: 1; }
 
 .home-meta { text-align: center; padding: 0 6px; }
 .home-meta-head { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }

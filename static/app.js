@@ -35,14 +35,34 @@ let resolvedTz = null;     // tz from the latest geocode (used when auto-tz is o
 // Navigation
 // --------------------------------------------------------------------------
 const SCREENS = ["welcome", "home", "connect", "frame", "artwork", "settings", "account"];
-function go(name) {
+let currentScreen = null;
+
+// Toggle which screen is visible (no history side effects).
+function setScreen(name) {
   for (const s of SCREENS) $(`screen-${s}`).hidden = s !== name;
   // Home is a single, fixed viewport (no scroll); every other screen scrolls
   // normally. Lock #app to the viewport only on home so its padding can't push
   // the page past 100dvh.
   $("app").classList.toggle("locked", name === "home");
   window.scrollTo(0, 0);
+  currentScreen = name;
 }
+
+// Navigate to a screen and record it in history so the Android/browser back
+// button steps back through the app instead of leaving the site.
+function go(name) {
+  if (name === currentScreen) { setScreen(name); return; }
+  setScreen(name);
+  const state = { screen: name };
+  if (history.state && history.state.screen) history.pushState(state, "");
+  else history.replaceState(state, "");
+}
+
+// Hardware/browser back: restore the previous in-app screen.
+window.addEventListener("popstate", (e) => {
+  const name = e.state && e.state.screen;
+  if (name && SCREENS.includes(name)) setScreen(name);
+});
 
 async function api(path, { method = "GET", body, auth = true, timeout = 9000 } = {}) {
   const headers = { "Content-Type": "application/json" };
