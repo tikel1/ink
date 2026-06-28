@@ -39,6 +39,10 @@ body::before {
 
 #app { position: relative; z-index: 1; max-width: var(--maxw); margin: 0 auto;
        padding: max(18px, env(safe-area-inset-top)) 20px 60px; }
+/* Home is locked to exactly one viewport — no page scroll. Other screens keep
+   the scrollable padding above. */
+#app.locked { height: 100dvh; overflow: hidden;
+       padding: max(12px, env(safe-area-inset-top)) 20px max(10px, env(safe-area-inset-bottom)); }
 
 /* ── Screen transitions ───────────────────────────────────────────────── */
 .screen { animation: rise .42s var(--ease) both; }
@@ -350,7 +354,7 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
                background: none; border: none; cursor: pointer; padding: 0; text-decoration: underline; }
 
 /* ═══════════════════════ v2 — home as a hung work of art ═══════════════ */
-.home { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+.home { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
 .home-top { display: flex; align-items: center; gap: 12px; margin: 2px 0 14px; position: relative; }
 .brand-word { font-family: "Fraunces"; font-weight: 800; font-size: 30px; letter-spacing: -.01em; line-height: 1; }
 .brand-word.small { font-size: 22px; }
