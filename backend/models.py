@@ -53,6 +53,10 @@ class Device:
     orientation: str
     show_date: bool
     show_weather: bool
+    city_name: str
+    auto_timezone: bool
+    schedule: str
+    schedule_days: str
     custom_prompt_override: Optional[str]
     enabled: bool
     last_seen: Optional[str]
@@ -84,6 +88,10 @@ class Device:
             orientation=row["orientation"],
             show_date=bool(row["show_date"]),
             show_weather=bool(row["show_weather"]),
+            city_name=row["city_name"],
+            auto_timezone=bool(row["auto_timezone"]),
+            schedule=row["schedule"],
+            schedule_days=row["schedule_days"],
             custom_prompt_override=row["custom_prompt_override"],
             enabled=bool(row["enabled"]),
             last_seen=row["last_seen"],

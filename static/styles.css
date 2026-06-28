@@ -337,6 +337,92 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .ib-btn { width: auto; padding: 10px 18px; }
 .ib-later { font-size: 12.5px; color: var(--muted); }
 
+/* ═══════════════════════ v2 — home as a hung work of art ═══════════════ */
+.home { display: flex; flex-direction: column; min-height: 92dvh; }
+.home-top { display: flex; align-items: center; gap: 12px; margin: 2px 0 14px; position: relative; }
+.brand-word { font-family: "Fraunces"; font-weight: 800; font-size: 30px; letter-spacing: -.01em; line-height: 1; }
+.brand-word.small { font-size: 22px; }
+.inkmark-anim { width: 40px; height: 40px; }
+.home-top .inkmark-anim { margin-left: 4px; }
+.gear-btn { margin-left: auto; background: none; border: none; cursor: pointer; padding: 8px;
+            border-radius: 50%; color: var(--ink-soft); transition: background .2s, color .2s; }
+.gear-btn:hover { background: rgba(27,24,19,.07); color: var(--ink); }
+.frame-screen .home-top .back { font-size: 26px; line-height: 1; padding: 0 6px 0 0; color: var(--ink-soft); }
+
+.home-frame { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 16px; }
+
+/* Classic museum frame */
+.gallery-frame { display: block; width: 100%; margin: 0 auto; cursor: pointer; padding: 0;
+                 background: none; border: none; max-width: 520px; }
+.gframe-mat {
+  display: block; position: relative; background: #fdfdfb;
+  padding: clamp(14px, 5vw, 30px);
+  border-radius: 3px;
+  /* layered "frame": dark outer molding + gold fillet + white mat */
+  box-shadow:
+    0 0 0 3px #d8cba0,                                   /* gold fillet */
+    0 0 0 16px #1d1a14,                                  /* black/wood molding */
+    0 0 0 18px #3b3528,                                  /* molding highlight edge */
+    var(--shadow-lg);
+}
+.gframe-mat::after { content: ""; position: absolute; inset: clamp(14px,5vw,30px);
+                     box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); pointer-events: none; }
+.gframe-mat img { display: block; width: 100%; border-radius: 1px; opacity: 0;
+                  transition: opacity .5s var(--ease); }
+.gframe-mat img.loaded { opacity: 1; }
+.gframe-mat .skeleton { position: absolute; inset: clamp(14px,5vw,30px); }
+/* Portrait frame: the served PNG is rotated; show it upright + taller frame */
+.home-frame.is-portrait .gallery-frame { max-width: 320px; }
+.home-frame.is-portrait .gframe-mat img { transform: rotate(-90deg); }
+.gallery-frame:active { transform: scale(.99); }
+
+.home-meta { text-align: center; padding: 0 6px; }
+.home-meta-head { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.home-name { font-family: "Fraunces"; font-size: 20px; font-weight: 600; }
+.status-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+               color: var(--ink-soft); background: var(--paper-2); border: 1px solid var(--line);
+               padding: 4px 10px; border-radius: 999px; }
+.home-explain { color: var(--ink-soft); font-size: 14.5px; line-height: 1.5; margin: 10px auto 4px;
+                max-width: 42ch; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+                overflow: hidden; }
+.more-link { color: var(--ink); font-weight: 600; }
+.frame-switch { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 6px; }
+.frame-switch button { background: var(--paper-2); border: 1.5px solid var(--line); border-radius: 999px;
+                       padding: 6px 13px; font: inherit; font-size: 12.5px; font-weight: 600;
+                       color: var(--ink-soft); cursor: pointer; }
+.frame-switch button.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+/* ── Frame screen tweaks (compact, less scrolling) ───────────────────── */
+.frame-screen .artframe { margin: 4px 0 12px; }
+.status-line { display: flex; align-items: center; justify-content: center; gap: 8px;
+               font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin: 0 0 10px; }
+.placard { padding: 0 6px; }
+.nav-list.compact { margin-top: 14px; gap: 8px; }
+.nav-list.compact .nav-row { padding: 12px 14px; }
+.nav-list.compact .nav-t { font-family: "Fraunces"; font-size: 15px; font-weight: 600; flex: 1; }
+
+/* ── Radio groups ────────────────────────────────────────────────────── */
+.radios { border: none; padding: 0; margin: 14px 0 0; }
+.radios legend { font-size: 13px; font-weight: 600; color: var(--ink-soft); margin-bottom: 8px; padding: 0; }
+.radios { display: flex; flex-wrap: wrap; gap: 9px; }
+.radios legend { flex-basis: 100%; }
+.radio { position: relative; margin: 0; }
+.radio input { position: absolute; opacity: 0; pointer-events: none; }
+.radio span { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 10px;
+              font-size: 14px; font-weight: 600; color: var(--ink-soft); background: var(--paper);
+              border: 1.5px solid var(--line); cursor: pointer; transition: all .18s var(--ease); }
+.radio input:checked + span { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.radios.orient .radio span { flex-direction: column; padding: 12px 22px; }
+.ori { width: 30px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+
+/* ── City field with edit icon ───────────────────────────────────────── */
+.field-with-icon { position: relative; align-items: center; }
+.icon-inline { background: none; border: none; cursor: pointer; color: var(--ink-soft);
+               font-size: 16px; padding: 0 6px; }
+h4.sub { font-size: 13px; font-weight: 600; color: var(--muted); margin: 18px 0 0;
+         text-transform: uppercase; letter-spacing: .06em; }
+.chips.days { margin-top: 10px; }
+
 /* ── Messages + toast ────────────────────────────────────────────────── */
 .ok { color: var(--ok); font-size: 13px; margin: 10px 0 0; font-weight: 600; }
 .error { color: var(--danger); font-size: 13px; margin: 10px 0 0; font-weight: 600; }

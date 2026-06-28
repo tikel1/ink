@@ -41,6 +41,10 @@ class ConfigUpdate(BaseModel):
     orientation: str | None = Field(default=None, pattern=r"^(landscape|portrait)$")
     show_date: bool | None = None
     show_weather: bool | None = None
+    city_name: str | None = Field(default=None, max_length=80)
+    auto_timezone: bool | None = None
+    schedule: str | None = Field(default=None, pattern=r"^(daily|weekly|custom)$")
+    schedule_days: str | None = Field(default=None, max_length=60)
     custom_prompt_override: str | None = None
     enabled: bool | None = None
 
@@ -200,6 +204,10 @@ def _device_payload(device: Device) -> dict:
         "orientation": device.orientation,
         "show_date": device.show_date,
         "show_weather": device.show_weather,
+        "city_name": device.city_name,
+        "auto_timezone": device.auto_timezone,
+        "schedule": device.schedule,
+        "schedule_days": device.schedule_days,
         "custom_prompt_override": device.custom_prompt_override,
         "enabled": device.enabled,
         "battery": device.battery,

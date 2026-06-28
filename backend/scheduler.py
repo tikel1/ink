@@ -43,8 +43,20 @@ async def run_due_generations() -> None:
 
 def _is_due(device, lead_minutes: int) -> bool:
     now = now_in_tz(device.tz)
+    if not _scheduled_today(device, now):
+        return False
     existing = artwork_repo.get(device.id, now.date().isoformat())
     if existing and existing.status == artwork_repo.READY:
         return False
     wake = now.replace(hour=device.wake_hour, minute=0, second=0, microsecond=0)
     return wake - timedelta(minutes=lead_minutes) <= now < wake
+
+
+def _scheduled_today(device, now) -> bool:
+    """daily → every day; weekly/custom → only on the chosen weekday(s)."""
+    if device.schedule == "daily":
+        return True
+    days = {d.strip().lower() for d in (device.schedule_days or "").split(",") if d.strip()}
+    if not days:                       # nothing chosen → don't strand the frame
+        return True
+    return now.strftime("%a").lower() in days

@@ -39,6 +39,10 @@ CREATE TABLE IF NOT EXISTS devices (
     orientation     TEXT NOT NULL DEFAULT 'landscape',
     show_date       INTEGER NOT NULL DEFAULT 1,
     show_weather    INTEGER NOT NULL DEFAULT 1,
+    city_name     TEXT NOT NULL DEFAULT '',         -- display name of the location
+    auto_timezone INTEGER NOT NULL DEFAULT 1,        -- tz follows the location automatically
+    schedule      TEXT NOT NULL DEFAULT 'daily',     -- daily | weekly | custom
+    schedule_days TEXT NOT NULL DEFAULT '',          -- comma days for custom, e.g. mon,thu
     custom_prompt_override TEXT,
     enabled      INTEGER NOT NULL DEFAULT 1,
     last_seen    TEXT,
@@ -69,6 +73,10 @@ _MIGRATIONS = {
     "show_date": "INTEGER NOT NULL DEFAULT 1",
     "show_weather": "INTEGER NOT NULL DEFAULT 1",
     "name": "TEXT NOT NULL DEFAULT ''",
+    "city_name": "TEXT NOT NULL DEFAULT ''",
+    "auto_timezone": "INTEGER NOT NULL DEFAULT 1",
+    "schedule": "TEXT NOT NULL DEFAULT 'daily'",
+    "schedule_days": "TEXT NOT NULL DEFAULT ''",
 }
 
 

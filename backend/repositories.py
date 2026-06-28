@@ -138,6 +138,7 @@ def unbind_device(device_id: str) -> None:
                  signature = ?,
                  holiday_jewish = 1, holiday_israeli = 1, holiday_global = 1,
                  orientation = 'landscape', show_date = 1, show_weather = 1,
+                 city_name = '', auto_timezone = 1, schedule = 'daily', schedule_days = '',
                  custom_prompt_override = NULL, enabled = 1
                WHERE id = ?""",
             (
@@ -172,6 +173,7 @@ def update_device_config(device_id: str, **fields: object) -> None:
         "tz", "lat", "lon", "wake_hour", "language", "temp_unit", "interests",
         "signature", "holiday_jewish", "holiday_israeli", "holiday_global",
         "orientation", "show_date", "show_weather",
+        "city_name", "auto_timezone", "schedule", "schedule_days",
         "custom_prompt_override", "enabled",
     }
     updates = {k: v for k, v in fields.items() if k in allowed}
