@@ -27,10 +27,11 @@ class Settings(BaseSettings):
     image_provider: str = "openai"
     platform_openai_api_key: str = ""
     openai_image_model: str = "gpt-image-2-2026-04-21"
-    # low|medium|high — "low" (~$0.006-0.012/image) is plenty for a 1-bit
-    # thresholded e-ink panel; medium/high cost far more.
-    openai_image_quality: str = "low"
-    openai_text_model: str = "gpt-4o-mini"
+    # low|medium|high — "medium" (~$0.05/image) is the quality/cost sweet spot
+    # for the framed art; "low" looked too soft, "high" (~$0.21) is overkill.
+    openai_image_quality: str = "medium"
+    # Smart-but-cheap text model for event selection + fact-checking.
+    openai_text_model: str = "gpt-5.4-mini"
 
     # Fernet key (base64, 32 bytes) for encrypting per-account API keys at rest.
     master_encryption_key: str = ""

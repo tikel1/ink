@@ -57,6 +57,8 @@ class Device:
     auto_timezone: bool
     schedule: str
     schedule_days: str
+    power_source: str
+    sleep_after_minutes: int
     custom_prompt_override: Optional[str]
     enabled: bool
     last_seen: Optional[str]
@@ -92,6 +94,8 @@ class Device:
             auto_timezone=bool(row["auto_timezone"]),
             schedule=row["schedule"],
             schedule_days=row["schedule_days"],
+            power_source=row["power_source"],
+            sleep_after_minutes=row["sleep_after_minutes"],
             custom_prompt_override=row["custom_prompt_override"],
             enabled=bool(row["enabled"]),
             last_seen=row["last_seen"],

@@ -179,15 +179,16 @@ function renderFrameSwitch(activeId) {
 // --------------------------------------------------------------------------
 function wireConnect() {
   $("empty-connect-btn").addEventListener("click", () => go("connect"));
-  $("connect-back").addEventListener("click", () => showHome());
+  $("connect-back").addEventListener("click", () => { stopScan(); showHome(); });
   $("pair-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     try {
       const dev = await api("/devices/pair", { method: "POST", body: { pairing_code: $("pair-code").value.trim() } });
       const nm = $("pair-name").value.trim();
       if (nm) { try { await api(`/devices/${dev.id}/config`, { method: "PUT", body: { name: nm } }); } catch {} }
-      $("pair-code").value = ""; $("pair-name").value = ""; toast("Frame connected");
-      await showHome(dev.id);
+      $("pair-code").value = ""; $("pair-name").value = ""; toast("Paired!");
+      await openFrame(dev.id);
+      flash("action-msg", "Paired! Go ahead and tap Regenerate to create your first artwork.");
     } catch (e2) { showError("pair-error", e2); }
   });
 }
@@ -386,13 +387,16 @@ function openSettings() {
   renderDayChips((d.schedule_days || "").split(",").map((s) => s.trim()).filter(Boolean));
   $("day-chips").hidden = (d.schedule || "daily") === "daily";
   $("wake").value = d.wake_hour;
+  setRadio("power", d.power_source || "usb");
+  $("sleep-after").value = d.sleep_after_minutes || 10;
+  $("sleep-row").hidden = (d.power_source || "usb") !== "battery";
   $("auto-tz").checked = d.auto_timezone !== false;
   $("tz-row").hidden = d.auto_timezone !== false; $("tz").value = d.tz || "";
   $("spec-conn").textContent = d.last_seen ? relTime(d.last_seen) : "never";
   $("spec-wifi").textContent = wifiLabel(d.wifi_rssi);
   const bat = batteryPct(d.battery); $("spec-batt").textContent = bat != null ? `${bat}%` : "—";
   $("spec-fw").textContent = d.fw_version || "—"; $("spec-id").textContent = d.id;
-  ["name-msg", "sched-msg", "tz-msg"].forEach((i) => { $(i).hidden = true; });
+  ["name-msg", "sched-msg", "tz-msg", "power-msg"].forEach((i) => { $(i).hidden = true; });
   go("settings");
 }
 
@@ -410,6 +414,15 @@ function wireSettings() {
     const wake = parseInt($("wake").value, 10);
     try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body: { schedule: sched, schedule_days: days, wake_hour: isNaN(wake) ? undefined : wake } }); flash("sched-msg", "Saved."); toast("Schedule saved"); }
     catch (e) { showError("sched-msg", e); }
+  });
+  document.querySelectorAll('input[name="power"]').forEach((r) =>
+    r.addEventListener("change", () => { $("sleep-row").hidden = getRadio("power") !== "battery"; }));
+  $("power-save").addEventListener("click", async () => {
+    const body = { power_source: getRadio("power") };
+    const s = parseInt($("sleep-after").value, 10);
+    if (!isNaN(s)) body.sleep_after_minutes = s;
+    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body }); flash("power-msg", "Saved."); toast("Power saved"); }
+    catch (e) { showError("power-msg", e); }
   });
   $("auto-tz").addEventListener("change", (e) => { $("tz-row").hidden = e.target.checked; });
   $("tz-save").addEventListener("click", async () => {
@@ -514,16 +527,72 @@ function wireInstall() {
 }
 
 // --------------------------------------------------------------------------
+// In-app QR scanner (camera) to pair
+// --------------------------------------------------------------------------
+let scanStream = null, scanRAF = null, scanDetector = null;
+
+function wireScanner() {
+  $("scan-btn").addEventListener("click", startScan);
+  $("scan-cancel").addEventListener("click", stopScan);
+}
+
+async function startScan() {
+  $("pair-error").hidden = true;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    $("manual-pair").open = true; toast("Camera not available — enter the code"); return;
+  }
+  try { scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); }
+  catch { $("manual-pair").open = true; toast("Camera blocked — enter the code instead"); return; }
+
+  const v = $("scan-video"); v.srcObject = scanStream; await v.play().catch(() => {});
+  $("scanner").hidden = false; $("scan-btn").hidden = true;
+  scanDetector = null;
+  if ("BarcodeDetector" in window) { try { scanDetector = new BarcodeDetector({ formats: ["qr_code"] }); } catch {} }
+
+  const canvas = document.createElement("canvas"); const ctx = canvas.getContext("2d");
+  const tick = async () => {
+    if (!scanStream) return;
+    let text = null;
+    if (v.readyState >= 2) {
+      if (scanDetector) { try { const c = await scanDetector.detect(v); if (c.length) text = c[0].rawValue; } catch {} }
+      else if (window.jsQR) {
+        canvas.width = v.videoWidth; canvas.height = v.videoHeight;
+        ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+        const d = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const r = window.jsQR(d.data, d.width, d.height); if (r) text = r.data;
+      }
+    }
+    if (text) {
+      let code = null, server = null;
+      try { const u = new URL(text); code = u.searchParams.get("code"); server = u.searchParams.get("server"); } catch {}
+      if (!code) { const m = String(text).match(/\b(\d{6})\b/); if (m) code = m[1]; }
+      if (code) { stopScan(); if (server) setServer(server); toast("QR found — pairing…"); syncByCode(code); return; }
+    }
+    scanRAF = requestAnimationFrame(tick);
+  };
+  tick();
+}
+
+function stopScan() {
+  if (scanRAF) { cancelAnimationFrame(scanRAF); scanRAF = null; }
+  if (scanStream) { scanStream.getTracks().forEach((t) => t.stop()); scanStream = null; }
+  if ($("scanner")) { $("scanner").hidden = true; $("scan-btn").hidden = false; }
+}
+
+// --------------------------------------------------------------------------
 // QR deep-link pairing
 // --------------------------------------------------------------------------
 async function syncByCode(code) {
-  try { const dev = await api("/devices/pair", { method: "POST", body: { pairing_code: code } }); toast("Frame connected"); await showHome(dev.id); }
-  catch (e) { await showHome(); go("connect"); $("pair-code").value = code; showError("pair-error", e); }
+  try {
+    const dev = await api("/devices/pair", { method: "POST", body: { pairing_code: code } });
+    toast("Paired!"); await openFrame(dev.id);
+    flash("action-msg", "Paired! Go ahead and tap Regenerate to create your first artwork.");
+  } catch (e) { await showHome(); go("connect"); $("pair-code").value = code; showError("pair-error", e); }
 }
 
 function init() {
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
-  wireWelcome(); wireConnect(); wireFrame(); wireArtwork(); wireSettings(); wireAccount(); wireInstall();
+  wireWelcome(); wireConnect(); wireFrame(); wireArtwork(); wireSettings(); wireAccount(); wireInstall(); wireScanner();
   const params = new URLSearchParams(location.search);
   const server = params.get("server"); if (server) setServer(server);
   const code = params.get("code"); const valid = code && /^\d{6}$/.test(code);

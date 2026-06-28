@@ -93,11 +93,28 @@ globals:
   - id: last_ver
     type: std::string
     initial_value: '""'
+  # Power config, polled from the backend's .ver headers. Default "usb" so the
+  # frame never sleeps unexpectedly until the backend says it's on battery.
+  - id: g_power
+    type: std::string
+    initial_value: '"usb"'
+  - id: g_sleep_min
+    type: int
+    initial_value: "10"
+  - id: g_wake_hour
+    type: int
+    initial_value: "6"
 
-# Deep sleep intentionally removed: KEY1-on-GPIO2 sharing the wake pin in polling
-# mode triggered spurious sleeps that bricked the board seconds after boot. This
-# is an always-awake (USB) build. A debounced, battery-aware sleep can return
-# later as its own change.
+# Deep sleep is used only on battery (see the version-poll). KEY1 wakes it; sleep
+# is triggered ONLY by the idle check — never by a KEY press (that bricked boot).
+deep_sleep:
+  id: deep_sleep_component
+  wakeup_pin:
+    number: GPIO2
+    inverted: true
+    mode: INPUT_PULLUP
+    allow_other_uses: true
+  wakeup_pin_mode: INVERT_WAKEUP
 
 button:
   - platform: factory_reset
@@ -106,11 +123,11 @@ button:
     internal: true
 
 binary_sensor:
-  # KEY1 = refresh (re-fetch + redraw the current artwork).
+  # KEY1 = refresh + wake (the deep-sleep wake pin). Press never sleeps.
   - platform: gpio
     name: "KEY1 refresh"
     internal: true
-    pin: { number: GPIO2, mode: INPUT_PULLUP, inverted: true }
+    pin: { number: GPIO2, mode: INPUT_PULLUP, inverted: true, allow_other_uses: true }
     on_press:
       - logger.log: "KEY1 refresh"
       - component.update: online_artwork
@@ -124,16 +141,16 @@ binary_sensor:
       - logger.log: "KEY2 refresh"
       - component.update: online_artwork
 
-  # KEY3 = hold 5s for factory reset (clears WiFi + pairing).
+  # KEY3 = hold 15s to factory-reset (clears WiFi + pairing, returns to onboarding).
   - platform: gpio
     name: "KEY3 factory reset"
     internal: true
     pin: { number: GPIO5, mode: INPUT_PULLUP, inverted: true }
     on_multi_click:
       - timing:
-          - ON for at least 5s
+          - ON for at least 15s
         then:
-          - logger.log: "Factory reset (held 5s)"
+          - logger.log: "Factory reset (held 15s)"
           - button.press: factory_reset_button
 
 sensor:
@@ -175,19 +192,35 @@ interval:
     then:
       - http_request.get:
           url: !lambda 'return "${backend_base}/media/current/" + get_mac_address() + ".ver";'
-          collect_headers: ["x-ver"]
+          collect_headers: ["x-ver", "x-power", "x-sleep", "x-wake"]
           on_response:
             then:
               - lambda: |-
                   if (response->status_code != 200) return;
+                  // Power/sleep config (every poll).
+                  std::string p = response->get_response_header("x-power");
+                  if (!p.empty()) id(g_power) = p;
+                  std::string sm = response->get_response_header("x-sleep");
+                  if (!sm.empty()) id(g_sleep_min) = atoi(sm.c_str());
+                  std::string wh = response->get_response_header("x-wake");
+                  if (!wh.empty()) id(g_wake_hour) = atoi(wh.c_str());
+                  // Refresh the artwork only when the version changed.
                   std::string v = response->get_response_header("x-ver");
-                  if (v.empty()) return;
-                  if (id(last_ver).empty()) { id(last_ver) = v; return; }  // baseline only
-                  if (v != id(last_ver)) {
-                    id(last_ver) = v;
-                    ESP_LOGI("ink", "new artwork version %s — refreshing", v.c_str());
-                    id(online_artwork)->update();
+                  if (!v.empty()) {
+                    if (id(last_ver).empty()) { id(last_ver) = v; }
+                    else if (v != id(last_ver)) {
+                      id(last_ver) = v;
+                      ESP_LOGI("ink", "new artwork version %s — refreshing", v.c_str());
+                      id(online_artwork)->update();
+                    }
                   }
+      # On battery: after the awake window, sleep until the next update hour.
+      - if:
+          condition:
+            lambda: 'return id(g_power) == "battery" && id(image_loaded) &&
+                            millis() > (uint32_t) id(g_sleep_min) * 60000UL;'
+          then:
+            - script.execute: go_to_sleep
 
 online_image:
   url: "${backend_base}/media/current/placeholder.png"
@@ -225,30 +258,15 @@ display:
         it.image(0, 0, id(online_artwork), Color::BLACK, Color::WHITE);
         return;
       }
-      // Branded setup screen — Ink masthead, editorial look.
+      // Pre-WiFi: the portrait Ink onboarding screen (app QR + Wi-Fi steps).
       it.fill(Color::WHITE);
-      // Ink mark: an organic ink blob + a separate dot.
-      it.filled_circle(92, 92, 33, Color::BLACK);
-      it.filled_circle(124, 110, 21, Color::BLACK);
-      it.filled_circle(152, 64, 11, Color::BLACK);
-      it.print(186, 40, id(ink_display), Color::BLACK, TextAlign::TOP_LEFT, "Ink");
-      // Masthead double rule.
-      it.filled_rectangle(60, 150, 384, 3, Color::BLACK);
-      it.filled_rectangle(60, 157, 384, 1, Color::BLACK);
-      it.print(62, 166, id(ink_italic), Color::BLACK, TextAlign::TOP_LEFT,
-               "A new work of art, every morning.");
-      // Getting Started
-      it.print(60, 216, id(ink_head), Color::BLACK, TextAlign::TOP_LEFT, "Getting Started");
-      it.print(64, 266, id(ink_body), Color::BLACK, TextAlign::TOP_LEFT,
-               "1.  Download & install the Ink app");
-      it.print(64, 304, id(ink_body), Color::BLACK, TextAlign::TOP_LEFT,
-               "2.  Connect to the \"Ink Frame\" Wi-Fi");
-      it.print(64, 342, id(ink_body), Color::BLACK, TextAlign::TOP_LEFT,
-               "3.  Follow the instructions in the app");
-      // App QR (right)
-      it.qr_code(598, 152, id(app_qr), Color::BLACK, 5);
-      it.print(606, 324, id(ink_body), Color::BLACK, TextAlign::TOP_LEFT, "Scan to");
-      it.print(606, 352, id(ink_body), Color::BLACK, TextAlign::TOP_LEFT, "get the app");
+      it.image(0, 0, id(onboarding_img), Color::BLACK, Color::WHITE);
+
+image:
+  - file: onboarding.png
+    id: onboarding_img
+    type: BINARY
+    resize: 800x480
 
 script:
   - id: boot_sequence
@@ -265,3 +283,21 @@ script:
                             get_mac_address() + ".png";
           id(online_artwork).set_url(url.c_str());
       - component.update: online_artwork
+
+  # Battery only: sleep until the next daily update hour (KEY1 also wakes it).
+  - id: go_to_sleep
+    then:
+      - logger.log: "Battery: sleeping until the next update hour"
+      - lambda: |-
+          auto t = id(sntp_time).now();
+          uint32_t delta = 3600;  // 1h fallback if the clock isn't set
+          if (t.is_valid()) {
+            int now_s = t.hour * 3600 + t.minute * 60 + t.second;
+            int wake_s = id(g_wake_hour) * 3600;
+            int d = wake_s - now_s;
+            if (d <= 0) d += 86400;
+            delta = (uint32_t) d;
+          }
+          id(deep_sleep_component)->set_sleep_duration(delta * 1000ULL);
+      - delay: 2s
+      - lambda: 'id(deep_sleep_component)->begin_sleep();'

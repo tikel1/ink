@@ -52,9 +52,15 @@ async def current_version(device_id: str) -> Response:
     repositories.update_telemetry(device_id)
     path = generation.current_image_path(device_id)
     ver = str(int(path.stat().st_mtime)) if path.exists() else "0"
-    # Also expose the version as a response header — the frame's Arduino HTTP
-    # client reads collected headers reliably (the response body does not).
-    return Response(content=ver, media_type="text/plain", headers={"X-Ver": ver})
+    # Expose version + power/sleep config as response headers — the frame's
+    # Arduino HTTP client reads collected headers reliably (the body does not).
+    headers = {"X-Ver": ver}
+    device = repositories.get_device(device_id)
+    if device is not None:
+        headers["X-Power"] = device.power_source            # usb | battery
+        headers["X-Sleep"] = str(device.sleep_after_minutes)  # minutes awake before sleep
+        headers["X-Wake"] = str(device.wake_hour)             # daily wake/update hour
+    return Response(content=ver, media_type="text/plain", headers=headers)
 
 
 @router.get("/archive/{device_id}/{date}.png")

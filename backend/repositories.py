@@ -81,14 +81,15 @@ def register_device(device_id: str) -> Device:
     with get_connection() as conn:
         conn.execute(
             """INSERT INTO devices
-               (id, api_key, pairing_code, status, signature, tz, lat, lon, wake_hour, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (id, api_key, pairing_code, status, signature, orientation, tz, lat, lon, wake_hour, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 device_id,
                 secrets.token_urlsafe(24),
                 _new_pairing_code(),
                 _UNPAIRED,
                 _DEFAULT_SIGNATURE,
+                "portrait",                      # frames ship portrait by default
                 settings.default_tz,
                 settings.default_lat,
                 settings.default_lon,
@@ -139,6 +140,7 @@ def unbind_device(device_id: str) -> None:
                  holiday_jewish = 1, holiday_israeli = 1, holiday_global = 1,
                  orientation = 'landscape', show_date = 1, show_weather = 1,
                  city_name = '', auto_timezone = 1, schedule = 'daily', schedule_days = '',
+                 power_source = 'usb', sleep_after_minutes = 10,
                  custom_prompt_override = NULL, enabled = 1
                WHERE id = ?""",
             (
@@ -174,6 +176,7 @@ def update_device_config(device_id: str, **fields: object) -> None:
         "signature", "holiday_jewish", "holiday_israeli", "holiday_global",
         "orientation", "show_date", "show_weather",
         "city_name", "auto_timezone", "schedule", "schedule_days",
+        "power_source", "sleep_after_minutes",
         "custom_prompt_override", "enabled",
     }
     updates = {k: v for k, v in fields.items() if k in allowed}

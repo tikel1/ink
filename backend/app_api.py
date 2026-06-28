@@ -45,6 +45,8 @@ class ConfigUpdate(BaseModel):
     auto_timezone: bool | None = None
     schedule: str | None = Field(default=None, pattern=r"^(daily|weekly|custom)$")
     schedule_days: str | None = Field(default=None, max_length=60)
+    power_source: str | None = Field(default=None, pattern=r"^(usb|battery)$")
+    sleep_after_minutes: int | None = Field(default=None, ge=1, le=240)
     custom_prompt_override: str | None = None
     enabled: bool | None = None
 
@@ -208,6 +210,8 @@ def _device_payload(device: Device) -> dict:
         "auto_timezone": device.auto_timezone,
         "schedule": device.schedule,
         "schedule_days": device.schedule_days,
+        "power_source": device.power_source,
+        "sleep_after_minutes": device.sleep_after_minutes,
         "custom_prompt_override": device.custom_prompt_override,
         "enabled": device.enabled,
         "battery": device.battery,

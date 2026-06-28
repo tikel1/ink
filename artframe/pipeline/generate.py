@@ -67,19 +67,50 @@ async def generate_artwork(settings: Settings, config: DeviceConfig) -> ArtworkR
     )
 
 
+_EVENT_ATTEMPTS = 3
+
+
 async def _select_event(
     settings: Settings, config: DeviceConfig, today: date_cls, holiday_ctx
 ) -> str:
+    """Pick a fact-checked event. Try the interest-aware selector a few times;
+    fall back to a generic well-known event; if even that fails the fact-check,
+    return "" so the artwork is drawn with no event at all (rather than a
+    fabricated one like a made-up "UN football day")."""
     holiday_block = prompts.format_holiday_context(
         holiday_ctx.jewish, holiday_ctx.israeli, holiday_ctx.global_
     )
     interests = ", ".join(config.interests) if config.interests else "general curiosity"
+    date_label = today.strftime("%B %d")
     prompt = prompts.EVENT_SELECTION_PROMPT.format(
-        date=today.strftime("%B %d"),
-        holiday_context=holiday_block,
-        interests=interests,
+        date=date_label, holiday_context=holiday_block, interests=interests,
     )
-    return await generation_client.generate_text(settings, prompt)
+    for attempt in range(_EVENT_ATTEMPTS):
+        event = await generation_client.generate_text(settings, prompt)
+        if await _fact_check(settings, event, date_label):
+            return event
+        logger.info("event failed fact-check (try %d/%d): %s",
+                    attempt + 1, _EVENT_ATTEMPTS, event)
+    # Fallback: a generic, well-known event — also fact-checked.
+    generic = await generation_client.generate_text(
+        settings, prompts.GENERIC_EVENT_PROMPT.format(date=date_label))
+    if await _fact_check(settings, generic, date_label):
+        return generic
+    logger.warning("%s: all events failed fact-check — drawing without an event", config.id)
+    return ""
+
+
+async def _fact_check(settings: Settings, event: str, date_label: str) -> bool:
+    """True only if the model is confident the event is real and correctly dated."""
+    if not event or not event.strip():
+        return False
+    try:
+        verdict = await generation_client.generate_text(
+            settings, prompts.FACT_CHECK_PROMPT.format(event=event.strip(), date=date_label))
+    except Exception:  # noqa: BLE001 — an errored check shouldn't pass a bad event
+        logger.warning("fact-check call failed", exc_info=True)
+        return False
+    return verdict.strip().upper().startswith("ACCURATE")
 
 
 def _build_image_prompt(config: DeviceConfig, wx, today: date_cls, event: str) -> str:
@@ -108,6 +139,8 @@ async def _narrate(
     settings: Settings, config: DeviceConfig, event: str
 ) -> tuple[str | None, str | None]:
     """Best-effort narration text; failures degrade to None."""
+    if not event or not event.strip():
+        return None, None
     try:
         tasks = [generation_client.generate_text(
             settings, prompts.NARRATION_EN_PROMPT.format(event=event))]

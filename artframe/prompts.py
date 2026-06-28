@@ -37,6 +37,26 @@ only one event and write 15-25 words about it with no introduction—just a
 description of the event."""
 
 # --------------------------------------------------------------------------- #
+# Step 1b — fact-check the chosen event before drawing it.
+# --------------------------------------------------------------------------- #
+FACT_CHECK_PROMPT = """You are a strict historical fact-checker.
+
+Claim (intended for {date}):
+"{event}"
+
+Did this actually happen, roughly on that date, and is it described accurately?
+Be skeptical — if you are not highly confident it is true AND correctly dated,
+treat it as false. Reply with a single word on the first line: ACCURATE or
+INACCURATE."""
+
+# Fallback if the model's picks keep failing the fact-check.
+GENERIC_EVENT_PROMPT = """Name one very well-known, indisputable event or fact
+associated with {date} (for example a famous birth, a discovery, an invention,
+or a widely recognized international holiday). Only choose something you are
+certain is true and correctly dated. Avoid war or violence. Write 15-20 words
+with no introduction—just the event."""
+
+# --------------------------------------------------------------------------- #
 # Step 2 — render the artwork (ported verbatim from the OpenAI image action)
 # --------------------------------------------------------------------------- #
 ARTWORK_PROMPT = """### Core Art Style & Composition:
@@ -86,8 +106,8 @@ If the viewer can instantly read everything → it is too literal.
 - Caption (bottom edge, outside shapes):
   → 3-7 words, **medium, bold, quiet, and visually detached** from composition
   → Noticeable on small screens with low resolution
-  → Caption the event in a magazine style copywriting. If it's a historical
-    event, include the year in the caption.
+  → If there is an event above, caption it in magazine-style copywriting (include
+    the year for a historical event). If there is no event, omit the caption.
 - Signature: "{signature}" — **bold, subtle, pen or brush handwritten,
   understated**
 
