@@ -167,9 +167,6 @@ function renderHomeFrame(d) {
   currentId = d.id; currentDevice = d;
   $("home-frame").classList.toggle("is-portrait", d.orientation === "portrait");
   $("home-frame-name").textContent = displayName(d);
-  const st = frameState(d);
-  $("home-dot").className = `dot ${st.cls}`;
-  $("home-status-text").textContent = `${st.label} · ${st.sub}`;
   $("home-explain").textContent = "Loading today's work…";
   loadArtwork($("home-art-img"), $("home-skeleton"), d.id, () => {
     $("home-explain").textContent = "No artwork yet — open the frame and tap Regenerate.";
