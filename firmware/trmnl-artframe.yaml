@@ -11,8 +11,8 @@
 #       - On USB power -> stays ON, refreshes the art periodically.
 #       - On battery   -> sleeps; press KEY1 to wake + refresh, then sleeps again
 #                         after `idle_minutes` of no interaction.
-#   Buttons: KEY1 = wake/refresh, KEY2 = stay awake, KEY3 = tap: sleep · hold 5s:
-#   factory reset (clears WiFi + pairing).
+#   Buttons: KEY1 = wake + refresh, KEY2 = refresh, KEY3 = tap: sleep ·
+#   hold 15s: factory reset (clears WiFi + pairing, returns to onboarding).
 #
 # Set `backend_base` before flashing. `timezone` is for the clock; the daily
 # generation hour is set per frame in the app.
@@ -133,13 +133,14 @@ button:
     internal: true
 
 binary_sensor:
-  # KEY1 = refresh + wake (the deep-sleep wake pin). Press never sleeps.
+  # KEY1 = wake + refresh. It is the deep-sleep wake pin, so a press wakes the
+  # frame from sleep; while awake it re-fetches the artwork. A press never sleeps.
   - platform: gpio
-    name: "KEY1 refresh"
+    name: "KEY1 wake/refresh"
     internal: true
     pin: { number: GPIO2, mode: INPUT_PULLUP, inverted: true, allow_other_uses: true }
     on_press:
-      - logger.log: "KEY1 refresh"
+      - logger.log: "KEY1 wake/refresh"
       - component.update: online_artwork
 
   # KEY2 = refresh (re-fetch + redraw the current artwork).
@@ -151,17 +152,25 @@ binary_sensor:
       - logger.log: "KEY2 refresh"
       - component.update: online_artwork
 
-  # KEY3 = hold 15s to factory-reset (clears WiFi + pairing, returns to onboarding).
+  # KEY3 = tap to sleep (wake again with KEY1); hold 15s to factory-reset.
+  # Sleep is triggered from KEY3 (GPIO5), never from the wake pin KEY1 (GPIO2) —
+  # pressing the wake pin to sleep caused a wake/sleep boot loop.
   - platform: gpio
-    name: "KEY3 factory reset"
+    name: "KEY3 sleep / factory reset"
     internal: true
     pin: { number: GPIO5, mode: INPUT_PULLUP, inverted: true }
     on_multi_click:
       - timing:
           - ON for at least 15s
         then:
-          - logger.log: "Factory reset (held 15s)"
+          - logger.log: "KEY3 held 15s — factory reset"
           - button.press: factory_reset_button
+      - timing:
+          - ON for at most 1500ms
+          - OFF for at least 50ms
+        then:
+          - logger.log: "KEY3 tap — entering sleep"
+          - script.execute: go_to_sleep
 
 sensor:
   - platform: adc
@@ -281,7 +290,13 @@ image:
 script:
   - id: boot_sequence
     then:
-      - component.update: my_display  # draw the pairing screen before WiFi exists
+      # E-paper is persistent: after a reset it still physically shows the last
+      # artwork. Force a redraw to the onboarding / QR welcome screen first (the
+      # 1s delay lets the panel finish init so the draw isn't a no-op), so a reset
+      # never leaves the stale image up. Fresh art replaces it once downloaded.
+      - delay: 1s
+      - lambda: 'id(image_loaded) = false;'
+      - component.update: my_display
       - wait_until: wifi.connected    # stays awake through captive-portal onboarding
       - delay: 3s
       - wait_until:
@@ -294,10 +309,11 @@ script:
           id(online_artwork).set_url(url.c_str());
       - component.update: online_artwork
 
-  # Battery only: sleep until the next daily update hour (KEY1 also wakes it).
+  # Sleep until the next daily update hour; KEY1 also wakes it any time. Used both
+  # by the battery idle timer and by a KEY3 tap (manual sleep).
   - id: go_to_sleep
     then:
-      - logger.log: "Battery: sleeping until the next update hour"
+      - logger.log: "Sleeping until the next update hour (KEY1 wakes)"
       - lambda: |-
           auto t = id(sntp_time).now();
           uint32_t delta = 3600;  // 1h fallback if the clock isn't set
