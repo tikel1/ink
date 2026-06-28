@@ -50,74 +50,81 @@ A museum-quality abstract composition in the definitive style of Henri Matisse
 painted paper**, not digital shapes.
 
 The composition should feel **instinctive, slightly unbalanced, and poetic**,
-with a strong sense of rhythm between forms. Balance **visual harmony with
-clear, recognizable subjects** — beautiful and stylized first, but the weather,
-the date, and the event should each read at a glance.
+with a strong sense of rhythm between forms. Prioritize **visual harmony and
+abstract expression over clarity or communication**.
 
 ---
 
 ### Colors & Shapes:
 
-- **Perfectly flat, pure white background (#FFFFFF)** — absolutely no texture,
-  grain, paper fibers, speckle, or tonal variation in the background
-- Deep matte **solid black** shapes only — fully opaque, no grey, no halftone
+- Pure white background
+- Deep matte black shapes only
 - **No other colors allowed**
 - Shapes must be **large, organic, irregular, and biomorphic**
-- Edges must be **rough, torn, imperfect, visibly hand-cut** (shape edges only —
-  the background stays clean white)
-- No gradients, no shadows, no grain, no digital precision
+- Edges must be **rough, torn, imperfect, visibly hand-cut**
+- Subtle paper texture / screen-print feel
+- No gradients, no shadows, no digital precision
 
 Use **1-3 dominant black shapes** that feel fluid and ambiguous. Avoid symmetry
 and avoid geometric forms.
 
 ---
 
-### Stylization Rule (Balance):
+### Abstraction Rule (Critical Override):
 
-- Simplify and stylize everything into bold Matisse paper-cut shapes
-- BUT the weather, the date, and the event must each stay **recognizable at a
-  glance** — stylized, not obscured, fragmented, or random
-- Distort gently for rhythm and beauty, never to the point the subject is lost
-- Stylized and poetic, yes — abstract to the point of guessing, no
+- **Legibility is intentionally degraded**
+- Information should feel **hidden, dissolved, or partially lost**
+- Elements must be **distorted, fragmented, stretched, rotated, and merged**
+- The result should read as **abstract art first, information second**
+
+If the viewer can instantly read everything → it is too literal.
 
 ---
 
-### Crucially Integrated Dynamic Data (Negative Space):
-
 {data_block}
 
-### 2. Event Symbol (Recognizable, Stylized):
+### 2. Event Symbol (Extremely Abstract):
 
 - Source: "{event}"
-- Choose the single most iconic object, figure, or symbol of this event and
-  render it as one bold, evocative Matisse paper-cut silhouette (1-2 elements).
-  Simplified and stylized — but a viewer should clearly sense what it depicts.
-  It must genuinely relate to this specific event, never a generic or random shape.
+- Translate into **one single, ambiguous black silhouette** (max two elements)
+- Must:
+  - Suggest the idea **indirectly**, not depict it.
+  - Feel like a **primitive cut-out gesture**
+  - Avoid literal storytelling
+  - Keep the element recognizable and implicit to the subject
 
 ---
 
 ### Text & Signature (Detached Minimalism):
 
-- Caption (bottom edge, outside shapes): 3-7 words, medium, bold, quiet,
-  visually detached, noticeable on small low-resolution screens. Magazine-style
-  copywriting. **Name the specific subject** (the person, place, discovery, or
-  achievement) so a viewer can tell what it refers to — avoid vague one-word
-  captions. If it is a historical event, include the year.
-- Signature: "{signature}" — bold, subtle, pen/brush handwritten, understated.
+- Caption (bottom edge, outside shapes):
+  → 3-7 words, **medium, bold, quiet, and visually detached** from composition
+  → Noticeable on small screens with low resolution
+  → Caption the event in a magazine style copywriting. If it's a historical
+    event, include the year in the caption.
+- Signature: "{signature}" — **bold, subtle, pen or brush handwritten,
+  understated**
 
 ---
 
 ### Technical Constraints:
 
 - Resolution: {resolution}
-- Low detail, high contrast
-- Focus on shape language, negative space, and tactile imperfection
+- Low detail
+- High contrast
+- Focus on **shape language, negative space, and tactile imperfection**
+
+---
 
 ### Final Intent:
 
-A true paper collage by hand — the date, weather, and event woven into the
-composition as bold Matisse cut-outs: stylized and beautiful, yet clearly
-recognizable. Not a literal poster, but never a random abstraction either."""
+The piece should feel like:
+- A **true paper collage by hand**
+- A **pure abstract composition**
+- With **hidden structured data embedded inside**
+
+Not a designed poster — but an artwork where meaning is **discovered, not
+delivered**."""
 
 # --------------------------------------------------------------------------- #
 # Step 3 — narration text (optional metadata shown in the app)
@@ -148,22 +155,36 @@ def build_data_block(
     visibly changes what the model is told to embed.
     """
     if not show_weather and not show_date:
-        return ("Embed no text, numbers, or symbols at all. Keep the composition "
+        return ("### Crucially Integrated Dynamic Data:\n\n"
+                "Embed no text, numbers, or symbols at all. Keep the composition "
                 "purely abstract with no readable information.")
-    lines = [
-        "Integrate the following as clean negative space carved from the black",
-        "shapes — stylized Matisse paper-cut letterforms, but clearly legible:",
-    ]
+
+    intro = (
+        "### Crucially Integrated Dynamic Data (Dissolved Negative Space):\n\n"
+        "The date, weather icon, and temperature must be **carved out of the "
+        "black shapes as negative space**, fully integrated into their form.\n\n"
+        "They must:\n"
+        "- Follow the **exact curvature and flow** of the shape\n"
+        "- Be **warped unevenly** (non-linear scaling)\n"
+        "- Be **partially cropped, overlapped, or fragmented**\n"
+        "- Feel like they were **cut blindly by hand**, not typeset\n\n"
+        "They should resemble a **calligram dissolving into abstraction**, not "
+        "readable typography.\n\n"
+        "### 1. Weather & Date (Embedded and Distorted):\n"
+    )
+    items: list[str] = []
     if show_weather:
-        lines.append(f'- Weather: a simple, unmistakable icon for "{condition}" '
-                     "(sun for clear, a sun behind a cloud for partly cloudy, "
-                     "plain clouds for overcast, a cloud with raindrops ONLY if it "
-                     "is actually rainy). Match the stated condition exactly — never "
-                     "add rain, snow, or storms unless the condition says so.")
-        lines.append(f'- Temperature: "{temperature}" — bold, clearly readable digits.')
+        items.append(f'- Weather icon: "{condition}" → Render as a **naïve, '
+                     "irregular, possibly incomplete symbol**, stretched and bent "
+                     "to the shape")
+        items.append(f'- Temperature: "{temperature}" → Digits should be '
+                     "**elongated, compressed, or fused**, possibly sharing edges")
     if show_date:
-        lines.append(f'- Date: "{date_str}" — bold and readable, gently curved.')
-    return "\n".join(lines)
+        items.append(f'- Date: "{date_str}" → Break into **uneven fragments**, '
+                     "scattered or curved along the inner contour")
+    tail = ("\n\nAll must feel like they are **being absorbed into the black "
+            "mass**, not sitting inside it.")
+    return intro + "\n".join(items) + tail
 
 
 def format_holiday_context(jewish: list[str], israeli: list[str], glob: list[str]) -> str:

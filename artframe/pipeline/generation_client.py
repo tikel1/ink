@@ -55,6 +55,7 @@ async def generate_image(
         model=settings.openai_image_model,
         prompt=prompt,
         size=_OPENAI_IMAGE_SIZE.get(orientation, _OPENAI_IMAGE_SIZE["landscape"]),
+        quality=settings.openai_image_quality,
         n=1,
     )
     payload = response.data[0]

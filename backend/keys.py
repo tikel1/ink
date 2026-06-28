@@ -48,6 +48,7 @@ def resolve_settings(account: Account) -> Settings:
         image_provider=backend.image_provider,
         openai_api_key=api_key,
         openai_image_model=backend.openai_image_model,
+        openai_image_quality=backend.openai_image_quality,
         openai_text_model=backend.openai_text_model,
     )
 

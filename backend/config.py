@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     image_provider: str = "openai"
     platform_openai_api_key: str = ""
     openai_image_model: str = "gpt-image-1"
+    # low|medium|high — "low" is ~10x cheaper than the default and plenty for a
+    # 1-bit thresholded e-ink panel (gpt-image-1 defaults to high otherwise).
+    openai_image_quality: str = "low"
     openai_text_model: str = "gpt-4o-mini"
 
     # Fernet key (base64, 32 bytes) for encrypting per-account API keys at rest.

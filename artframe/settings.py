@@ -14,4 +14,5 @@ class Settings:
     image_provider: str
     openai_api_key: str
     openai_image_model: str
+    openai_image_quality: str
     openai_text_model: str

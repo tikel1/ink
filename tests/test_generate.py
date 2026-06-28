@@ -47,7 +47,8 @@ async def test_generate_artwork_produces_panel_png(monkeypatch):
     )
     settings = Settings(
         image_provider="openai", openai_api_key="x",
-        openai_image_model="gpt-image-1", openai_text_model="gpt-4o-mini",
+        openai_image_model="gpt-image-1", openai_image_quality="low",
+        openai_text_model="gpt-4o-mini",
     )
 
     result = await gen.generate_artwork(settings, config)
