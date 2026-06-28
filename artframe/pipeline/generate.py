@@ -88,7 +88,7 @@ def _build_image_prompt(config: DeviceConfig, wx, today: date_cls, event: str) -
     temp_str = f"{wx.temperature(config.temp_unit)}{symbol}"
     date_str = today.strftime("%a, %b %d")
     data_block = prompts.build_data_block(
-        config.show_weather, config.show_date, wx.condition, temp_str, date_str
+        config.show_weather, config.show_date, wx.condition, temp_str, date_str, event
     )
     resolution = ("480x800 (vertical)" if config.orientation == "portrait"
                   else "800x480 (horizontal)")

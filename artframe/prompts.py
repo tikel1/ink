@@ -16,29 +16,25 @@ and current events of global importance or national importance to the State of
 Israel. Prefer a positive event, an international holiday, an event of global
 historical significance, or an event in science, culture, or joyful current
 affairs. If it is a major event, sports are also acceptable. The event should
-have educational value and be inspiring.
+have educational value and be inspiring. Avoid events that are war or violence
+related, or events with negative subjects. Try to avoid events where the main
+subject will be subjected to copyright restrictions like Disney.
 
-STRICTLY EXCLUDE anything dark or violent — no assassinations, killings, deaths,
-wars, battles, attacks, terrorism, disasters, accidents, or tragedies, even if
-historically significant. Choose an uplifting alternative for that date instead
-(a discovery, invention, cultural milestone, exploration, or celebration). Also
-avoid subjects under copyright restrictions like Disney.
-
-When several events qualify, gently favor ones that align with the viewer's
-interests: {interests}.
+When several events qualify, favor those that align with the viewer's interests:
+{interests}.
 
 Additionally:
+2. Today might be a holiday. Today's holiday context (may be empty):
 
-2. Today's holiday context (may be empty):
 {holiday_context}
 
 3. If today is a *very important* holiday for the world or for Judaism, choose
 it. Only include holidays that are relevant globally, to Israel, or to Judaism.
 Exclude Muslim holidays and ignore holidays specific to other nations or
-religions. Select Jewish holidays only if explicitly listed in section 2. If
-there is no holiday, use the proposed historical event. Choose only one event
-and write 15-25 words about it with no introduction—just a description of the
-event."""
+religions. Select Jewish holidays only if they are explicitly mentioned in
+section 2. If there is no holiday, use the proposed historical event. Choose
+only one event and write 15-25 words about it with no introduction—just a
+description of the event."""
 
 # --------------------------------------------------------------------------- #
 # Step 2 — render the artwork (ported verbatim from the OpenAI image action)
@@ -82,16 +78,6 @@ If the viewer can instantly read everything → it is too literal.
 ---
 
 {data_block}
-
-### 2. Event Symbol (Extremely Abstract):
-
-- Source: "{event}"
-- Translate into **one single, ambiguous black silhouette** (max two elements)
-- Must:
-  - Suggest the idea **indirectly**, not depict it.
-  - Feel like a **primitive cut-out gesture**
-  - Avoid literal storytelling
-  - Keep the element recognizable and implicit to the subject
 
 ---
 
@@ -147,44 +133,60 @@ NARRATION_HE_PROMPT = """יש פה פירוט על אירוע:
 
 
 def build_data_block(
-    show_weather: bool, show_date: bool, condition: str, temperature: str, date_str: str
+    show_weather: bool, show_date: bool, condition: str, temperature: str,
+    date_str: str, event: str = "",
 ) -> str:
-    """The dynamic-data directives injected into the artwork prompt.
-
-    Reflects the device's show-date / show-weather toggles so the configuration
-    visibly changes what the model is told to embed.
+    """Assemble the two embedded sections of the artwork prompt, kept verbatim
+    from the original. Section 1 (Weather & Date) is included only if the device
+    wants the date and/or weather; section 2 (Event Symbol) only if there is an
+    event. Either can be subtracted per the device's preferences.
     """
-    if not show_weather and not show_date:
-        return ("### Crucially Integrated Dynamic Data:\n\n"
-                "Embed no text, numbers, or symbols at all. Keep the composition "
-                "purely abstract with no readable information.")
+    sections: list[str] = []
 
-    intro = (
-        "### Crucially Integrated Dynamic Data (Dissolved Negative Space):\n\n"
-        "The date, weather icon, and temperature must be **carved out of the "
-        "black shapes as negative space**, fully integrated into their form.\n\n"
-        "They must:\n"
-        "- Follow the **exact curvature and flow** of the shape\n"
-        "- Be **warped unevenly** (non-linear scaling)\n"
-        "- Be **partially cropped, overlapped, or fragmented**\n"
-        "- Feel like they were **cut blindly by hand**, not typeset\n\n"
-        "They should resemble a **calligram dissolving into abstraction**, not "
-        "readable typography.\n\n"
-        "### 1. Weather & Date (Embedded and Distorted):\n"
-    )
-    items: list[str] = []
-    if show_weather:
-        items.append(f'- Weather icon: "{condition}" → Render as a **naïve, '
-                     "irregular, possibly incomplete symbol**, stretched and bent "
-                     "to the shape")
-        items.append(f'- Temperature: "{temperature}" → Digits should be '
-                     "**elongated, compressed, or fused**, possibly sharing edges")
-    if show_date:
-        items.append(f'- Date: "{date_str}" → Break into **uneven fragments**, '
-                     "scattered or curved along the inner contour")
-    tail = ("\n\nAll must feel like they are **being absorbed into the black "
-            "mass**, not sitting inside it.")
-    return intro + "\n".join(items) + tail
+    if show_weather or show_date:
+        intro = (
+            "### Crucially Integrated Dynamic Data (Dissolved Negative Space):\n\n"
+            "The date, weather icon, and temperature must be **carved out of the "
+            "black shapes as negative space**, fully integrated into their form.\n\n"
+            "They must:\n"
+            "- Follow the **exact curvature and flow** of the shape\n"
+            "- Be **warped unevenly** (non-linear scaling)\n"
+            "- Be **partially cropped, overlapped, or fragmented**\n"
+            "- Feel like they were **cut blindly by hand**, not typeset\n\n"
+            "They should resemble a **calligram dissolving into abstraction**, not "
+            "readable typography.\n\n"
+            "### 1. Weather & Date (Embedded and Distorted):\n"
+        )
+        items: list[str] = []
+        if show_weather:
+            items.append(f'- Weather icon: "{condition}" → Render as a **naïve, '
+                         "irregular, possibly incomplete symbol**, stretched and bent "
+                         "to the shape")
+            items.append(f'- Temperature: "{temperature}" → Digits should be '
+                         "**elongated, compressed, or fused**, possibly sharing edges")
+        if show_date:
+            items.append(f'- Date: "{date_str}" → Break into **uneven fragments**, '
+                         "scattered or curved along the inner contour")
+        tail = ("\n\nAll must feel like they are **being absorbed into the black "
+                "mass**, not sitting inside it.")
+        sections.append(intro + "\n".join(items) + tail)
+
+    if event:
+        sections.append(
+            "### 2. Event Symbol (Extremely Abstract):\n\n"
+            f'- Source: "{event}"\n'
+            "- Translate into **one single, ambiguous black silhouette** (max two elements)\n"
+            "- Must:\n"
+            "  - Suggest the idea **indirectly**, not depict it.\n"
+            "  - Feel like a **primitive cut-out gesture**\n"
+            "  - Avoid literal storytelling\n"
+            "  - Keep the element recognizable and implicit to the subject"
+        )
+
+    if not sections:
+        return ("Embed no text, numbers, or symbols at all. Keep the composition "
+                "purely abstract with no readable information.")
+    return "\n\n---\n\n".join(sections)
 
 
 def format_holiday_context(jewish: list[str], israeli: list[str], glob: list[str]) -> str:
