@@ -47,9 +47,10 @@
         <button id="server-save" type="button" class="btn-ghost">Save server</button>
         <p id="server-msg" class="ok" hidden></p>
       </details>
-      <details class="disclosure">
+      <p class="returning-hint">Already set up a frame? <button type="button" id="restore-open" class="link inline-link">Restore your account ›</button></p>
+      <details class="disclosure" id="restore-details">
         <summary>I already have an account</summary>
-        <label>Account token<input id="restore-token" placeholder="paste token" /></label>
+        <label>Account token<input id="restore-token" placeholder="paste your token" /></label>
         <button id="restore-btn" class="btn-ghost">Restore</button>
       </details>
       <p id="welcome-error" class="error" hidden></p>
