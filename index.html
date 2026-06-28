@@ -101,19 +101,30 @@
         <span class="brand-text">Connect a frame</span><span class="spacer"></span>
       </header>
       <ol class="steps">
-        <li><b>Pairing mode.</b> A new frame is ready on first power‑on. To re‑pair one,
-          hold <b>KEY3</b> ~5 s.</li>
+        <li><b>Onboarding mode.</b> A new frame is ready on first power‑on. To re‑pair
+          one, hold <b>KEY3</b> ~15 s.</li>
         <li><b>Join the frame's Wi‑Fi</b> (“Ink Frame”) on your phone; a setup page opens.</li>
-        <li><b>Pick your home Wi‑Fi</b> and enter the password. The frame shows a 6‑digit code.</li>
-        <li><b>Pair</b> by typing the code below.</li>
+        <li><b>Pick your home Wi‑Fi.</b> The frame then shows a QR + 6‑digit code.</li>
+        <li><b>Scan it below</b> (or enter the code).</li>
       </ol>
-      <form id="pair-form" class="pair-form">
-        <input id="pair-code" inputmode="numeric" maxlength="6" placeholder="000000" class="code-input" />
-        <label>Name this frame <span class="optional">(optional)</span>
-          <input id="pair-name" maxlength="40" placeholder="e.g. Living room" /></label>
-        <button type="submit" class="btn-primary">Pair frame</button>
-        <p id="pair-error" class="error" hidden></p>
-      </form>
+
+      <button type="button" id="scan-btn" class="btn-primary">Scan QR to pair</button>
+      <div id="scanner" class="scanner" hidden>
+        <video id="scan-video" playsinline muted></video>
+        <p class="scan-hint" id="scan-hint">Point the camera at the QR on the frame…</p>
+        <button type="button" id="scan-cancel" class="btn-ghost">Cancel</button>
+      </div>
+
+      <details class="disclosure" id="manual-pair">
+        <summary>Enter the code instead</summary>
+        <form id="pair-form" class="pair-form">
+          <input id="pair-code" inputmode="numeric" maxlength="6" placeholder="000000" class="code-input" />
+          <label>Name this frame <span class="optional">(optional)</span>
+            <input id="pair-name" maxlength="40" placeholder="e.g. Living room" /></label>
+          <button type="submit" class="btn-primary">Pair frame</button>
+          <p id="pair-error" class="error" hidden></p>
+        </form>
+      </details>
     </section>
 
     <!-- ─────────────────────────── Frame detail ─────────────────────────── -->
@@ -243,9 +254,22 @@
           <label class="radio"><input type="radio" name="sched" value="custom" /><span>Specific days</span></label>
         </fieldset>
         <fieldset class="chips days" id="day-chips" hidden></fieldset>
-        <label>Update time (hour 0–23)<input id="wake" type="number" min="0" max="23" /></label>
+        <label>Daily update time (hour 0–23)<input id="wake" type="number" min="0" max="23" /></label>
         <button type="button" id="sched-save" class="btn-ghost">Save schedule</button>
         <p id="sched-msg" class="ok" hidden></p>
+      </div>
+
+      <div class="card">
+        <h3>Power</h3>
+        <fieldset class="radios" id="power-radios">
+          <legend>How is this frame powered?</legend>
+          <label class="radio"><input type="radio" name="power" value="usb" /><span>Plugged in (always on)</span></label>
+          <label class="radio"><input type="radio" name="power" value="battery" /><span>Battery (sleeps)</span></label>
+        </fieldset>
+        <label id="sleep-row" hidden>Stay awake after update (minutes)<input id="sleep-after" type="number" min="1" max="240" /></label>
+        <p class="hint">On battery the frame wakes at the update time, shows the new work, then sleeps to save power. Plugged in, it stays on.</p>
+        <button type="button" id="power-save" class="btn-ghost">Save power</button>
+        <p id="power-msg" class="ok" hidden></p>
       </div>
 
       <div class="card">
@@ -344,6 +368,7 @@
   </div>
 
   <div id="toast" class="toast" hidden></div>
+  <script src="jsqr.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
