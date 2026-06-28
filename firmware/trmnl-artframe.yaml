@@ -50,6 +50,16 @@ psram:
   mode: octal
   speed: 80MHz
 
+# Override ESPHome's stock captive portal with an Ink-branded page (the Wi-Fi
+# setup screen shown when you join the "Ink Frame" hotspot). The local component
+# is a copy of the built-in one with a re-skinned captive_index.h; it still uses
+# the same /config.json + /wifisave endpoints, so behaviour is unchanged.
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [captive_portal]
+
 wifi:
   power_save_mode: light
   ap:

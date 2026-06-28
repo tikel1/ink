@@ -1,0 +1,50 @@
+<!DOCTYPE html><html lang=en><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Ink · Connect to Wi-Fi</title>
+<style>
+:root{--paper:#e7dfce;--paper2:#efe9db;--ink:#1b1813;--soft:#4a4438;--muted:#8b8473;--line:#cfc6b1}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(120% 80% at 50% -10%,#efe9db,#e7dfce 60%);color:var(--ink);font-family:-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px}
+.card{width:100%;max-width:380px;background:var(--paper2);border:1.5px solid var(--line);border-radius:18px;padding:26px 22px;box-shadow:0 10px 40px rgba(27,24,19,.12)}
+.brand{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:6px}
+.brand b{font-family:Georgia,"Times New Roman",serif;font-weight:700;font-size:30px;letter-spacing:-.01em}
+.blob{width:20px;height:20px;background:var(--ink);border-radius:46% 54% 50% 50%/52% 48% 52% 48%}
+.eyebrow{text-align:center;text-transform:uppercase;letter-spacing:.22em;font-size:11px;color:var(--muted);font-weight:600;margin:0 0 18px}
+h1{font-family:Georgia,serif;font-size:22px;text-align:center;margin:0 0 4px;font-weight:600}
+p.sub{color:var(--soft);text-align:center;font-size:14px;margin:0 0 18px;line-height:1.5}
+label{display:block;font-size:12px;font-weight:600;color:var(--soft);margin:14px 0 0}
+input{width:100%;margin-top:6px;padding:13px;font-size:16px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+input:focus{outline:none;border-color:var(--ink)}
+button{width:100%;margin-top:20px;padding:15px;font-size:15px;font-weight:600;color:var(--paper);background:var(--ink);border:none;border-radius:10px;cursor:pointer}
+button:active{opacity:.85}
+.foot{text-align:center;color:var(--muted);font-size:12px;margin-top:16px;line-height:1.5}
+.ok .spin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--ink);border-radius:50%;animation:s 1s linear infinite;margin:14px auto}
+@keyframes s{to{transform:rotate(360deg)}}
+</style></head><body>
+<div class=card>
+  <div class=brand><b>Ink</b><span class=blob></span></div>
+  <p class=eyebrow>A daily work of art</p>
+  <div id=form>
+    <h1>Connect your frame</h1>
+    <p class=sub>Choose your home Wi-Fi so your Ink frame can fetch each morning's artwork.</p>
+    <form action=/wifisave method=get>
+      <label for=ssid>Wi-Fi network</label>
+      <input list=nets id=ssid name=ssid placeholder="Network name" autocomplete=off required>
+      <datalist id=nets></datalist>
+      <label for=psk>Password</label>
+      <input id=psk name=psk type=password placeholder="Wi-Fi password" autocomplete=off>
+      <button type=submit>Connect</button>
+    </form>
+    <p class=foot>After connecting, your frame shows a pairing code to enter in the Ink app.</p>
+  </div>
+  <div id=done class=ok style=display:none>
+    <h1>Connecting&hellip;</h1>
+    <div class=spin></div>
+    <p class=sub>Your Ink frame is joining the network and will restart. When it shows a <b>pairing code</b>, enter it in the Ink app to finish setup.</p>
+  </div>
+</div>
+<script>
+if(location.search.indexOf('save')>=0){document.getElementById('form').style.display='none';document.getElementById('done').style.display='block';}
+else{fetch('/config.json').then(function(r){return r.json()}).then(function(d){var seen={},dl=document.getElementById('nets');(d.aps||[]).filter(function(a){return a&&a.ssid}).sort(function(a,b){return b.rssi-a.rssi}).forEach(function(a){if(seen[a.ssid])return;seen[a.ssid]=1;var o=document.createElement('option');o.value=a.ssid;dl.appendChild(o)})}).catch(function(){});}
+</script>
+</body></html>
