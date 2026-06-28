@@ -170,13 +170,13 @@ async function showHome() {
   if (!devices.length) {
     $("home-empty").hidden = false;
     if (eyebrow) eyebrow.hidden = true;     // just the mark + Connect when empty
-    maybeShowInstallBanner();
+    hideInstallBanner(false);               // don't stack an install prompt on the empty state
     return;
   }
   if (eyebrow) eyebrow.hidden = false;
   for (const d of devices) grid.appendChild(frameCard(d));
   $("add-frame-btn").hidden = false;
-  maybeShowInstallBanner();
+  maybeShowInstallBanner();                 // only once they actually have a frame
 }
 
 function frameCard(d) {
