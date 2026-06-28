@@ -13,6 +13,7 @@ _UNPAIRED = "unpaired"
 _PAIRED = "paired"
 _PAIRING_MIN = 100_000
 _PAIRING_MAX = 999_999
+_DEFAULT_SIGNATURE = "Ink."
 
 
 def now_iso() -> str:
@@ -80,13 +81,14 @@ def register_device(device_id: str) -> Device:
     with get_connection() as conn:
         conn.execute(
             """INSERT INTO devices
-               (id, api_key, pairing_code, status, tz, lat, lon, wake_hour, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (id, api_key, pairing_code, status, signature, tz, lat, lon, wake_hour, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 device_id,
                 secrets.token_urlsafe(24),
                 _new_pairing_code(),
                 _UNPAIRED,
+                _DEFAULT_SIGNATURE,
                 settings.default_tz,
                 settings.default_lat,
                 settings.default_lon,
@@ -130,9 +132,10 @@ def unbind_device(device_id: str) -> None:
         conn.execute(
             """UPDATE devices SET
                  account_id = NULL, status = ?, pairing_code = ?,
+                 name = '',
                  tz = ?, lat = ?, lon = ?, wake_hour = ?,
                  language = 'en', temp_unit = 'c', interests = '',
-                 signature = 'House Kaplan',
+                 signature = ?,
                  holiday_jewish = 1, holiday_israeli = 1, holiday_global = 1,
                  orientation = 'landscape', show_date = 1, show_weather = 1,
                  custom_prompt_override = NULL, enabled = 1
@@ -140,7 +143,7 @@ def unbind_device(device_id: str) -> None:
             (
                 _UNPAIRED, _new_pairing_code(),
                 settings.default_tz, settings.default_lat, settings.default_lon,
-                settings.default_wake_hour, device_id,
+                settings.default_wake_hour, _DEFAULT_SIGNATURE, device_id,
             ),
         )
 
@@ -165,6 +168,7 @@ def list_enabled_paired_devices() -> list[Device]:
 
 def update_device_config(device_id: str, **fields: object) -> None:
     allowed = {
+        "name",
         "tz", "lat", "lon", "wake_hour", "language", "temp_unit", "interests",
         "signature", "holiday_jewish", "holiday_israeli", "holiday_global",
         "orientation", "show_date", "show_weather",

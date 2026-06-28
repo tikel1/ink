@@ -9,205 +9,342 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,800;1,9..144,400&display=swap" />
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,800;1,9..144,400&family=Inter:wght@400;500;600&display=swap" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <!-- Reusable ink-blob mark (gooey filter). Referenced by <use>. -->
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute">
+    <defs>
+      <filter id="goo">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b" />
+        <feColorMatrix in="b" mode="matrix"
+          values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9" />
+      </filter>
+      <g id="inkblob" filter="url(#goo)">
+        <circle class="bl b1" cx="80" cy="80" r="24" />
+        <circle class="bl b2" cx="80" cy="80" r="17" />
+        <circle class="bl b3" cx="80" cy="80" r="13" />
+        <circle class="bl b4" cx="80" cy="80" r="19" />
+        <circle class="bl b5" cx="80" cy="80" r="10" />
+      </g>
+    </defs>
+  </svg>
+
   <main id="app">
 
-    <!-- Welcome / onboarding entry -->
+    <!-- ───────────────────────── Welcome / onboarding ───────────────────── -->
     <section id="screen-welcome" class="screen center">
       <div class="inkmark inkmark-lg" aria-hidden="true">
-        <svg viewBox="0 0 160 160">
-          <defs>
-            <filter id="goo">
-              <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="b" />
-              <feColorMatrix in="b" mode="matrix"
-                values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" />
-            </filter>
-          </defs>
-          <g filter="url(#goo)" fill="#1b1813">
-            <circle class="bl b1" cx="80" cy="80" r="24" />
-            <circle class="bl b2" cx="80" cy="80" r="17" />
-            <circle class="bl b3" cx="80" cy="80" r="13" />
-            <circle class="bl b4" cx="80" cy="80" r="19" />
-            <circle class="bl b5" cx="80" cy="80" r="10" />
-          </g>
-        </svg>
+        <svg viewBox="0 0 160 160"><use href="#inkblob" /></svg>
       </div>
-      <p class="exhibit-eyebrow">The Daily Exhibition</p>
+      <p class="eyebrow">Daily intelligent artwork</p>
       <h1 class="word">Ink</h1>
       <hr class="rule" />
-      <p class="edition">No. 1 · Première</p>
-      <p class="tagline">A new work, curated and hung on your wall each morning.</p>
-      <button id="start-btn">Enter the exhibition</button>
-      <details id="server-details">
+      <p class="tagline">A new intelligent artwork on your frame, every morning.</p>
+      <button id="start-btn" class="btn-primary">Get started</button>
+      <details id="server-details" class="disclosure">
         <summary>Ink server address</summary>
         <label>Server URL<input id="server-url" placeholder="https://your-ink-server" /></label>
-        <button id="server-save" type="button" class="secondary">Save server</button>
+        <button id="server-save" type="button" class="btn-ghost">Save server</button>
         <p id="server-msg" class="ok" hidden></p>
       </details>
-      <details>
+      <details class="disclosure">
         <summary>I already have an account</summary>
         <label>Account token<input id="restore-token" placeholder="paste token" /></label>
-        <button id="restore-btn" class="secondary">Restore</button>
+        <button id="restore-btn" class="btn-ghost">Restore</button>
       </details>
       <p id="welcome-error" class="error" hidden></p>
     </section>
 
-    <!-- Frames (home) -->
-    <section id="screen-devices" class="screen" hidden>
+    <!-- ───────────────────────────── Home ───────────────────────────────── -->
+    <section id="screen-home" class="screen" hidden>
       <header class="topbar">
-        <span class="brand"><span class="inkmark inkmark-sm" aria-hidden="true"><svg viewBox="0 0 120 120"><path class="ink-blob b1" d="M34 84c-10-18 2-46 24-55 17-7 37 0 42 15 5 15-6 28-23 35-18 7-33 22-43 5z"/><circle class="ink-dot" cx="86" cy="38" r="9"/></svg></span>Ink</span>
-        <button class="link" id="account-btn">Account</button>
+        <span class="brand">
+          <span class="inkmark inkmark-sm" aria-hidden="true"><svg viewBox="0 0 160 160"><use href="#inkblob" /></svg></span>
+          Ink
+        </span>
+        <button class="icon-btn" id="menu-btn" aria-label="Account & settings">
+          <svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+        </button>
       </header>
 
-      <h2 class="section-title">Your frames</h2>
-      <div id="device-list" class="device-list"></div>
+      <p class="eyebrow home-eyebrow">Your frames</p>
 
-      <div class="card onboard">
-        <h3>Connect a frame</h3>
-        <ol class="steps">
-          <li><b>Pairing mode.</b> A new frame is ready on first power‑on. To
-            re‑pair one, hold <b>KEY3</b> ~5s — the screen shows “Pairing mode”.</li>
-          <li><b>Join the frame's Wi‑Fi.</b> In your phone's Wi‑Fi settings, join
-            <b>“Ink Frame”</b> (or scan the QR on the screen). A setup page opens
-            on its own.</li>
-          <li><b>Pick your home Wi‑Fi</b> on that page and enter its password.
-            The frame connects, then shows a pairing QR + 6‑digit code.</li>
-          <li><b>Pair.</b> Scan that QR, or type the code here:</li>
-        </ol>
-        <form id="pair-form">
-          <input id="pair-code" inputmode="numeric" maxlength="6" placeholder="000000" class="code-input" />
-          <button type="submit">Pair frame</button>
-          <p id="pair-error" class="error" hidden></p>
-        </form>
+      <!-- Empty state: no frame connected -->
+      <div id="home-empty" class="empty-state" hidden>
+        <div class="inkmark inkmark-md float" aria-hidden="true">
+          <svg viewBox="0 0 160 160"><use href="#inkblob" /></svg>
+        </div>
+        <h2>Add your first frame</h2>
+        <p class="muted">Connect an Ink frame to start its daily artwork.</p>
+        <button id="empty-connect-btn" class="btn-primary">Connect a frame</button>
       </div>
+
+      <!-- Frame cards -->
+      <div id="frame-grid" class="frame-grid"></div>
+
+      <button id="add-frame-btn" class="add-frame" hidden>＋ Connect another frame</button>
     </section>
 
-    <!-- Frame detail -->
-    <section id="screen-edit" class="screen" hidden>
+    <!-- ───────────────────────── Connect a frame ────────────────────────── -->
+    <section id="screen-connect" class="screen" hidden>
       <header class="topbar">
-        <button class="link" id="back-btn">‹ Frames</button>
-        <span class="brand" id="edit-title">Frame</span>
+        <button class="link back" id="connect-back">‹ Back</button>
+        <span class="brand-text">Connect a frame</span>
         <span class="spacer"></span>
       </header>
 
-      <!-- Connection status -->
-      <div class="status" id="status">
-        <span class="dot" id="status-dot"></span>
-        <span class="status-text" id="status-text">—</span>
-        <span class="status-sub" id="status-sub"></span>
-      </div>
+      <ol class="steps">
+        <li><b>Pairing mode.</b> A new frame is ready on first power‑on. To re‑pair one,
+          hold <b>KEY3</b> ~5 s — the screen shows “Pairing mode”.</li>
+        <li><b>Join the frame's Wi‑Fi.</b> In your phone's Wi‑Fi settings, join
+          <b>“Ink Frame”</b> (or scan the QR on the screen). A setup page opens on its own.</li>
+        <li><b>Pick your home Wi‑Fi</b> and enter the password. The frame connects, then
+          shows a pairing QR + 6‑digit code.</li>
+        <li><b>Pair.</b> Scan that QR, or type the code below.</li>
+      </ol>
 
-      <!-- Picture frame -->
+      <form id="pair-form" class="pair-form">
+        <input id="pair-code" inputmode="numeric" maxlength="6" placeholder="000000" class="code-input" />
+        <label>Name this frame <span class="optional">(optional)</span>
+          <input id="pair-name" maxlength="40" placeholder="e.g. Living room" /></label>
+        <button type="submit" class="btn-primary">Pair frame</button>
+        <p id="pair-error" class="error" hidden></p>
+      </form>
+    </section>
+
+    <!-- ─────────────────────────── Frame detail ─────────────────────────── -->
+    <section id="screen-frame" class="screen" hidden>
+      <header class="topbar">
+        <button class="link back" id="frame-back">‹ Collection</button>
+        <span class="brand-text" id="frame-title">Ink Frame</span>
+        <span class="spacer"></span>
+      </header>
+
       <figure class="artframe">
-        <div class="mat"><img id="preview-img" alt="current artwork" /></div>
+        <div class="mat">
+          <div class="skeleton" id="img-skeleton"></div>
+          <img id="preview-img" alt="current artwork" />
+        </div>
       </figure>
 
-      <!-- Museum wall label -->
       <section class="placard">
         <p class="placard-eyebrow" id="ev-meta">On view today</p>
         <p class="placard-body" id="ev-text">No artwork generated yet.</p>
         <p class="placard-body he" id="ev-text-he" dir="rtl" hidden></p>
         <p class="placard-sign" id="ev-sign" hidden></p>
-        <p class="placard-credit">Ink · The Daily Exhibition · generated daily</p>
+        <p class="placard-credit">Ink · Daily intelligent artwork</p>
       </section>
 
       <div class="actions">
-        <button id="regen-btn" type="button" class="secondary">Regenerate</button>
-        <button id="remove-btn" type="button" class="danger">Disconnect &amp; forget</button>
+        <button id="regen-btn" type="button" class="btn-primary">Regenerate</button>
       </div>
-      <p class="hint">Forgetting clears this frame's settings and returns it to onboarding — it shows a pairing QR again on its next wake.</p>
-      <p id="action-msg" class="ok" hidden></p>
+      <p id="action-msg" class="ok center-text" hidden></p>
 
-      <details class="card prefs">
-        <summary>Preferences</summary>
-        <form id="edit-form">
+      <nav class="nav-list">
+        <button class="nav-row" id="goto-artwork">
+          <span class="nav-ico">🎨</span>
+          <span class="nav-col"><span class="nav-t">Artwork settings</span>
+            <span class="nav-s">Subjects, location, signature, style</span></span>
+          <span class="nav-chev">›</span>
+        </button>
+        <button class="nav-row" id="goto-settings">
+          <span class="nav-ico">⚙︎</span>
+          <span class="nav-col"><span class="nav-t">Frame settings</span>
+            <span class="nav-s" id="settings-sub">Status, Wi‑Fi, buttons</span></span>
+          <span class="nav-chev">›</span>
+        </button>
+      </nav>
+    </section>
+
+    <!-- ────────────────────── Artwork configuration ─────────────────────── -->
+    <section id="screen-artwork" class="screen" hidden>
+      <header class="topbar">
+        <button class="link back" id="artwork-back">‹ Frame</button>
+        <span class="brand-text">Artwork settings</span>
+        <span class="spacer"></span>
+      </header>
+
+      <form id="artwork-form">
+        <div class="card">
           <h3>Location &amp; schedule</h3>
-          <label>Location
-            <div class="row"><input id="loc-search" placeholder="City, country" />
-            <button type="button" id="loc-btn" class="secondary inline">Find</button></div>
+          <label>Find your city
+            <div class="row">
+              <input id="loc-search" placeholder="City, country" />
+              <button type="button" id="loc-btn" class="btn-ghost inline">Find</button>
+            </div>
           </label>
+          <button type="button" id="geo-btn" class="link locate">Use my current location</button>
+          <p id="loc-msg" class="hint" hidden></p>
           <div class="row">
             <label>Latitude<input id="lat" type="number" step="0.0001" required /></label>
             <label>Longitude<input id="lon" type="number" step="0.0001" required /></label>
           </div>
           <label>Timezone<input id="tz" required /></label>
           <label>Wake hour (0–23)<input id="wake" type="number" min="0" max="23" required /></label>
+        </div>
 
-          <h3>Artwork</h3>
-          <div class="row">
-            <label>Language<select id="language"><option value="en">English</option><option value="he">Hebrew</option></select></label>
-            <label>Orientation<select id="orientation"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></label>
-          </div>
-
+        <div class="card">
+          <h3>Subjects</h3>
+          <p class="hint">What the daily work draws inspiration from.</p>
           <fieldset class="chips">
-            <legend>Interests</legend>
             <label class="chip"><input type="checkbox" class="interest" value="science" /><span>Science</span></label>
             <label class="chip"><input type="checkbox" class="interest" value="history" /><span>History</span></label>
             <label class="chip"><input type="checkbox" class="interest" value="sports" /><span>Sports</span></label>
             <label class="chip"><input type="checkbox" class="interest" value="astronomy" /><span>Astronomy</span></label>
             <label class="chip"><input type="checkbox" class="interest" value="art" /><span>Art</span></label>
-            <label class="other">Other<input id="interest-other" placeholder="anything else, comma separated" /></label>
           </fieldset>
+          <label>Anything else<input id="interest-other" placeholder="e.g. cinema, jazz, architecture" /></label>
+        </div>
 
-          <label>Signature<input id="signature" placeholder="House Kaplan" /></label>
+        <div class="card">
+          <h3>Style &amp; details</h3>
+          <div class="row">
+            <label>Language<select id="language"><option value="en">English</option><option value="he">Hebrew</option></select></label>
+            <label>Orientation<select id="orientation"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></label>
+          </div>
+          <label>Signature<input id="signature" placeholder="Ink." /></label>
+          <label class="toggle"><span>Show the date</span><input type="checkbox" id="show_date" /><i></i></label>
+          <label class="toggle"><span>Show the weather</span><input type="checkbox" id="show_weather" /><i></i></label>
+          <label>Temperature units<select id="temp_unit"><option value="c">°C</option><option value="f">°F</option></select></label>
+        </div>
 
-          <fieldset>
-            <legend>Show on the artwork</legend>
-            <label class="toggle"><span>Date</span><input type="checkbox" id="show_date" /><i></i></label>
-            <label class="toggle"><span>Weather</span><input type="checkbox" id="show_weather" /><i></i></label>
-            <label>Units<select id="temp_unit"><option value="c">°C</option><option value="f">°F</option></select></label>
-          </fieldset>
+        <div class="card">
+          <h3>Holidays</h3>
+          <label class="toggle"><span>Jewish</span><input type="checkbox" id="h-jewish" /><i></i></label>
+          <label class="toggle"><span>Israeli</span><input type="checkbox" id="h-israeli" /><i></i></label>
+          <label class="toggle"><span>Global</span><input type="checkbox" id="h-global" /><i></i></label>
+        </div>
 
-          <fieldset>
-            <legend>Holidays</legend>
-            <label class="toggle"><span>Jewish</span><input type="checkbox" id="h-jewish" /><i></i></label>
-            <label class="toggle"><span>Israeli</span><input type="checkbox" id="h-israeli" /><i></i></label>
-            <label class="toggle"><span>Global</span><input type="checkbox" id="h-global" /><i></i></label>
-          </fieldset>
-          <label class="toggle standalone"><span>Generate daily</span><input type="checkbox" id="enabled" /><i></i></label>
-          <button type="submit">Save preferences</button>
+        <div class="card">
+          <label class="toggle standalone"><span>Generate a new work daily</span><input type="checkbox" id="enabled" /><i></i></label>
+        </div>
+
+        <div class="sticky-save">
+          <button type="submit" class="btn-primary">Save settings</button>
           <p id="save-msg" class="ok" hidden></p>
-        </form>
-      </details>
+        </div>
+      </form>
     </section>
 
-    <!-- Account -->
-    <section id="screen-account" class="screen" hidden>
+    <!-- ───────────────────────── Frame settings ─────────────────────────── -->
+    <section id="screen-settings" class="screen" hidden>
       <header class="topbar">
-        <button class="link" id="acct-back">‹ Frames</button>
-        <span class="brand">Account</span>
+        <button class="link back" id="settings-back">‹ Frame</button>
+        <span class="brand-text">Frame settings</span>
         <span class="spacer"></span>
       </header>
+
+      <div class="card status-card">
+        <div class="status-head">
+          <span class="dot" id="set-dot"></span>
+          <span class="status-state" id="set-state">—</span>
+        </div>
+        <p class="status-sub" id="set-sub"></p>
+      </div>
+
       <div class="card">
-        <h3>OpenAI API key</h3>
-        <p id="key-status" class="hint">—</p>
-        <p id="key-required-note" class="error" hidden>
-          Your own API key is now required for this account. Please add one below.
-        </p>
-        <label>Your API key<input id="api-key" type="password" placeholder="sk-..." /></label>
-        <button id="save-key-btn">Use my key</button>
-        <button id="clear-key-btn" class="secondary">Use the default key</button>
+        <h3>Name</h3>
+        <div class="row">
+          <input id="set-name" maxlength="40" placeholder="Ink Frame" />
+          <button type="button" id="set-name-save" class="btn-ghost inline">Save</button>
+        </div>
+        <p id="name-msg" class="ok" hidden></p>
+      </div>
+
+      <dl class="spec">
+        <div><dt>Connection</dt><dd id="spec-conn">—</dd></div>
+        <div><dt>Wi‑Fi signal</dt><dd id="spec-wifi">—</dd></div>
+        <div><dt>Battery</dt><dd id="spec-batt">—</dd></div>
+        <div><dt>Firmware</dt><dd id="spec-fw">—</dd></div>
+        <div><dt>Frame ID</dt><dd id="spec-id" class="mono">—</dd></div>
+      </dl>
+
+      <div class="card">
+        <h3>Buttons</h3>
+        <ul class="buttons-help">
+          <li><b>KEY1</b><span>Refresh — re‑fetch and redraw the current artwork now.</span></li>
+          <li><b>KEY2</b><span>Refresh — same as KEY1.</span></li>
+          <li><b>KEY3</b><span>Hold ~5 s to factory‑reset (clears Wi‑Fi &amp; pairing).</span></li>
+        </ul>
+      </div>
+
+      <button id="disconnect-btn" type="button" class="btn-danger">Disconnect &amp; forget this frame</button>
+      <p class="hint center-text">Forgetting clears this frame's settings and returns it to onboarding — it shows a pairing QR again on its next wake.</p>
+    </section>
+
+    <!-- ───────────────────────────── Account ────────────────────────────── -->
+    <section id="screen-account" class="screen" hidden>
+      <header class="topbar">
+        <button class="link back" id="acct-back">‹ Home</button>
+        <span class="brand-text">Account</span>
+        <span class="spacer"></span>
+      </header>
+
+      <div class="card">
+        <h3>Image generation</h3>
+        <p class="hint">Your daily artwork is created with OpenAI. Use Ink's shared key, or bring your own.</p>
+        <div class="segmented">
+          <button type="button" class="seg" id="seg-platform">Ink's key</button>
+          <button type="button" class="seg" id="seg-own">My own key</button>
+        </div>
+        <div id="own-key-fields" hidden>
+          <label>Your OpenAI API key<input id="api-key" type="password" placeholder="sk-..." autocomplete="off" /></label>
+          <button id="save-key-btn" type="button" class="btn-primary">Save key</button>
+        </div>
+        <p id="key-required-note" class="hint" hidden>Your own key is required for this account.</p>
         <p id="key-msg" class="ok" hidden></p>
         <p id="key-err" class="error" hidden></p>
       </div>
-      <div class="card">
-        <h3>Account token</h3>
-        <p class="hint">Save this to use your account on another device. Keep it secret.</p>
-        <input id="token-display" readonly />
+
+      <div class="card" id="install-card" hidden>
+        <h3>Install Ink</h3>
+        <p class="hint" id="install-hint">Add Ink to your home screen for a full‑screen, app‑like experience.</p>
+        <button id="install-btn" type="button" class="btn-primary">Install app</button>
       </div>
-      <div class="card">
-        <h3>Ink server</h3>
-        <p class="hint">The backend this app talks to.</p>
-        <label>Server URL<input id="acct-server-url" placeholder="https://your-ink-server" /></label>
-        <button id="acct-server-save" class="secondary">Save server</button>
-        <p id="acct-server-msg" class="ok" hidden></p>
-      </div>
+
+      <dl class="spec">
+        <div><dt>App version</dt><dd id="app-version" class="mono">—</dd></div>
+        <div><dt>Account</dt><dd id="acct-id" class="mono">—</dd></div>
+      </dl>
+      <button id="update-btn" type="button" class="btn-ghost wide">Check for updates</button>
+
+      <details class="disclosure-card">
+        <summary>Advanced</summary>
+        <div class="adv-body">
+          <label>Server URL<input id="acct-server-url" placeholder="https://your-ink-server" /></label>
+          <button id="acct-server-save" type="button" class="btn-ghost">Save server</button>
+          <p id="acct-server-msg" class="ok" hidden></p>
+          <hr class="adv-rule" />
+          <p class="hint">Account key — restores this account on another device (temporary, until sign‑in arrives). Keep it private.</p>
+          <input id="token-display" readonly class="mono" />
+        </div>
+      </details>
+
+      <button id="logout-btn" type="button" class="link danger-link">Log out</button>
+      <p id="update-msg" class="ok center-text" hidden></p>
     </section>
 
   </main>
+
+  <!-- Install banner -->
+  <div id="install-banner" class="install-banner" hidden>
+    <div class="ib-mark inkmark inkmark-sm" aria-hidden="true"><svg viewBox="0 0 160 160"><use href="#inkblob" /></svg></div>
+    <div class="ib-body">
+      <p class="ib-title">Install Ink</p>
+      <p class="ib-sub" id="ib-sub">Add it to your home screen for a full‑screen experience.</p>
+      <label class="ib-check"><input type="checkbox" id="ib-dontshow" /> Don't show this again</label>
+    </div>
+    <div class="ib-actions">
+      <button id="ib-install" class="btn-primary ib-btn">Install</button>
+      <button id="ib-dismiss" class="link ib-later">Not now</button>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" hidden></div>
+
   <script src="app.js"></script>
 </body>
 </html>

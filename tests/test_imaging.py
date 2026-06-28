@@ -13,12 +13,15 @@ def _png(width: int, height: int) -> bytes:
     return buf.getvalue()
 
 
-def test_png_output_is_1bit_at_panel_size():
+def test_png_output_is_8bit_grayscale_at_panel_size():
+    # 8-bit grayscale (not 1-bit) so ESPHome's online_image/pngle decodes it;
+    # pixels are still pure black/white from the Floyd-Steinberg dither.
     out = to_eink_image(_png(1536, 1024), fmt="PNG")
     with Image.open(io.BytesIO(out)) as img:
         assert img.format == "PNG"
-        assert img.mode == "1"
+        assert img.mode == "L"
         assert img.size == (DISPLAY_WIDTH, DISPLAY_HEIGHT)
+        assert set(img.getdata()) <= {0, 255}
 
 
 def test_portrait_source_is_rotated_to_landscape():
@@ -38,5 +41,5 @@ def test_portrait_renders_into_landscape_panel():
     # Portrait source composes 480x800 then rotates into the 800x480 panel.
     out = to_eink_image(_png(1024, 1536), fmt="PNG", orientation="portrait")
     with Image.open(io.BytesIO(out)) as img:
-        assert img.mode == "1"
+        assert img.mode == "L"
         assert img.size == (DISPLAY_WIDTH, DISPLAY_HEIGHT)

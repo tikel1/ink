@@ -33,10 +33,11 @@ async def generate_text(settings: Settings, prompt: str) -> str:
         raise NotImplementedError(f"text provider {settings.image_provider}")
 
     client = _require_openai(settings)
-    response = await client.responses.create(
-        model=settings.openai_text_model, input=prompt
+    response = await client.chat.completions.create(
+        model=settings.openai_text_model,
+        messages=[{"role": "user", "content": prompt}],
     )
-    text = response.output_text.strip()
+    text = (response.choices[0].message.content or "").strip()
     if not text:
         raise GenerationError("empty text completion")
     return text

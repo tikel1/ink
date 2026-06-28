@@ -29,8 +29,12 @@ def to_eink_image(source: bytes, fmt: str = "PNG", orientation: str = "landscape
         else:
             fitted = _fit(_orient_landscape(rgb), DISPLAY_WIDTH, DISPLAY_HEIGHT)
             panel = fitted.convert("1")  # Pillow default = Floyd-Steinberg
+        # Store PNG as 8-bit grayscale (pixels are still pure 0/255 from the
+        # dither). ESPHome's online_image decoder is unreliable with 1-bit-depth
+        # PNGs; 8-bit decodes cleanly and the dither pattern is preserved.
+        out_img = panel.convert("L") if fmt.upper() == "PNG" else panel
         out = io.BytesIO()
-        panel.save(out, format=fmt)
+        out_img.save(out, format=fmt)
         return out.getvalue()
 
 

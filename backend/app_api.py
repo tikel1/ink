@@ -26,6 +26,7 @@ class KeyRequest(BaseModel):
 
 
 class ConfigUpdate(BaseModel):
+    name: str | None = Field(default=None, max_length=40)
     lat: float | None = Field(default=None, ge=-90, le=90)
     lon: float | None = Field(default=None, ge=-180, le=180)
     tz: str | None = None
@@ -184,6 +185,7 @@ def _device_payload(device: Device) -> dict:
     return {
         "id": device.id,
         "status": device.status,
+        "name": device.name,
         "tz": device.tz,
         "lat": device.lat,
         "lon": device.lon,

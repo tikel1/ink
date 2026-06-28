@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS devices (
     account_id   TEXT REFERENCES accounts(id) ON DELETE SET NULL,
     pairing_code TEXT,
     status       TEXT NOT NULL DEFAULT 'unpaired',
+    name         TEXT NOT NULL DEFAULT '',   -- user-given label, '' = use default
     tz           TEXT NOT NULL,
     lat          REAL NOT NULL,
     lon          REAL NOT NULL,
@@ -31,7 +32,7 @@ CREATE TABLE IF NOT EXISTS devices (
     language     TEXT NOT NULL DEFAULT 'en',
     temp_unit    TEXT NOT NULL DEFAULT 'c',
     interests    TEXT NOT NULL DEFAULT '',   -- comma separated
-    signature    TEXT NOT NULL DEFAULT 'House Kaplan',
+    signature    TEXT NOT NULL DEFAULT 'Ink.',
     holiday_jewish  INTEGER NOT NULL DEFAULT 1,
     holiday_israeli INTEGER NOT NULL DEFAULT 1,
     holiday_global  INTEGER NOT NULL DEFAULT 1,
@@ -67,6 +68,7 @@ _MIGRATIONS = {
     "orientation": "TEXT NOT NULL DEFAULT 'landscape'",
     "show_date": "INTEGER NOT NULL DEFAULT 1",
     "show_weather": "INTEGER NOT NULL DEFAULT 1",
+    "name": "TEXT NOT NULL DEFAULT ''",
 }
 
 

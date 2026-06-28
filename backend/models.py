@@ -38,6 +38,7 @@ class Device:
     account_id: Optional[str]
     pairing_code: Optional[str]
     status: str
+    name: str
     tz: str
     lat: float
     lon: float
@@ -68,6 +69,7 @@ class Device:
             account_id=row["account_id"],
             pairing_code=row["pairing_code"],
             status=row["status"],
+            name=row["name"],
             tz=row["tz"],
             lat=row["lat"],
             lon=row["lon"],

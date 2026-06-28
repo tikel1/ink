@@ -1,6 +1,7 @@
 {
   "name": "Ink",
   "short_name": "Ink",
+  "description": "Daily intelligent artwork for your Ink frame.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

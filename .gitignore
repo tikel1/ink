@@ -4,3 +4,12 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+
+# Runtime data (DB + generated images/archive are recreated at runtime)
+data/
+# Local tooling / logs / build output (not source)
+cloudflared.exe
+backend.log
+_*.txt
+.claude/
+firmware/.esphome/

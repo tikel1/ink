@@ -20,11 +20,12 @@
 substitutions:
   device_name: ink-frame
   friendly_name: "Ink Frame"
-  backend_base: "https://frames.example.com"
+  backend_base: "https://your-ink-server.example.com"  # set to your server before flashing
+  app_url: "https://tikel1.github.io/ink/"   # QR on the setup screen points here
   timezone: "Asia/Jerusalem"
   idle_minutes: "10"               # battery: sleep after this much idle time
   powered_voltage: "4.15"          # >= this reads as "on USB power" (calibrate)
-  powered_refresh_minutes: "60"    # powered: how often to re-fetch the art
+  powered_refresh_minutes: "30"    # backup re-fetch cadence while powered
 
 esphome:
   name: ${device_name}
@@ -32,7 +33,6 @@ esphome:
   on_boot:
     priority: 600
     then:
-      - globals.set: { id: is_sleeping_icon, value: "false" }
       - script.execute: boot_sequence
 
 esp32:
@@ -40,6 +40,15 @@ esp32:
   variant: esp32s3
   framework:
     type: arduino
+
+# The 800x480 1-bit panel buffer is 48 KB — too big for fragmented internal
+# DRAM (largest free block ~31 KB). This board has 8 MB octal PSRAM; enabling it
+# lets online_image allocate the framebuffer there so the artwork actually
+# decodes and renders. (Without this, every image fetch fails with
+# "allocation of 48000 bytes failed".)
+psram:
+  mode: octal
+  speed: 80MHz
 
 wifi:
   power_save_mode: light
@@ -50,11 +59,14 @@ wifi:
 
 captive_portal:
 
+# Native API enables reliable log streaming over WiFi (no flaky USB serial).
+api:
+
 ota:
   - platform: esphome
 
 logger:
-  level: INFO
+  level: DEBUG          # diagnosing the display busy-pin timeout
   baud_rate: 115200
 
 http_request:
@@ -66,25 +78,23 @@ time:
   - platform: sntp
     id: sntp_time
     timezone: ${timezone}
+    on_time:
+      # Refresh once a day shortly after 06:00, when the new art is ready.
+      - seconds: 0
+        minutes: 5
+        hours: 6
+        then:
+          - component.update: online_artwork
 
 globals:
-  - id: is_sleeping_icon
-    type: bool
-    initial_value: "false"
   - id: image_loaded
     type: bool
     initial_value: "false"
-  - id: is_powered
-    type: bool
-    initial_value: "false"
 
-deep_sleep:
-  id: deep_sleep_component
-  wakeup_pin:
-    number: GPIO2            # KEY1 wakes the frame from deep sleep
-    inverted: true
-    mode: INPUT_PULLUP
-    allow_other_uses: true
+# Deep sleep intentionally removed: KEY1-on-GPIO2 sharing the wake pin in polling
+# mode triggered spurious sleeps that bricked the board seconds after boot. This
+# is an always-awake (USB) build. A debounced, battery-aware sleep can return
+# later as its own change.
 
 button:
   - platform: factory_reset
@@ -93,32 +103,31 @@ button:
     internal: true
 
 binary_sensor:
+  # KEY1 = refresh (re-fetch + redraw the current artwork).
   - platform: gpio
-    name: "KEY1 wake/refresh"
+    name: "KEY1 refresh"
     internal: true
-    pin: { number: GPIO2, mode: INPUT_PULLUP, inverted: true, allow_other_uses: true }
+    pin: { number: GPIO2, mode: INPUT_PULLUP, inverted: true }
     on_press:
-      - globals.set: { id: is_sleeping_icon, value: "false" }
-      - script.execute: idle_timer        # reset the idle countdown
-      - component.update: online_artwork   # pull the latest art
+      - logger.log: "KEY1 refresh"
+      - component.update: online_artwork
 
+  # KEY2 = refresh (re-fetch + redraw the current artwork).
   - platform: gpio
-    name: "KEY2 stay awake"
+    name: "KEY2 refresh"
     internal: true
     pin: { number: GPIO3, mode: INPUT_PULLUP, inverted: true }
     on_press:
-      - script.stop: idle_timer
+      - logger.log: "KEY2 refresh"
+      - component.update: online_artwork
 
+  # KEY3 = hold 5s for factory reset (clears WiFi + pairing).
   - platform: gpio
-    name: "KEY3"
+    name: "KEY3 factory reset"
     internal: true
     pin: { number: GPIO5, mode: INPUT_PULLUP, inverted: true }
     on_multi_click:
-      - timing:                            # quick tap -> sleep now
-          - ON for at most 1s
-        then:
-          - script.execute: go_to_sleep
-      - timing:                            # hold 5s -> factory reset
+      - timing:
           - ON for at least 5s
         then:
           - logger.log: "Factory reset (held 5s)"
@@ -134,28 +143,32 @@ sensor:
     filters:
       - multiply: 1.1
 
+# Fraunces — the same display serif as the Ink app, for a consistent look.
 font:
-  - file: "gfonts://Roboto"
-    id: roboto
-    size: 34
-  - file: "gfonts://Roboto"
-    id: roboto_small
-    size: 22
+  - file: { type: gfonts, family: Fraunces, weight: 800 }
+    id: ink_display
+    size: 78
+  - file: { type: gfonts, family: Fraunces, weight: 600 }
+    id: ink_head
+    size: 33
+  - file: { type: gfonts, family: Fraunces, weight: 400 }
+    id: ink_body
+    size: 25
+  - file: { type: gfonts, family: Fraunces, weight: 400, italic: true }
+    id: ink_italic
+    size: 23
 
-# QR that encodes "join my open Wi-Fi hotspot" — phone cameras join on scan.
 qr_code:
   - id: wifi_qr
     value: "WIFI:S:${friendly_name};T:nopass;;"
+  - id: app_qr
+    value: "${app_url}"
 
-# Powered mode: re-fetch the art periodically (guarded so battery mode ignores it).
+# Re-fetch the art periodically (always-awake build).
 interval:
   - interval: ${powered_refresh_minutes}min
     then:
-      - if:
-          condition:
-            lambda: "return id(is_powered);"
-          then:
-            - component.update: online_artwork
+      - component.update: online_artwork
 
 online_image:
   url: "${backend_base}/media/current/placeholder.png"
@@ -166,7 +179,11 @@ online_image:
   update_interval: never
   on_download_finished:
     then:
-      - lambda: "if (id(online_artwork).get_width() > 0) { id(image_loaded) = true; }"
+      - lambda: |-
+          int w = id(online_artwork).get_width();
+          int h = id(online_artwork).get_height();
+          ESP_LOGI("ink", "download finished: decoded %dx%d", w, h);
+          if (w > 0) { id(image_loaded) = true; }
       - component.update: my_display
 
 spi:
@@ -185,32 +202,37 @@ display:
     lambda: |-
       if (id(image_loaded) && id(online_artwork).get_width() > 0) {
         it.image(0, 0, id(online_artwork), Color::BLACK, Color::WHITE);
-      } else {
-        // Pairing mode: instructions on the left, a "join my Wi-Fi" QR on the right.
-        it.fill(Color::WHITE);
-        it.print(60, 90, id(roboto), Color::BLACK, TextAlign::TOP_LEFT, "Pairing mode");
-        it.print(60, 150, id(roboto_small), Color::BLACK, TextAlign::TOP_LEFT,
-                 "1. Scan this QR, or join");
-        it.print(60, 182, id(roboto_small), Color::BLACK, TextAlign::TOP_LEFT,
-                 "   Wi-Fi: ${friendly_name}");
-        it.print(60, 230, id(roboto_small), Color::BLACK, TextAlign::TOP_LEFT,
-                 "2. Pick your home Wi-Fi");
-        it.print(60, 262, id(roboto_small), Color::BLACK, TextAlign::TOP_LEFT,
-                 "   on the page that opens.");
-        it.qr_code(540, 150, id(wifi_qr), Color::BLACK, 5);
+        return;
       }
-      it.filled_rectangle(0, 0, 16, 16, Color::BLACK);
-      if (id(is_sleeping_icon)) {
-        it.filled_circle(8, 8, 6, Color::WHITE);
-        it.filled_circle(11, 5, 6, Color::BLACK);
-      } else {
-        it.line(3, 8, 7, 13, Color::WHITE);
-        it.line(7, 13, 14, 3, Color::WHITE);
-      }
+      // Branded setup screen — Ink masthead, editorial look.
+      it.fill(Color::WHITE);
+      // Ink mark: an organic ink blob + a separate dot.
+      it.filled_circle(92, 92, 33, Color::BLACK);
+      it.filled_circle(124, 110, 21, Color::BLACK);
+      it.filled_circle(152, 64, 11, Color::BLACK);
+      it.print(186, 40, id(ink_display), Color::BLACK, TextAlign::TOP_LEFT, "Ink");
+      // Masthead double rule.
+      it.filled_rectangle(60, 150, 384, 3, Color::BLACK);
+      it.filled_rectangle(60, 157, 384, 1, Color::BLACK);
+      it.print(62, 166, id(ink_italic), Color::BLACK, TextAlign::TOP_LEFT,
+               "A new work on your wall, every morning.");
+      // Getting Started
+      it.print(60, 216, id(ink_head), Color::BLACK, TextAlign::TOP_LEFT, "Getting Started");
+      it.print(64, 266, id(ink_body), Color::BLACK, TextAlign::TOP_LEFT,
+               "1.  Download & install the Ink app");
+      it.print(64, 304, id(ink_body), Color::BLACK, TextAlign::TOP_LEFT,
+               "2.  Connect to the \"Ink Frame\" Wi-Fi");
+      it.print(64, 342, id(ink_body), Color::BLACK, TextAlign::TOP_LEFT,
+               "3.  Follow the instructions in the app");
+      // App QR (right)
+      it.qr_code(598, 152, id(app_qr), Color::BLACK, 5);
+      it.print(606, 324, id(ink_body), Color::BLACK, TextAlign::TOP_LEFT, "Scan to");
+      it.print(606, 352, id(ink_body), Color::BLACK, TextAlign::TOP_LEFT, "get the app");
 
 script:
   - id: boot_sequence
     then:
+      - component.update: my_display  # draw the pairing screen before WiFi exists
       - wait_until: wifi.connected    # stays awake through captive-portal onboarding
       - delay: 3s
       - wait_until:
@@ -222,32 +244,3 @@ script:
                             get_mac_address() + ".png";
           id(online_artwork).set_url(url.c_str());
       - component.update: online_artwork
-      - delay: 2s
-      # Decide power mode from the battery rail voltage.
-      - component.update: batt
-      - delay: 400ms
-      - lambda: "id(is_powered) = (id(batt).state >= ${powered_voltage});"
-      - if:
-          condition:
-            lambda: "return id(is_powered);"
-          then:
-            - logger.log: "On USB power - staying awake"
-          else:
-            - logger.log: "On battery - will sleep when idle"
-            - script.execute: idle_timer
-
-  # Battery idle timer: any KEY1 press restarts it; KEY2 stops it.
-  - id: idle_timer
-    mode: restart
-    then:
-      - delay: ${idle_minutes}min
-      - script.execute: go_to_sleep
-
-  - id: go_to_sleep
-    then:
-      - logger.log: "Sleeping (wake with KEY1)"
-      - globals.set: { id: is_sleeping_icon, value: "true" }
-      - component.update: my_display
-      - delay: 3s
-      # No sleep duration -> wakes only on the KEY1 pin.
-      - lambda: "id(deep_sleep_component).begin_sleep();"

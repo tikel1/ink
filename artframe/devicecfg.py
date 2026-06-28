@@ -23,7 +23,7 @@ class DeviceConfig:
     language: str = "en"
     temp_unit: str = "c"
     interests: tuple[str, ...] = ()
-    signature: str = "House Kaplan"
+    signature: str = "Ink."
     holiday_jewish: bool = True
     holiday_israeli: bool = True
     holiday_global: bool = True
