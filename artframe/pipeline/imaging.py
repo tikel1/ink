@@ -25,14 +25,14 @@ def to_eink_image(source: bytes, fmt: str = "PNG", orientation: str = "landscape
         rgb = raw.convert("RGB")
         if orientation == "portrait":
             fitted = _fit(rgb, DISPLAY_HEIGHT, DISPLAY_WIDTH)  # 480x800
-            panel = fitted.convert("1").rotate(90, expand=True)  # -> 800x480
+            panel = _binarize(fitted).rotate(90, expand=True)  # -> 800x480
         else:
             fitted = _fit(_orient_landscape(rgb), DISPLAY_WIDTH, DISPLAY_HEIGHT)
-            panel = fitted.convert("1")  # Pillow default = Floyd-Steinberg
-        # Store PNG as 8-bit grayscale (pixels are still pure 0/255 from the
-        # dither). ESPHome's online_image decoder is unreliable with 1-bit-depth
-        # PNGs; 8-bit decodes cleanly and the dither pattern is preserved.
-        out_img = panel.convert("L") if fmt.upper() == "PNG" else panel
+            panel = _binarize(fitted)
+        # `panel` is 8-bit grayscale with pure 0/255 pixels. ESPHome's
+        # online_image decoder is unreliable with 1-bit-depth PNGs, so keep PNG
+        # 8-bit; BMP stays 1-bit for size.
+        out_img = panel if fmt.upper() == "PNG" else panel.convert("1")
         out = io.BytesIO()
         out_img.save(out, format=fmt)
         return out.getvalue()
@@ -43,6 +43,17 @@ def to_eink_bmp(source: bytes) -> bytes:
     return to_eink_image(source, fmt="BMP")
 
 
+# Pixels at/above this 0-255 luminance become white, below become black. A hard
+# threshold keeps flat paper-cut art crisp and the background pure white — unlike
+# Floyd-Steinberg dithering, which speckles every off-white pixel into noise.
+_BW_THRESHOLD = 128
+
+
+def _binarize(image: Image.Image) -> Image.Image:
+    """Threshold to pure black/white (mode 'L', values 0 or 255 only)."""
+    return image.convert("L").point(lambda p: 255 if p >= _BW_THRESHOLD else 0)
+
+
 def _orient_landscape(image: Image.Image) -> Image.Image:
     """Rotate portrait sources so the long edge is horizontal."""
     if image.height > image.width:
@@ -50,18 +61,25 @@ def _orient_landscape(image: Image.Image) -> Image.Image:
     return image
 
 
-def _fit(image: Image.Image, width: int, height: int) -> Image.Image:
-    """Cover-fit to width x height: scale to fill, center-crop the overflow."""
-    target_ratio = width / height
-    source_ratio = image.width / image.height
-    scale = (height / image.height) if source_ratio > target_ratio else (width / image.width)
+# White margin on each side of the panel, as a fraction of width/height. Keeps
+# the whole artwork (incl. the signature) visible — no edge cropping — and gives
+# a clean matted border. Applied here in post-processing, never in the prompt.
+_MARGIN = 0.05
 
-    new_size = (round(image.width * scale), round(image.height * scale))
+
+def _fit(image: Image.Image, width: int, height: int) -> Image.Image:
+    """Contain-fit the whole image inside a `width`x`height` white canvas, leaving
+    a `_MARGIN` border on every side. Nothing is cropped (letterboxed instead)."""
+    inner_w = max(1, round(width * (1 - 2 * _MARGIN)))
+    inner_h = max(1, round(height * (1 - 2 * _MARGIN)))
+    scale = min(inner_w / image.width, inner_h / image.height)
+
+    new_size = (max(1, round(image.width * scale)), max(1, round(image.height * scale)))
     scaled = image.resize(new_size, Image.LANCZOS)
 
-    left = (scaled.width - width) // 2
-    top = (scaled.height - height) // 2
-    return scaled.crop((left, top, left + width, top + height))
+    canvas = Image.new("RGB", (width, height), (255, 255, 255))
+    canvas.paste(scaled, ((width - scaled.width) // 2, (height - scaled.height) // 2))
+    return canvas
 
 
 def save_image(image_bytes: bytes, path: Path) -> Path:

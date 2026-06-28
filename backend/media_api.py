@@ -45,6 +45,18 @@ async def current(device_id: str) -> Response:
     return _png(splash.connect_splash(AP_NAME))
 
 
+@router.get("/current/{device_id}.ver")
+async def current_version(device_id: str) -> Response:
+    """Tiny version stamp the frame polls so it re-fetches only when the artwork
+    actually changed (avoids constant e-ink refreshes). Also counts as a check-in."""
+    repositories.update_telemetry(device_id)
+    path = generation.current_image_path(device_id)
+    ver = str(int(path.stat().st_mtime)) if path.exists() else "0"
+    # Also expose the version as a response header — the frame's Arduino HTTP
+    # client reads collected headers reliably (the response body does not).
+    return Response(content=ver, media_type="text/plain", headers={"X-Ver": ver})
+
+
 @router.get("/archive/{device_id}/{date}.png")
 async def archive(device_id: str, date: str) -> Response:
     path = generation.archive_image_path(device_id, date)

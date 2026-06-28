@@ -66,7 +66,7 @@ ota:
   - platform: esphome
 
 logger:
-  level: DEBUG          # diagnosing the display busy-pin timeout
+  level: INFO
   baud_rate: 115200
 
 http_request:
@@ -90,6 +90,9 @@ globals:
   - id: image_loaded
     type: bool
     initial_value: "false"
+  - id: last_ver
+    type: std::string
+    initial_value: '""'
 
 # Deep sleep intentionally removed: KEY1-on-GPIO2 sharing the wake pin in polling
 # mode triggered spurious sleeps that bricked the board seconds after boot. This
@@ -164,11 +167,27 @@ qr_code:
   - id: app_qr
     value: "${app_url}"
 
-# Re-fetch the art periodically (always-awake build).
+# Poll a tiny version stamp; only re-fetch + redraw when the artwork changed.
+# This makes a Regenerate (or the daily job) appear on the frame within ~60s
+# without flashing the e-ink on every poll.
 interval:
-  - interval: ${powered_refresh_minutes}min
+  - interval: 60s
     then:
-      - component.update: online_artwork
+      - http_request.get:
+          url: !lambda 'return "${backend_base}/media/current/" + get_mac_address() + ".ver";'
+          collect_headers: ["x-ver"]
+          on_response:
+            then:
+              - lambda: |-
+                  if (response->status_code != 200) return;
+                  std::string v = response->get_response_header("x-ver");
+                  if (v.empty()) return;
+                  if (id(last_ver).empty()) { id(last_ver) = v; return; }  // baseline only
+                  if (v != id(last_ver)) {
+                    id(last_ver) = v;
+                    ESP_LOGI("ink", "new artwork version %s — refreshing", v.c_str());
+                    id(online_artwork)->update();
+                  }
 
 online_image:
   url: "${backend_base}/media/current/placeholder.png"
@@ -197,6 +216,8 @@ display:
     dc_pin: GPIO10
     reset_pin: GPIO38
     busy_pin: { number: GPIO4, inverted: true }
+    # Slow SPI clock: tolerant of a ribbon-extended bus (works direct at any speed).
+    data_rate: 200kHz
     model: 7.50inv2
     update_interval: never
     lambda: |-
@@ -215,7 +236,7 @@ display:
       it.filled_rectangle(60, 150, 384, 3, Color::BLACK);
       it.filled_rectangle(60, 157, 384, 1, Color::BLACK);
       it.print(62, 166, id(ink_italic), Color::BLACK, TextAlign::TOP_LEFT,
-               "A new work on your wall, every morning.");
+               "A new work of art, every morning.");
       // Getting Started
       it.print(60, 216, id(ink_head), Color::BLACK, TextAlign::TOP_LEFT, "Getting Started");
       it.print(64, 266, id(ink_body), Color::BLACK, TextAlign::TOP_LEFT,
