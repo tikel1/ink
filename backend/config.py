@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # Generation provider + YOUR platform key (the default payer).
     image_provider: str = "openai"
     platform_openai_api_key: str = ""
-    openai_image_model: str = "gpt-image-2"
+    openai_image_model: str = "gpt-image-2-2026-04-21"
     # low|medium|high — "low" (~$0.006-0.012/image) is plenty for a 1-bit
     # thresholded e-ink panel; medium/high cost far more.
     openai_image_quality: str = "low"
