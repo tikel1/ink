@@ -213,6 +213,9 @@ input:focus, select:focus { outline: none; border-color: var(--ink);
 
 /* ── Actions + nav list ──────────────────────────────────────────────── */
 .actions { margin: 22px 0 8px; }
+.actions-row { display: flex; gap: 12px; }
+.actions-row .btn-ghost { flex: 0 0 38%; }
+.actions-row .btn-primary { flex: 1; }
 .nav-list { margin-top: 18px; display: grid; gap: 10px; }
 .nav-row { display: flex; align-items: center; gap: 14px; width: 100%; cursor: pointer;
            background: var(--paper-2); border: 1.5px solid var(--line); border-radius: var(--radius);

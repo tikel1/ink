@@ -287,10 +287,25 @@ async function pollGeneration(id) {
   flash("action-msg", "Still working… check back in a moment.");
 }
 
+// Re-pull the current artwork + placard into the app view (cache-busted).
+async function refreshArtwork() {
+  if (!currentId) return;
+  loadArtwork($("preview-img"), $("img-skeleton"), currentId, () => {
+    $("ev-text").textContent = "Today's work hasn't been created yet — tap Regenerate.";
+  });
+  await loadPlacard(currentId, currentDevice && currentDevice.signature);
+}
+
 function wireFrame() {
   $("frame-back").addEventListener("click", showHome);
   $("goto-artwork").addEventListener("click", openArtwork);
   $("goto-settings").addEventListener("click", openSettings);
+  $("refresh-btn").addEventListener("click", async () => {
+    $("refresh-btn").disabled = true;
+    await refreshArtwork();
+    $("refresh-btn").disabled = false;
+    toast("Refreshed");
+  });
   $("regen-btn").addEventListener("click", async () => {
     const id = currentId;
     setBusy(true);
