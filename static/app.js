@@ -37,6 +37,10 @@ let resolvedTz = null;     // tz from the latest geocode (used when auto-tz is o
 const SCREENS = ["welcome", "home", "connect", "frame", "artwork", "settings", "account"];
 function go(name) {
   for (const s of SCREENS) $(`screen-${s}`).hidden = s !== name;
+  // Home is a single, fixed viewport (no scroll); every other screen scrolls
+  // normally. Lock #app to the viewport only on home so its padding can't push
+  // the page past 100dvh.
+  $("app").classList.toggle("locked", name === "home");
   window.scrollTo(0, 0);
 }
 
