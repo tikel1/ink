@@ -11,8 +11,8 @@
 #       - On USB power -> stays ON, refreshes the art periodically.
 #       - On battery   -> sleeps; press KEY1 to wake + refresh, then sleeps again
 #                         after `idle_minutes` of no interaction.
-#   Buttons: KEY1 = wake + refresh, KEY2 = refresh, KEY3 = tap: sleep ·
-#   hold 15s: factory reset (clears WiFi + pairing, returns to onboarding).
+#   Buttons: KEY1 = sleep / wake (press to sleep when on, press to wake when
+#   asleep), KEY2 = refresh, KEY3 = wake · hold 15s: factory reset.
 #
 # Set `backend_base` before flashing. `timezone` is for the clock; the daily
 # generation hour is set per frame in the app.
@@ -30,6 +30,8 @@ substitutions:
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
+  includes:
+    - ink_sleep.h          # multi-button (KEY1 + KEY3) deep-sleep wake helper
   on_boot:
     priority: 600
     then:
@@ -114,17 +116,17 @@ globals:
   - id: g_wake_hour
     type: int
     initial_value: "6"
+  # True once boot + WiFi are up. Manual sleep (KEY1) is blocked until then so a
+  # stray press during boot can't sleep the frame before OTA/WiFi is reachable.
+  - id: g_booted
+    type: bool
+    initial_value: "false"
 
-# Deep sleep is used only on battery (see the version-poll). KEY1 wakes it; sleep
-# is triggered ONLY by the idle check — never by a KEY press (that bricked boot).
+# Deep sleep wakes on a daily timer (guaranteed fallback) AND on a press of
+# KEY1 (GPIO2) or KEY3 (GPIO5) — the ext1 multi-button wake is configured in the
+# go_to_sleep script via ink_sleep.h, so no wakeup_pin is set here.
 deep_sleep:
   id: deep_sleep_component
-  wakeup_pin:
-    number: GPIO2
-    inverted: true
-    mode: INPUT_PULLUP
-    allow_other_uses: true
-  wakeup_pin_mode: INVERT_WAKEUP
 
 button:
   - platform: factory_reset
@@ -133,15 +135,21 @@ button:
     internal: true
 
 binary_sensor:
-  # KEY1 = wake + refresh. It is the deep-sleep wake pin, so a press wakes the
-  # frame from sleep; while awake it re-fetches the artwork. A press never sleeps.
+  # KEY1 = sleep / wake. While asleep a press wakes the frame (ext1 wake pin);
+  # while awake a press puts it to sleep. Blocked until g_booted so a press
+  # during boot can't sleep before OTA/WiFi is up.
   - platform: gpio
-    name: "KEY1 wake/refresh"
+    name: "KEY1 sleep/wake"
+    id: key1_btn
     internal: true
-    pin: { number: GPIO2, mode: INPUT_PULLUP, inverted: true, allow_other_uses: true }
+    pin: { number: GPIO2, mode: INPUT_PULLUP, inverted: true }
     on_press:
-      - logger.log: "KEY1 wake/refresh"
-      - component.update: online_artwork
+      - if:
+          condition:
+            lambda: "return id(g_booted);"
+          then:
+            - logger.log: "KEY1 — entering sleep"
+            - script.execute: go_to_sleep
 
   # KEY2 = refresh (re-fetch + redraw the current artwork).
   - platform: gpio
@@ -152,11 +160,10 @@ binary_sensor:
       - logger.log: "KEY2 refresh"
       - component.update: online_artwork
 
-  # KEY3 = tap to sleep (wake again with KEY1); hold 15s to factory-reset.
-  # Sleep is triggered from KEY3 (GPIO5), never from the wake pin KEY1 (GPIO2) —
-  # pressing the wake pin to sleep caused a wake/sleep boot loop.
+  # KEY3 = wake (a press wakes from sleep via ext1); hold 15s to factory-reset.
   - platform: gpio
-    name: "KEY3 sleep / factory reset"
+    name: "KEY3 wake / factory reset"
+    id: key3_btn
     internal: true
     pin: { number: GPIO5, mode: INPUT_PULLUP, inverted: true }
     on_multi_click:
@@ -165,12 +172,6 @@ binary_sensor:
         then:
           - logger.log: "KEY3 held 15s — factory reset"
           - button.press: factory_reset_button
-      - timing:
-          - ON for at most 1500ms
-          - OFF for at least 50ms
-        then:
-          - logger.log: "KEY3 tap — entering sleep"
-          - script.execute: go_to_sleep
 
 sensor:
   - platform: adc
@@ -298,6 +299,7 @@ script:
       - lambda: 'id(image_loaded) = false;'
       - component.update: my_display
       - wait_until: wifi.connected    # stays awake through captive-portal onboarding
+      - lambda: "id(g_booted) = true;"  # OTA/WiFi reachable — manual sleep now allowed
       - delay: 3s
       - wait_until:
           condition:
@@ -309,11 +311,19 @@ script:
           id(online_artwork).set_url(url.c_str());
       - component.update: online_artwork
 
-  # Sleep until the next daily update hour; KEY1 also wakes it any time. Used both
-  # by the battery idle timer and by a KEY3 tap (manual sleep).
+  # Sleep until the next daily update hour (timer = guaranteed wake); KEY1 or KEY3
+  # also wake it any time. Used by the battery idle timer and by a KEY1 press.
   - id: go_to_sleep
     then:
-      - logger.log: "Sleeping until the next update hour (KEY1 wakes)"
+      - logger.log: "Sleeping until the next update hour (KEY1/KEY3 wake)"
+      # Wait for the keys to be released first — otherwise a still-pressed wake
+      # pin would immediately re-wake the chip (the old boot loop).
+      - wait_until:
+          condition:
+            and:
+              - binary_sensor.is_off: key1_btn
+              - binary_sensor.is_off: key3_btn
+          timeout: 8s
       - lambda: |-
           auto t = id(sntp_time).now();
           uint32_t delta = 3600;  // 1h fallback if the clock isn't set
@@ -325,5 +335,6 @@ script:
             delta = (uint32_t) d;
           }
           id(deep_sleep_component)->set_sleep_duration(delta * 1000ULL);
-      - delay: 2s
+          ink_enable_button_wakeup();   // wake on KEY1 or KEY3 (ext1)
+      - delay: 1s
       - lambda: 'id(deep_sleep_component)->begin_sleep();'
