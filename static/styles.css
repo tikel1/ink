@@ -21,6 +21,10 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
+/* A `hidden` element must always stay hidden — author rules like
+   `.home-frame { display:flex }` would otherwise beat the UA [hidden] default
+   and leak the inactive view under the active one. */
+[hidden] { display: none !important; }
 body {
   background:
     radial-gradient(120% 80% at 50% -10%, #efe9db 0%, var(--paper) 55%),
@@ -374,23 +378,31 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
    (inspired by gallery print mockups). */
 .gallery-frame { display: flex; justify-content: center; margin: 0 auto 4px; cursor: pointer;
                  padding: 0; background: none; border: none; max-width: 100%; }
-.gframe-mat {
-  display: inline-block; position: relative; background: #fcfbf8;
-  padding: clamp(14px, 5vw, 30px); border-radius: 1px;
+/* Walnut molding — real wood-grain photo, beveled with inner light/shade. */
+.gframe-wood {
+  display: inline-block; position: relative;
+  background: #5a3d28 url("walnut.jpg") center / cover;
+  padding: clamp(13px, 4vw, 20px); border-radius: 4px;
   box-shadow:
-    0 0 0 7px #fcfbf8,                  /* mat continues to the molding */
-    0 0 0 15px #9b7748,                 /* walnut molding face */
-    0 0 0 17px #6f5331,                 /* molding inner depth */
-    inset 0 0 0 1px rgba(0,0,0,.04),    /* faint mat tone */
-    18px 30px 48px -18px rgba(27,24,19,.55),  /* soft wall shadow, cast down-right */
-    0 6px 16px -8px rgba(27,24,19,.35);
+    inset 0 2px 3px rgba(255,255,255,.20),   /* top molding highlight */
+    inset 0 -4px 8px rgba(0,0,0,.45),         /* bottom molding shade (rounded look) */
+    inset 0 0 0 1px rgba(0,0,0,.35),          /* crisp outer edge */
+    18px 28px 48px -16px rgba(27,24,19,.55),  /* soft wall shadow, cast down-right */
+    0 6px 16px -8px rgba(27,24,19,.4);
+}
+/* Wide white mat inside the molding. */
+.gframe-mat {
+  display: block; position: relative; background: #fcfbf8;
+  padding: clamp(12px, 4.5vw, 26px); border-radius: 1px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.05),
+              inset 0 2px 9px rgba(0,0,0,.12);   /* mat recessed below the molding lip */
 }
 /* The mat "window": a crisp line + subtle bevel where the print meets the mat. */
-.gframe-mat::after { content: ""; position: absolute; inset: clamp(14px,5vw,30px);
+.gframe-mat::after { content: ""; position: absolute; inset: clamp(12px,4.5vw,26px);
                      box-shadow: inset 0 0 0 1px rgba(0,0,0,.16),
                                  inset 0 1px 4px rgba(0,0,0,.10); pointer-events: none; }
 .gframe-mat img.loaded { opacity: 1; }
-.gframe-mat .skeleton { position: absolute; inset: clamp(14px,5vw,30px); }
+.gframe-mat .skeleton { position: absolute; inset: clamp(12px,4.5vw,26px); }
 .gallery-frame:active { transform: scale(.99); }
 
 /* Landscape: image capped by width + height so the whole home fits one screen. */
@@ -400,7 +412,7 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 }
 /* Portrait: served PNG is the panel buffer (landscape px); show it upright by
    swapping dims via container-query units + rotating 90° clockwise. */
-.home-frame.is-portrait .gframe-mat { container-type: size; aspect-ratio: 480 / 800; height: 50dvh; }
+.home-frame.is-portrait .gframe-mat { container-type: size; aspect-ratio: 480 / 800; height: 46dvh; }
 .home-frame.is-portrait .gframe-mat img {
   position: absolute; top: 50%; left: 50%; opacity: 0; transition: opacity .5s var(--ease);
   width: 100cqh; height: 100cqw; max-width: none;
