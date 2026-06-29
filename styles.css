@@ -439,10 +439,16 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .gear-btn { margin-left: auto; background: none; border: none; cursor: pointer; padding: 8px;
             border-radius: 50%; color: var(--ink-soft); transition: background .2s, color .2s; }
 .gear-btn:hover { background: rgba(27,24,19,.07); color: var(--ink); }
-/* Refresh sits with the gear in the right-hand cluster of the home header. */
-.home-top .home-refresh { margin-left: auto; }
-.home-top .home-refresh + .gear-btn { margin-left: 0; }
-.home-refresh.busy svg { animation: spin 1s linear infinite; }
+
+/* Pull-to-refresh: the home is one locked viewport, so we drive the gesture
+   ourselves. The spinner is revealed above the frame as it's dragged down. */
+.home { position: relative; touch-action: none; }
+.pull-spinner { position: absolute; top: 44px; left: 50%; margin-left: -18px; z-index: 6;
+  width: 36px; height: 36px; border-radius: 50%; color: var(--ink-soft);
+  background: var(--paper-2); border: 1.5px solid var(--line); box-shadow: var(--shadow);
+  display: grid; place-items: center; opacity: 0; transform: translateY(-12px) scale(.7);
+  pointer-events: none; }
+.pull-spinner.spin svg { animation: spin .9s linear infinite; }
 .frame-screen .home-top .back { font-size: 26px; line-height: 1; padding: 0 6px 0 0; color: var(--ink-soft); }
 
 /* Sit the artwork toward the top (just below the header) rather than vertically
@@ -496,7 +502,10 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 }
 /* Portrait: served PNG is the panel buffer (landscape px); show it upright by
    swapping dims via container-query units + rotating 90° clockwise. */
-.home-frame.is-portrait .gframe-mat { container-type: size; aspect-ratio: 480 / 800; height: 57dvh; }
+.home-frame.is-portrait .gframe-mat { container-type: size; aspect-ratio: 480 / 800; height: 54dvh; }
+/* Portrait: sit the frame higher (smaller top margin) so the caption below has
+   more breathing room. */
+.home-frame.is-portrait .gallery-frame { margin-top: clamp(4px, 1.5vh, 14px); }
 .home-frame.is-portrait .gframe-mat img {
   position: absolute; top: 50%; left: 50%; opacity: 0; transition: opacity .5s var(--ease);
   width: 100cqh; height: 100cqw; max-width: none;
