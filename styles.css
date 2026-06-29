@@ -125,6 +125,10 @@ button { font-family: inherit; }
 .btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
 .btn-danger:hover { background: rgba(155,59,47,.07); }
 .btn-primary:disabled { opacity: .55; cursor: default; transform: none; }
+.btn-ghost:disabled { opacity: .4; cursor: default; background: transparent; }
+/* Regenerating: gentle pulse so the loading state reads without verbose text. */
+.btn-primary.busy { animation: btn-pulse 1.3s ease-in-out infinite; }
+@keyframes btn-pulse { 0%,100% { opacity: .7; } 50% { opacity: 1; } }
 button.inline { width: auto; white-space: nowrap; padding: 0 16px; }
 .wide { margin-top: 8px; }
 .danger-link { color: var(--danger); display: block; width: 100%; text-align: center;
@@ -219,13 +223,13 @@ input:focus, select:focus { outline: none; border-color: var(--ink);
                    color: var(--muted); margin: 0 0 8px; font-weight: 600; }
 .placard-body { font-size: 17px; line-height: 1.55; margin: 0 0 8px; color: var(--ink); }
 .placard-body.he { font-size: 16px; color: var(--ink-soft); }
-.placard-sign { font-family: "Fraunces"; font-style: italic; color: var(--ink-soft); margin: 4px 0 0; }
+.placard-sign { font-family: "Fraunces"; font-style: italic; color: var(--ink-soft); margin: 14px 0 0; font-size: 16px; }
 .placard-credit { font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
                   color: var(--muted); margin: 16px 0 0; }
 
 /* ── Actions + nav list ──────────────────────────────────────────────── */
 .actions { margin: 22px 0 8px; }
-.actions-row { display: flex; gap: 12px; }
+.actions-row { display: flex; gap: 12px; margin-top: 26px; }
 .actions-row .btn-ghost { flex: 0 0 38%; }
 .actions-row .btn-primary { flex: 1; }
 .nav-list { margin-top: 18px; display: grid; gap: 10px; }

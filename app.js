@@ -240,6 +240,7 @@ async function openFrame(id) {
     const st = frameState(currentDevice);
     $("fr-dot").className = `dot ${st.cls}`;
     $("fr-status").textContent = `${st.label} · ${st.sub}`;
+    updateRefreshState();
   } catch (e) { showError("action-msg", e); }
   await loadGallery(id);
 }
@@ -334,21 +335,37 @@ function onGalleryScroll() {
 }
 
 function setBusy(on) {
-  $("regen-btn").disabled = on; $("regen-btn").textContent = on ? "Painting…" : "Regenerate";
+  $("regen-btn").disabled = on; $("regen-btn").textContent = on ? "Regenerating…" : "Regenerate";
+  $("regen-btn").classList.toggle("busy", on);
   $("gallery").classList.toggle("busy", on);
 }
 async function pollGeneration(id) {
-  flash("action-msg", "Painting today's work… (about 20–30 s)");
   for (let i = 0; i < 48; i++) {
     await sleep(2500);
     let s; try { s = await api(`/devices/${id}/generation`); } catch { continue; }
-    if (s.state === "done") {
-      if (id === currentId) await loadGallery(id);
-      flash("action-msg", "Done — your frame shows it on its next refresh, or press KEY1."); return;
-    }
-    if (s.state === "error") { flash("action-msg", s.detail || "Generation failed.", true); return; }
+    if (s.state === "done") { if (id === currentId) await loadGallery(id); toast("New artwork ready"); return; }
+    if (s.state === "error") { toast(s.detail || "Couldn't create the artwork"); return; }
   }
-  flash("action-msg", "Still working… check back in a moment.");
+  toast("Still working — check back shortly");
+}
+
+// Refresh re-pulls the artwork; it's only meaningful when the frame is awake.
+// When asleep/offline, disable it and show a friendly hint.
+function updateRefreshState() {
+  const st = currentDevice ? frameState(currentDevice) : null;
+  const btn = $("refresh-btn"), hint = $("refresh-hint");
+  const sleeping = st && st.cls === "s-sleep";
+  const offline = st && st.cls === "s-off";
+  btn.disabled = !!(sleeping || offline);
+  if (sleeping) {
+    btn.title = "Frame is asleep — press KEY1 on the frame to wake it";
+    hint.textContent = "💤 Frame is asleep — press KEY1 to wake it";
+    hint.hidden = false;
+  } else if (offline) {
+    btn.title = "Frame is offline";
+    hint.textContent = "⚠ Frame is offline — check it's powered and on Wi‑Fi";
+    hint.hidden = false;
+  } else { btn.title = "Refresh the artwork"; hint.hidden = true; }
 }
 
 function wireFrame() {
@@ -366,7 +383,7 @@ function wireFrame() {
   $("regen-btn").addEventListener("click", async () => {
     const id = currentId; setBusy(true);
     try { await api(`/devices/${id}/regenerate`, { method: "POST" }); await pollGeneration(id); }
-    catch (e) { flash("action-msg", e.message, true); }
+    catch (e) { toast(e.message); }
     setBusy(false);
   });
 }
