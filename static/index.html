@@ -177,20 +177,34 @@
 
         <div class="card">
           <h3>Location &amp; weather</h3>
-          <label>City
-            <div class="row field-with-icon">
-              <input id="city-name" placeholder="Search a city…" />
-              <button type="button" id="city-edit" class="icon-inline" aria-label="Change city" hidden>✎</button>
-              <button type="button" id="city-find" class="btn-ghost inline">Find</button>
-            </div>
-          </label>
-          <button type="button" id="geo-btn" class="link locate">Use my current location</button>
-          <p id="loc-msg" class="hint" hidden></p>
-          <label class="toggle"><span>Enter coordinates manually</span><input type="checkbox" id="manual-coords" /><i></i></label>
-          <div class="row" id="coords-row" hidden>
-            <label>Latitude<input id="lat" type="number" step="0.0001" /></label>
-            <label>Longitude<input id="lon" type="number" step="0.0001" /></label>
+          <span class="field-label">Location</span>
+          <div class="loc-view" id="loc-view">
+            <span id="city-display" class="loc-text"></span>
+            <button type="button" id="city-edit" class="icon-edit" aria-label="Change location">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+                   stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+              </svg>
+            </button>
           </div>
+          <div class="loc-edit" id="loc-edit" hidden>
+            <div class="autocomplete">
+              <div class="row field-with-icon">
+                <input id="city-name" placeholder="Type a city…" autocomplete="off"
+                       autocapitalize="words" spellcheck="false" />
+                <button type="button" id="city-find" class="btn-ghost inline">Find</button>
+              </div>
+              <ul id="city-suggest" class="suggest" hidden></ul>
+            </div>
+            <button type="button" id="geo-btn" class="link locate">Use my current location</button>
+            <label class="toggle"><span>Enter coordinates manually</span><input type="checkbox" id="manual-coords" /><i></i></label>
+            <div class="row" id="coords-row" hidden>
+              <label>Latitude<input id="lat" type="number" step="0.0001" /></label>
+              <label>Longitude<input id="lon" type="number" step="0.0001" /></label>
+            </div>
+          </div>
+          <p id="loc-msg" class="hint" hidden></p>
           <label class="toggle"><span>Show the weather</span><input type="checkbox" id="show_weather" /><i></i></label>
           <fieldset class="radios" id="unit-radios">
             <legend>Temperature units</legend>
