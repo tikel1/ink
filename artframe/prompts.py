@@ -71,30 +71,43 @@ Event: "{event}"
 
 Reply with a single word: REAL or FAKE."""
 
-# Web-search selection: ground the event (and especially its DATE) in reality,
-# and have the model name the single iconic image so the artwork has a clear,
-# recognizable subject to abstract. Returns JSON.
-SEARCH_EVENT_PROMPT = """Use web search to find ONE real, notable, positive event in
+# Web-search selection: ONE search returns several date-verified candidates; a
+# cheap second (no-search) step curates the most iconic one. Returns a JSON array.
+SEARCH_EVENT_PROMPT = """Use web search to find 3-5 real, notable, positive events in
 the category "{interest}" that genuinely happened on {date} — this exact month and
-day — in some past year. Verify the date with the search before answering.
+day — in past years. Verify each date with the search before listing it.
 
 Rules:
-- It MUST have occurred on {date} (this month and day). Confirm via search.
-- It must clearly belong to "{interest}".
-- Prefer the most ICONIC, celebrated, or historic moment — a championship won, a
-  world record broken, a legendary performance, a famous debut, a landmark album
-  or concert. AVOID routine announcements, anniversaries, administrative/corporate
-  news, or minor happenings. If several events qualify, pick the most memorable.
-- Positive and inspiring. Avoid war, violence, tragedy, and copyrighted characters.
+- Each event MUST have occurred on {date} (this month and day). Confirm via search.
+- Each must clearly belong to "{interest}".
+- Favour memorable moments — championships, world records, legendary performances,
+  famous debuts, landmark albums/concerts. Avoid war, violence, tragedy, and
+  copyrighted characters.
 
-Reply with ONLY compact JSON, no prose:
-{{"event": "<15-25 word description, including the year>",
-  "verified_date": "<Month DD, YYYY>",
-  "on_date": <true if it really happened on {date}, else false>,
-  "iconic_visual": "<the single most iconic, recognizable image of that moment, in
-  5-12 words, as a simple concrete subject suitable for a hand-cut paper silhouette>"}}
+Reply with ONLY a compact JSON array (no prose) of 3-5 objects:
+[{{"event": "<15-25 word description, including the year>",
+   "verified_date": "<Month DD, YYYY>",
+   "on_date": <true if it really happened on {date}, else false>,
+   "iconic_visual": "<the single most iconic, recognizable image of that moment, in
+   5-12 words, as a simple concrete subject for a hand-cut paper silhouette>"}}, ...]
 
-If web search finds no real "{interest}" event on {date}, reply: {{"on_date": false}}"""
+If web search finds no real "{interest}" event on {date}, reply: []"""
+
+# Curate (no search): pick the single most interesting/iconic candidate, and
+# drop any that look dubious or off-date.
+CURATE_EVENT_PROMPT = """These candidate events were each found via web search and
+claimed to have happened on {date}. Pick the SINGLE best one for a daily artwork:
+the most iconic and celebrated (a championship, record, legendary performance, or
+famous debut) — not a routine or minor event. Skip any that seem fabricated or
+clearly not on {date}.
+
+Candidates:
+{candidates}
+
+Reply with ONLY compact JSON for your choice:
+{{"event": "<chosen event description, incl. year>",
+  "iconic_visual": "<chosen event's iconic visual>"}}
+If none are suitable, reply: {{}}"""
 
 # Topic-forced selection: ask explicitly for ONE interest category, so the model
 # can't default to its favourite topics (space/tech) and ignore the interests.

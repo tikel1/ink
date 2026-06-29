@@ -84,25 +84,52 @@ async def generate_artwork(settings: Settings, config: DeviceConfig) -> ArtworkR
 _EVENT_ATTEMPTS = 2
 
 
+def _extract_json(raw: str, array: bool):
+    """Pull the first JSON array/object out of a model reply (tolerates prose)."""
+    pat = r"\[.*\]" if array else r"\{.*\}"
+    m = re.search(pat, raw, re.DOTALL)
+    if not m:
+        return None
+    try:
+        return json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return None
+
+
 async def _search_event(settings: Settings, date_label: str, interest: str) -> EventPick | None:
-    """Web-search a real, date-verified event in `interest` for `date_label`.
-    Returns an EventPick (caption + iconic visual) or None if nothing solid."""
+    """One web search returns 3-5 date-verified candidates; a cheap no-search
+    curator then picks the most iconic. Returns an EventPick or None."""
     try:
         raw = await generation_client.generate_text_with_search(
             settings, prompts.SEARCH_EVENT_PROMPT.format(date=date_label, interest=interest))
     except Exception:  # noqa: BLE001 — search is best-effort; fall back to the model
         logger.warning("web search failed for %s", interest, exc_info=True)
         return None
-    match = re.search(r"\{.*\}", raw, re.DOTALL)
-    if not match:
+
+    candidates = _extract_json(raw, array=True) or []
+    on_date = [c for c in candidates
+               if isinstance(c, dict) and c.get("on_date") and (c.get("event") or "").strip()]
+    if not on_date:
         return None
+    if len(on_date) == 1:
+        c = on_date[0]
+        return EventPick(c["event"].strip(), (c.get("iconic_visual") or "").strip())
+
+    # Curate the most iconic one (cheap, no search).
+    listing = "\n".join(
+        f'{i+1}. {c["event"].strip()}  [visual: {(c.get("iconic_visual") or "").strip()}]'
+        for i, c in enumerate(on_date))
     try:
-        data = json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return None
-    if not data.get("on_date") or not (data.get("event") or "").strip():
-        return None
-    return EventPick(data["event"].strip(), (data.get("iconic_visual") or "").strip())
+        choice_raw = await generation_client.generate_text(
+            settings, prompts.CURATE_EVENT_PROMPT.format(date=date_label, candidates=listing))
+        choice = _extract_json(choice_raw, array=False) or {}
+    except Exception:  # noqa: BLE001
+        choice = {}
+    if (choice.get("event") or "").strip():
+        return EventPick(choice["event"].strip(), (choice.get("iconic_visual") or "").strip())
+    # Curation failed → fall back to the first verified candidate.
+    c = on_date[0]
+    return EventPick(c["event"].strip(), (c.get("iconic_visual") or "").strip())
 
 
 async def _select_event(
