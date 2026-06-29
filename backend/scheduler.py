@@ -53,9 +53,11 @@ def _is_due(device, lead_minutes: int) -> bool:
     if device.last_auto_gen == now.date().isoformat():
         return False
     wake = now.replace(hour=device.wake_hour, minute=device.wake_minute, second=0, microsecond=0)
-    # Generate in the window just before the frame's wake time, so the new image
-    # is ready when the frame wakes ~5 min later to fetch it.
-    return wake - timedelta(minutes=lead_minutes) <= now < wake
+    # Due from a few minutes before the set time onward (so the art is ready when a
+    # battery frame wakes). No upper bound: if the backend was down at that moment
+    # (restart, PC asleep), the next tick still catches up — and last_auto_gen keeps
+    # it to once per day. Far more robust than a fixed window that an outage can miss.
+    return now >= wake - timedelta(minutes=lead_minutes)
 
 
 def _scheduled_today(device, now) -> bool:
