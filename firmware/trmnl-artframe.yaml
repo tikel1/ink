@@ -339,11 +339,18 @@ display:
       // the last frame before deep sleep, so the retained e-ink shows it the
       // whole time the frame is asleep.
       if (id(g_asleep)) {
-        // small thin crescent (banana): a black disc carved by an equal-size
-        // disc offset horizontally -> a ~14px sliver with horns up/down.
-        int cx = 780, cy = 26, r = 7;
-        it.filled_circle(cx, cy, r, Color::BLACK);
-        it.filled_circle(cx + 3, cy, r, Color::WHITE);
+        // Crescent (banana) moon drawn with BLACK pixels only — this panel does
+        // not honor a white "carve" circle (that just left a solid disc). For
+        // each scanline we fill from the disc's left edge to where an x-offset
+        // disc would start, leaving a thin sliver that tapers to points (horns).
+        const int cx = 772, cy = 30, R = 11, d = 6;
+        for (int dy = -R; dy <= R; dy++) {
+          int hh = (int) lroundf(sqrtf((float)(R * R - dy * dy)));
+          int xL = cx - hh;                       // outer (disc) left edge
+          int inner = (cx + d) - hh;              // where the offset disc begins
+          int xR = (cx + hh < inner) ? (cx + hh) : inner;
+          if (xR > xL) it.line(xL, cy + dy, xR, cy + dy, Color::BLACK);
+        }
       }
 
 image:
