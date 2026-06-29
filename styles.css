@@ -536,3 +536,27 @@ h4.sub { font-size: 13px; font-weight: 600; color: var(--muted); margin: 18px 0 
          transition: opacity .3s, transform .3s var(--ease); max-width: 90vw; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast[hidden] { display: block; }
+
+/* ── Lightbox (zoom an artwork) ───────────────────────────────────────── */
+.lightbox { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center;
+            justify-content: center; background: rgba(18,16,12,.93); padding: 20px;
+            animation: lb-fade .2s var(--ease); }
+.lightbox[hidden] { display: none; }
+@keyframes lb-fade { from { opacity: 0; } to { opacity: 1; } }
+.lb-close { position: fixed; top: calc(12px + env(safe-area-inset-top)); right: 16px; z-index: 81;
+            width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer;
+            background: rgba(255,255,255,.16); color: #fff; font-size: 19px; line-height: 1; }
+.lb-close:active { background: rgba(255,255,255,.28); }
+.lb-frame { display: inline-block; position: relative; background: #fff;
+            padding: clamp(8px, 2.5vw, 18px); border-radius: 4px; box-shadow: 0 24px 70px rgba(0,0,0,.55); }
+.lb-frame img { display: block; opacity: 0; transition: opacity .3s var(--ease); border-radius: 2px; cursor: default; }
+.lb-frame img.loaded { opacity: 1; }
+/* Landscape: contain within the viewport. */
+.lightbox:not(.is-portrait) .lb-frame img { width: auto; height: auto;
+            max-width: min(94vw, 1100px); max-height: 84dvh; }
+/* Portrait: served PNG is the panel buffer (landscape px) — rotate upright; size
+   the frame so width (0.6·height) + padding still fits a narrow screen. */
+.lightbox.is-portrait .lb-frame { container-type: size; aspect-ratio: 480 / 800; height: min(84dvh, 140vw); }
+.lightbox.is-portrait .lb-frame img { position: absolute; top: 50%; left: 50%;
+            width: 100cqh; height: 100cqw; max-width: none;
+            transform: translate(-50%, -50%) rotate(90deg); }
