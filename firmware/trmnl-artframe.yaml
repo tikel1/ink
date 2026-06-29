@@ -133,6 +133,11 @@ globals:
   - id: g_booted
     type: bool
     initial_value: "false"
+  # True while the frame is asleep — draws the moon indicator into the last frame
+  # before deep sleep. Resets to false on wake (deep sleep = full reboot).
+  - id: g_asleep
+    type: bool
+    initial_value: "false"
 
 # Deep sleep wakes on a daily timer (guaranteed fallback) AND on a press of
 # KEY1 (GPIO2) or KEY3 (GPIO5) — the ext1 multi-button wake is configured in the
@@ -252,9 +257,11 @@ interval:
                     }
                   }
       # On battery: after the awake window, sleep until the next update hour.
+      # Sleep rules: plugged in (usb) -> always awake; on battery -> sleep after
+      # g_sleep_min minutes of uptime (applies whether paired or still pairing).
       - if:
           condition:
-            lambda: 'return id(g_power) == "battery" && id(image_loaded) &&
+            lambda: 'return id(g_power) == "battery" &&
                             millis() > (uint32_t) id(g_sleep_min) * 60000UL;'
           then:
             - script.execute: go_to_sleep
@@ -293,11 +300,19 @@ display:
     lambda: |-
       if (id(image_loaded) && id(online_artwork).get_width() > 0) {
         it.image(0, 0, id(online_artwork), Color::BLACK, Color::WHITE);
-        return;
+      } else {
+        // Pre-WiFi: the portrait Ink onboarding screen (app QR + Wi-Fi steps).
+        it.fill(Color::WHITE);
+        it.image(0, 0, id(onboarding_img), Color::BLACK, Color::WHITE);
       }
-      // Pre-WiFi: the portrait Ink onboarding screen (app QR + Wi-Fi steps).
-      it.fill(Color::WHITE);
-      it.image(0, 0, id(onboarding_img), Color::BLACK, Color::WHITE);
+      // Asleep indicator: a small crescent moon in the corner. It is drawn into
+      // the last frame before deep sleep, so the retained e-ink shows it the
+      // whole time the frame is asleep.
+      if (id(g_asleep)) {
+        int cx = 744, cy = 56, r = 30;
+        it.filled_circle(cx, cy, r, Color::BLACK);          // full disc
+        it.filled_circle(cx + 15, cy - 11, r, Color::WHITE); // carve -> crescent
+      }
 
 image:
   - file: onboarding.png
@@ -365,6 +380,8 @@ script:
               - binary_sensor.is_off: key1_btn
               - binary_sensor.is_off: key3_btn
           timeout: 8s
+      - lambda: 'id(g_asleep) = true;'
+      - component.update: my_display   # stamp the moon onto the retained frame
       - lambda: |-
           auto t = id(sntp_time).now();
           uint32_t delta = 3600;  // 1h fallback if the clock isn't set
