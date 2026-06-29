@@ -275,35 +275,33 @@ async function homeRefresh() {
   await sendCommand("refresh", "Refreshing the frame…");
 }
 
-// Pull-to-refresh. Home is one locked viewport (no native scroll), so we own the
-// gesture: dragging down past a threshold reveals a spinner and triggers a
-// refresh; a short drag springs back.
-const PULL_START = 6, PULL_THRESHOLD = 64, PULL_MAX = 96, PULL_REST = 24;
+// Pull-to-refresh. Home is one locked viewport, so we own the gesture entirely
+// (touch-action:none covers the children too). The page UI never moves — only
+// the spinner descends and a warm glow blooms from the top edge; releasing past
+// the threshold refreshes, a short pull springs back.
+const PULL_START = 5, PULL_THRESHOLD = 64, PULL_MAX = 130, PULL_REST = 38;
 function wirePullToRefresh() {
   const screen = $("screen-home");
   const sp = $("pull-spinner");
-  const frame = () => $("home-frame");
+  const glow = $("pull-glow");
   let startY = null, active = false, dist = 0, busy = false;
 
   const render = (d) => {
-    const t = d * 0.5;
-    sp.style.opacity = String(Math.min(1, d / PULL_THRESHOLD));
-    sp.style.transform = `translateY(${t}px) scale(${0.7 + Math.min(0.3, (d / PULL_THRESHOLD) * 0.3)}) rotate(${d * 2.4}deg)`;
-    frame().style.transform = `translateY(${t}px)`;
+    const p = Math.min(1, d / PULL_THRESHOLD);
+    sp.style.transition = ""; glow.style.transition = "";
+    sp.style.opacity = String(p);
+    sp.style.transform = `translateY(${d * 0.42}px) scale(${0.7 + p * 0.3}) rotate(${d * 2.6}deg)`;
+    glow.style.opacity = String(p * 0.9);
   };
-  const springBack = () => {
-    sp.style.opacity = ""; sp.style.transform = "";
-    frame().style.transition = "transform .25s var(--ease)";
-    frame().style.transform = "";
-    setTimeout(() => { frame().style.transition = ""; }, 260);
-  };
+  const ease = () => { sp.style.transition = "opacity .25s var(--ease), transform .25s var(--ease)"; glow.style.transition = "opacity .3s var(--ease)"; };
+  const springBack = () => { ease(); sp.style.opacity = ""; sp.style.transform = ""; glow.style.opacity = ""; };
 
   screen.addEventListener("pointerdown", (e) => {
-    if (busy || currentScreen !== "home" || frame().hidden) return;
+    if (busy || currentScreen !== "home" || $("home-frame").hidden) return;
     startY = e.clientY; active = false; dist = 0;
   });
   screen.addEventListener("pointermove", (e) => {
-    if (startY == null) return;
+    if (startY == null || busy) return;
     const dy = e.clientY - startY;
     if (dy < PULL_START) { if (active) { active = false; dist = 0; springBack(); } return; }
     active = true; dist = Math.min(dy, PULL_MAX);
@@ -317,10 +315,10 @@ function wirePullToRefresh() {
     startY = null; active = false; dist = 0;
     if (!trigger) { springBack(); return; }
     busy = true;
+    ease();
     sp.classList.add("spin");
     sp.style.opacity = "1"; sp.style.transform = `translateY(${PULL_REST}px) scale(1)`;
-    frame().style.transition = "transform .25s var(--ease)";
-    frame().style.transform = `translateY(${PULL_REST}px)`;
+    glow.style.opacity = "0.85";
     try { await homeRefresh(); }
     finally {
       sp.classList.remove("spin");

@@ -62,7 +62,7 @@ body::after {
 #app.locked { height: 100dvh; overflow: hidden;
        padding: max(12px, env(safe-area-inset-top)) 20px max(10px, env(safe-area-inset-bottom)); }
 /* Lock the page itself on home so it can't scroll/rubber-band even a few px. */
-body.home-locked { overflow: hidden; height: 100dvh; }
+body.home-locked { overflow: hidden; height: 100dvh; overscroll-behavior-y: none; }
 
 /* ── Screen transitions ───────────────────────────────────────────────── */
 .screen { animation: rise .42s var(--ease) both; }
@@ -441,12 +441,18 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .gear-btn:hover { background: rgba(27,24,19,.07); color: var(--ink); }
 
 /* Pull-to-refresh: the home is one locked viewport, so we drive the gesture
-   ourselves. The spinner is revealed above the frame as it's dragged down. */
-.home { position: relative; touch-action: none; }
-.pull-spinner { position: absolute; top: 44px; left: 50%; margin-left: -18px; z-index: 6;
+   ourselves. touch-action isn't inherited, so it must cover the children the
+   user actually grabs — otherwise the browser claims the vertical swipe. The UI
+   stays put; only the spinner descends + a warm glow blooms from the top edge. */
+.home { position: relative; }
+.home, .home * { touch-action: none; }
+.pull-glow { position: absolute; top: 0; left: -20px; right: -20px; height: 90px; z-index: 5;
+  pointer-events: none; opacity: 0;
+  background: radial-gradient(60% 100% at 50% 0, rgba(var(--glow), .6), transparent 72%); }
+.pull-spinner { position: absolute; top: 16px; left: 50%; margin-left: -18px; z-index: 6;
   width: 36px; height: 36px; border-radius: 50%; color: var(--ink-soft);
   background: var(--paper-2); border: 1.5px solid var(--line); box-shadow: var(--shadow);
-  display: grid; place-items: center; opacity: 0; transform: translateY(-12px) scale(.7);
+  display: grid; place-items: center; opacity: 0; transform: translateY(-16px) scale(.7);
   pointer-events: none; }
 .pull-spinner.spin svg { animation: spin .9s linear infinite; }
 .frame-screen .home-top .back { font-size: 26px; line-height: 1; padding: 0 6px 0 0; color: var(--ink-soft); }
