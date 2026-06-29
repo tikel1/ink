@@ -43,6 +43,21 @@ async def generate_text(settings: Settings, prompt: str) -> str:
     return text
 
 
+async def generate_text_with_search(settings: Settings, prompt: str) -> str:
+    """Like generate_text, but the model can run a live web search to ground its
+    answer (used to verify event dates). Returns the model's text output."""
+    if settings.image_provider != "openai":
+        raise NotImplementedError(f"text provider {settings.image_provider}")
+
+    client = _require_openai(settings)
+    response = await client.responses.create(
+        model=settings.openai_text_model,
+        tools=[{"type": "web_search"}],
+        input=prompt,
+    )
+    return (getattr(response, "output_text", "") or "").strip()
+
+
 async def generate_image(
     settings: Settings, prompt: str, orientation: str = "landscape"
 ) -> bytes:

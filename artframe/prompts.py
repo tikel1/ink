@@ -71,6 +71,27 @@ Event: "{event}"
 
 Reply with a single word: REAL or FAKE."""
 
+# Web-search selection: ground the event (and especially its DATE) in reality,
+# and have the model name the single iconic image so the artwork has a clear,
+# recognizable subject to abstract. Returns JSON.
+SEARCH_EVENT_PROMPT = """Use web search to find ONE real, notable, positive event in
+the category "{interest}" that genuinely happened on {date} — this exact month and
+day — in some past year. Verify the date with the search before answering.
+
+Rules:
+- It MUST have occurred on {date} (this month and day). Confirm via search.
+- It must clearly belong to "{interest}".
+- Positive and inspiring. Avoid war, violence, tragedy, and copyrighted characters.
+
+Reply with ONLY compact JSON, no prose:
+{{"event": "<15-25 word description, including the year>",
+  "verified_date": "<Month DD, YYYY>",
+  "on_date": <true if it really happened on {date}, else false>,
+  "iconic_visual": "<the single most iconic, recognizable image of that moment, in
+  5-12 words, as a simple concrete subject suitable for a hand-cut paper silhouette>"}}
+
+If web search finds no real "{interest}" event on {date}, reply: {{"on_date": false}}"""
+
 # Topic-forced selection: ask explicitly for ONE interest category, so the model
 # can't default to its favourite topics (space/tech) and ignore the interests.
 INTEREST_EVENT_PROMPT = """Name one real, well-known, positive event in the category
@@ -191,12 +212,15 @@ NARRATION_HE_PROMPT = """יש פה פירוט על אירוע:
 
 def build_data_block(
     show_weather: bool, show_date: bool, condition: str, temperature: str,
-    date_str: str, event: str = "",
+    date_str: str, event: str = "", visual: str = "",
 ) -> str:
     """Assemble the two embedded sections of the artwork prompt, kept verbatim
     from the original. Section 1 (Weather & Date) is included only if the device
     wants the date and/or weather; section 2 (Event Symbol) only if there is an
     event. Either can be subtracted per the device's preferences.
+
+    `visual` is the iconic image to depict (from the event finder); when given it
+    is what the silhouette draws, while `event` is kept as context for the caption.
     """
     sections: list[str] = []
 
@@ -246,9 +270,12 @@ def build_data_block(
         sections.append(intro + "\n".join(items) + tail)
 
     if event:
+        subject = visual.strip() if visual and visual.strip() else event
+        context = f'- It represents: "{event}"\n' if subject != event else ""
         sections.append(
             "### 2. Event Symbol (Extremely Abstract):\n\n"
-            f'- Source: "{event}"\n'
+            f'- Iconic image to depict: "{subject}"\n'
+            f"{context}"
             "- Translate into **one single, ambiguous black silhouette** (max two elements)\n"
             "- Must:\n"
             "  - Suggest the idea **indirectly**, not depict it.\n"

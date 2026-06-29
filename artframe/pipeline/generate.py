@@ -7,9 +7,12 @@ caller's job (so this stays easy to test).
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import date as date_cls
+from typing import NamedTuple
 
 from .. import prompts
 from ..devicecfg import DeviceConfig
@@ -18,6 +21,17 @@ from ..timeutil import now_in_tz
 from . import generation_client, holidays, imaging, weather
 
 logger = logging.getLogger(__name__)
+
+
+class EventPick(NamedTuple):
+    """An event chosen for the day: `caption` is the human text (caption +
+    narration); `visual` is the iconic image the artwork should depict (may be
+    empty, in which case the caption itself is the drawing subject)."""
+    caption: str
+    visual: str = ""
+
+
+_EMPTY_PICK = EventPick("", "")
 
 
 @dataclass(frozen=True)
@@ -46,14 +60,14 @@ async def generate_artwork(settings: Settings, config: DeviceConfig) -> ArtworkR
         ),
     )
 
-    event = await _select_event(settings, config, today, holiday_ctx)
-    image_prompt = _build_image_prompt(config, wx, today, event)
+    pick = await _select_event(settings, config, today, holiday_ctx)
+    image_prompt = _build_image_prompt(config, wx, today, pick)
 
     # The image render dominates latency; run narration alongside it so the
     # app-triggered path is as quick as the image call itself.
     raw_png, (narration_en, narration_he) = await asyncio.gather(
         generation_client.generate_image(settings, image_prompt, config.orientation),
-        _narrate(settings, config, event),
+        _narrate(settings, config, pick.caption),
     )
     dithered = imaging.to_eink_image(raw_png, fmt="PNG", orientation=config.orientation)
 
@@ -70,22 +84,52 @@ async def generate_artwork(settings: Settings, config: DeviceConfig) -> ArtworkR
 _EVENT_ATTEMPTS = 2
 
 
+async def _search_event(settings: Settings, date_label: str, interest: str) -> EventPick | None:
+    """Web-search a real, date-verified event in `interest` for `date_label`.
+    Returns an EventPick (caption + iconic visual) or None if nothing solid."""
+    try:
+        raw = await generation_client.generate_text_with_search(
+            settings, prompts.SEARCH_EVENT_PROMPT.format(date=date_label, interest=interest))
+    except Exception:  # noqa: BLE001 — search is best-effort; fall back to the model
+        logger.warning("web search failed for %s", interest, exc_info=True)
+        return None
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not match:
+        return None
+    try:
+        data = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+    if not data.get("on_date") or not (data.get("event") or "").strip():
+        return None
+    return EventPick(data["event"].strip(), (data.get("iconic_visual") or "").strip())
+
+
 async def _select_event(
     settings: Settings, config: DeviceConfig, today: date_cls, holiday_ctx
-) -> str:
-    """Pick a fact-checked event for today.
+) -> EventPick:
+    """Pick a date-verified, interest-matched event for today.
 
-    Strategy: first FORCE the topic — ask explicitly for an event in each of the
-    user's interest categories (left to itself the model defaults to its favourite
-    topics like space/tech and ignores the interests). If none pass the date/fact
-    check, fall back to the general interest-aware selector, then a generic
-    well-known event; if even that fails, return "" so the artwork is drawn with
-    no event rather than a fabricated one.
+    1) Web search the day's interest (grounds the date in reality + returns the
+       iconic visual to draw). 2) If search yields nothing, force the topic via
+       the model per interest. 3) Then the general selector, then a generic
+       event. If all fail, return an empty pick (no event drawn) rather than a
+       fabricated one.
     """
     date_label = today.strftime("%B %d")
     interests = [i.strip() for i in config.interests if i and i.strip()]
 
-    # 1) Topic-forced: one explicit ask per interest, rotated by day for variety.
+    # 1) Web-search the day's focus interest (rotated by day). One search per run.
+    if interests:
+        start = today.toordinal() % len(interests)
+        ordered = interests[start:] + interests[:start]
+        for interest in ordered:
+            pick = await _search_event(settings, date_label, interest)
+            if pick:
+                logger.info("web-search picked %s event: %s", interest, pick.caption)
+                return pick
+
+    # 2) Model-only topic-forced fallback (no search), rotated by day.
     if interests:
         start = today.toordinal() % len(interests)
         ordered = interests[start:] + interests[:start]
@@ -93,16 +137,12 @@ async def _select_event(
             event = await generation_client.generate_text(
                 settings, prompts.INTEREST_EVENT_PROMPT.format(date=date_label, interest=interest))
             if event.strip().upper().startswith("NONE") or not event.strip():
-                logger.info("no %s event recalled for %s", interest, date_label)
                 continue
-            # Light check only (is it real?) — the topic is already guaranteed by
-            # the forced ask, and an on-interest event beats bouncing to an
-            # off-interest fallback over an uncertain exact date.
             if await _is_real_event(settings, event):
-                return event
+                return EventPick(event, "")
             logger.info("%s event looked fabricated: %s", interest, event)
 
-    # 2) General interest-aware selector.
+    # 3) General interest-aware selector.
     holiday_block = prompts.format_holiday_context(
         holiday_ctx.jewish, holiday_ctx.israeli, holiday_ctx.global_
     )
@@ -113,17 +153,17 @@ async def _select_event(
     for attempt in range(_EVENT_ATTEMPTS):
         event = await generation_client.generate_text(settings, prompt)
         if await _fact_check(settings, event, date_label):
-            return event
+            return EventPick(event, "")
         logger.info("event failed fact-check (try %d/%d): %s",
                     attempt + 1, _EVENT_ATTEMPTS, event)
 
-    # 3) Generic, well-known fallback — also fact-checked.
+    # 4) Generic, well-known fallback — also fact-checked.
     generic = await generation_client.generate_text(
         settings, prompts.GENERIC_EVENT_PROMPT.format(date=date_label))
     if await _fact_check(settings, generic, date_label):
-        return generic
+        return EventPick(generic, "")
     logger.warning("%s: all events failed fact-check — drawing without an event", config.id)
-    return ""
+    return _EMPTY_PICK
 
 
 async def _is_real_event(settings: Settings, event: str) -> bool:
@@ -152,18 +192,19 @@ async def _fact_check(settings: Settings, event: str, date_label: str) -> bool:
     return verdict.strip().upper().startswith("ACCURATE")
 
 
-def _build_image_prompt(config: DeviceConfig, wx, today: date_cls, event: str) -> str:
+def _build_image_prompt(config: DeviceConfig, wx, today: date_cls, pick: EventPick) -> str:
     template = config.custom_prompt_override or prompts.ARTWORK_PROMPT
     symbol = "°F" if config.temp_unit == "f" else "°C"
     temp_str = f"{wx.temperature(config.temp_unit)}{symbol}"
     date_str = today.strftime("%a, %b %d")
     data_block = prompts.build_data_block(
-        config.show_weather, config.show_date, wx.condition, temp_str, date_str, event
+        config.show_weather, config.show_date, wx.condition, temp_str, date_str,
+        event=pick.caption, visual=pick.visual,
     )
     resolution = ("480x800 (vertical)" if config.orientation == "portrait"
                   else "800x480 (horizontal)")
     tokens = {
-        "event": event, "signature": config.signature, "data_block": data_block,
+        "event": pick.caption, "signature": config.signature, "data_block": data_block,
         "resolution": resolution, "condition": wx.condition,
         "temperature": temp_str, "date": date_str,
     }

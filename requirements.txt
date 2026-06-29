@@ -2,7 +2,7 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 httpx==0.28.1
 pillow==11.1.0
-openai==1.59.6
+openai>=2.44.0
 apscheduler==3.11.0
 qrcode==8.0
 cryptography==44.0.0
