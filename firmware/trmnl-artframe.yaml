@@ -279,6 +279,9 @@ interval:
                     ESP_LOGI("ink", "refreshing artwork");
                     id(online_artwork)->update();
                   }
+                  ESP_LOGI("ink", "poll: power=%s sleep_min=%d uptime=%us cmd=%s",
+                           id(g_power).c_str(), id(g_sleep_min),
+                           (unsigned)(millis() / 1000UL), cmd.c_str());
       # On battery: after the awake window, sleep until the next update hour.
       # Sleep rules: plugged in (usb) -> always awake; on battery -> sleep after
       # g_sleep_min minutes of uptime (applies whether paired or still pairing).
@@ -417,7 +420,7 @@ script:
   # also wake it any time. Used by the battery idle timer and by a KEY1 press.
   - id: go_to_sleep
     then:
-      - logger.log: "Sleeping until the next update hour (KEY1/KEY3 wake)"
+      - lambda: 'ESP_LOGI("ink", "go_to_sleep: START (backend=%s)", id(g_backend).c_str());'
       # Wait for the keys to be released first — otherwise a still-pressed wake
       # pin would immediately re-wake the chip (the old boot loop).
       - wait_until:
@@ -430,6 +433,13 @@ script:
       # away instead of waiting ~5 min for the missed check-in.
       - http_request.get:
           url: !lambda 'return id(g_backend) + "/media/sleep/" + get_mac_address();'
+          on_response:
+            then:
+              - lambda: 'ESP_LOGI("ink", "sleep ping -> HTTP %d", response->status_code);'
+          on_error:
+            then:
+              - lambda: 'ESP_LOGW("ink", "sleep ping FAILED (network)");'
+      - lambda: 'ESP_LOGI("ink", "go_to_sleep: drawing moon");'
       - lambda: 'id(g_asleep) = true;'
       - component.update: my_display   # stamp the moon onto the retained frame
       - lambda: |-
