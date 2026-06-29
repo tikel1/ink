@@ -342,11 +342,13 @@ display:
       // the last frame before deep sleep, so the retained e-ink shows it the
       // whole time the frame is asleep.
       if (id(g_asleep)) {
-        // Crescent (banana) moon drawn with BLACK pixels only — this panel does
-        // not honor a white "carve" circle (that just left a solid disc). For
-        // each scanline we fill from the disc's left edge to where an x-offset
-        // disc would start, leaving a thin sliver that tapers to points (horns).
-        const int cx = 772, cy = 30, R = 11, d = 6;
+        // Moon badge, inset from the corner. Drawn on its own WHITE plate with a
+        // BLACK outline so it stays visible over any artwork (a bare black
+        // crescent vanished where it landed on a dark shape). The crescent itself
+        // is filled per-scanline (black) — a disc minus an x-offset disc.
+        const int cx = 752, cy = 50, R = 13, d = 7, PLATE = R + 7;
+        it.filled_circle(cx, cy, PLATE, Color::WHITE);   // contrast plate
+        it.circle(cx, cy, PLATE, Color::BLACK);          // outline (defines the badge)
         for (int dy = -R; dy <= R; dy++) {
           int hh = (int) lroundf(sqrtf((float)(R * R - dy * dy)));
           int xL = cx - hh;                       // outer (disc) left edge
