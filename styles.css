@@ -458,7 +458,7 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 
 /* Fine-art print frame — slim walnut molding, wide white mat, soft wall shadow
    (inspired by gallery print mockups). */
-.gallery-frame { display: flex; justify-content: center; margin: clamp(10px, 5vh, 44px) auto 4px;
+.gallery-frame { display: flex; justify-content: center; margin: clamp(8px, 3vh, 24px) auto 4px;
                  cursor: pointer; padding: 0; background: none; border: none; max-width: 100%; }
 /* Walnut molding — real wood-grain photo, beveled with inner light/shade. */
 .gframe-wood {
@@ -498,11 +498,11 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
   display: block; opacity: 0; transition: opacity .5s var(--ease); border-radius: 1px;
   /* Cap by viewport width MINUS the mat+molding chrome (~64px) + #app padding,
      so the whole landscape frame fits and isn't clipped sideways. */
-  width: auto; height: auto; max-width: min(500px, calc(100vw - 112px)); max-height: 53dvh;
+  width: auto; height: auto; max-width: min(500px, calc(100vw - 112px)); max-height: 47dvh;
 }
 /* Portrait: served PNG is the panel buffer (landscape px); show it upright by
    swapping dims via container-query units + rotating 90° clockwise. */
-.home-frame.is-portrait .gframe-mat { container-type: size; aspect-ratio: 480 / 800; height: 54dvh; }
+.home-frame.is-portrait .gframe-mat { container-type: size; aspect-ratio: 480 / 800; height: 52dvh; }
 /* Portrait: sit the frame higher (smaller top margin) so the caption below has
    more breathing room. */
 .home-frame.is-portrait .gallery-frame { margin-top: clamp(4px, 1.5vh, 14px); }
@@ -525,7 +525,9 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
                     background: var(--ink); opacity: .45; }
 .art-caption { font-family: "Fraunces"; font-style: italic; color: var(--ink-soft); font-size: 15px;
                line-height: 1.45; margin: 8px auto 12px; max-width: 38ch;
-               display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+               display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+/* Landscape leaves more vertical room, so allow a 4th caption line. */
+.home-frame:not(.is-portrait) .art-caption { -webkit-line-clamp: 4; }
 .open-chip { display: inline-flex; align-items: center; justify-content: center; width: auto;
              padding: 9px 30px; background: var(--ink); color: var(--paper); border: none;
              border-radius: 999px; font-family: "Fraunces"; font-weight: 600; font-size: 15px;
@@ -535,11 +537,9 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .open-chip:active { transform: scale(.95); }
 
 /* Asleep indicator — small moon in the frame's corner + a wake hint. */
-.sleep-badge { position: absolute; top: 10px; right: 10px; z-index: 3;
-               width: 32px; height: 32px; border-radius: 50%; display: flex;
-               align-items: center; justify-content: center; color: var(--paper);
-               background: rgba(27,24,19,.82); box-shadow: var(--shadow); }
-.sleep-badge[hidden] { display: none; }
+/* Small moon beside the frame name when it's asleep. */
+.title-moon { vertical-align: -2px; margin-left: 7px; color: var(--muted); }
+.title-moon[hidden] { display: none; }
 .sleep-hint { font-family: "Inter"; font-size: 12.5px; font-weight: 600; color: var(--muted);
               margin: 10px 0 0; letter-spacing: .01em; }
 .sleep-hint[hidden] { display: none; }
