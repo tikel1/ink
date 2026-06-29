@@ -81,6 +81,10 @@ day — in some past year. Verify the date with the search before answering.
 Rules:
 - It MUST have occurred on {date} (this month and day). Confirm via search.
 - It must clearly belong to "{interest}".
+- Prefer the most ICONIC, celebrated, or historic moment — a championship won, a
+  world record broken, a legendary performance, a famous debut, a landmark album
+  or concert. AVOID routine announcements, anniversaries, administrative/corporate
+  news, or minor happenings. If several events qualify, pick the most memorable.
 - Positive and inspiring. Avoid war, violence, tragedy, and copyrighted characters.
 
 Reply with ONLY compact JSON, no prose:
