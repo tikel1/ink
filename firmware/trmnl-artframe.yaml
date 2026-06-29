@@ -20,7 +20,11 @@
 substitutions:
   device_name: ink-frame
   friendly_name: "Ink Frame"
-  backend_base: "https://your-ink-server.example.com"  # set to your server before flashing
+  backend_base: "https://your-ink-server.example.com"  # fallback if discovery fails
+  # Permanent pointer to the *current* server URL. The frame reads this at boot
+  # and every few minutes, so when the backend moves (e.g. to Fly.io) you just
+  # edit this one file — no reflash. Falls back to backend_base if unreachable.
+  config_url: "https://tikel1.github.io/ink/server.txt"
   app_url: "https://tikel1.github.io/ink/"   # QR on the setup screen points here
   timezone: "Asia/Jerusalem"
   idle_minutes: "10"               # battery: sleep after this much idle time
@@ -105,6 +109,11 @@ globals:
   - id: last_ver
     type: std::string
     initial_value: '""'
+  # Current backend URL, resolved from config_url (server.txt). Starts at the
+  # compiled fallback so the frame still works before the first resolve.
+  - id: g_backend
+    type: std::string
+    initial_value: '"${backend_base}"'
   # Power config, polled from the backend's .ver headers. Default "usb" so the
   # frame never sleeps unexpectedly until the backend says it's on battery.
   - id: g_power
@@ -208,10 +217,15 @@ qr_code:
 # This makes a Regenerate (or the daily job) appear on the frame within ~60s
 # without flashing the e-ink on every poll.
 interval:
+  # Re-resolve the server URL periodically so a moved backend is picked up
+  # without a reflash (and within minutes, not the 15-min reboot timeout).
+  - interval: 300s
+    then:
+      - script.execute: resolve_server
   - interval: 60s
     then:
       - http_request.get:
-          url: !lambda 'return "${backend_base}/media/current/" + get_mac_address() + ".ver";'
+          url: !lambda 'return id(g_backend) + "/media/current/" + get_mac_address() + ".ver";'
           collect_headers: ["x-ver", "x-power", "x-sleep", "x-wake"]
           on_response:
             then:
@@ -300,16 +314,40 @@ script:
       - component.update: my_display
       - wait_until: wifi.connected    # stays awake through captive-portal onboarding
       - lambda: "id(g_booted) = true;"  # OTA/WiFi reachable — manual sleep now allowed
-      - delay: 3s
+      - script.execute: resolve_server  # learn the current backend URL (server.txt)
+      - delay: 3s                        # give the resolve a moment to land
       - wait_until:
           condition:
             lambda: "return id(sntp_time).now().is_valid();"
           timeout: 30s
       - lambda: |-
-          std::string url = "${backend_base}/media/current/" +
+          std::string url = id(g_backend) + "/media/current/" +
                             get_mac_address() + ".png";
           id(online_artwork).set_url(url.c_str());
       - component.update: online_artwork
+
+  # Fetch the current backend URL from the permanent pointer (server.txt). The
+  # body is the URL; on failure we keep whatever g_backend already holds.
+  - id: resolve_server
+    then:
+      - http_request.get:
+          url: "${config_url}"
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  if (response->status_code != 200) return;
+                  std::string u = body;
+                  // trim surrounding whitespace / newlines
+                  size_t a = u.find_first_not_of(" \t\r\n");
+                  size_t b = u.find_last_not_of(" \t\r\n");
+                  if (a == std::string::npos) return;
+                  u = u.substr(a, b - a + 1);
+                  while (!u.empty() && u.back() == '/') u.pop_back();
+                  if (u.rfind("http", 0) == 0 && u != id(g_backend)) {
+                    id(g_backend) = u;
+                    ESP_LOGI("ink", "backend resolved: %s", u.c_str());
+                  }
 
   # Sleep until the next daily update hour (timer = guaranteed wake); KEY1 or KEY3
   # also wake it any time. Used by the battery idle timer and by a KEY1 press.
