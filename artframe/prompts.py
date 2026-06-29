@@ -182,8 +182,11 @@ def build_data_block(
             items.append(f'- Weather icon: "{condition}" → Render as a **naïve, '
                          "irregular, possibly incomplete symbol**, stretched and bent "
                          "to the shape")
-            items.append(f'- Temperature: "{temperature}" → Digits should be '
-                         "**elongated, compressed, or fused**, possibly sharing edges")
+            items.append(f'- Temperature: "{temperature}" → Reproduce this value and '
+                         "its unit symbol **exactly as written** — do NOT convert it or "
+                         "change the unit (if it says °C keep °C, if °F keep °F). Only the "
+                         "**shape** may be distorted: digits **elongated, compressed, or "
+                         "fused**, possibly sharing edges")
         if show_date:
             items.append(f'- Date: "{date_str}" → Break into **uneven fragments**, '
                          "scattered or curved along the inner contour")
