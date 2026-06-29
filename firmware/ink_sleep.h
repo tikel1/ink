@@ -5,6 +5,19 @@
 // deep_sleep component (the timer is the guaranteed fallback).
 #include "esp_sleep.h"
 #include "driver/rtc_io.h"
+#include "esp_task_wdt.h"
+
+// A blocking image fetch to a dead/slow/asleep server can stall the main loop.
+// The default 5s task watchdog then reboots the frame, looping forever while the
+// backend is unreachable. Relax it to 30s at runtime (no IDF rebuild needed) so
+// an unreachable server just means "no new art", never a reboot loop.
+inline void ink_relax_watchdog() {
+  esp_task_wdt_config_t cfg = {};
+  cfg.timeout_ms = 30000;
+  cfg.idle_core_mask = 0x3;   // keep both idle cores watched
+  cfg.trigger_panic = true;
+  esp_task_wdt_reconfigure(&cfg);
+}
 
 static const uint64_t INK_WAKE_MASK = (1ULL << 2) | (1ULL << 5);  // GPIO2 | GPIO5
 

@@ -37,9 +37,12 @@ esphome:
   includes:
     - ink_sleep.h          # multi-button (KEY1 + KEY3) deep-sleep wake helper
   on_boot:
-    priority: 600
-    then:
-      - script.execute: boot_sequence
+    - priority: 800
+      then:
+        - lambda: 'ink_relax_watchdog();'   # 5s -> 30s WDT so a dead server can't reboot-loop
+    - priority: 600
+      then:
+        - script.execute: boot_sequence
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -87,7 +90,7 @@ logger:
 
 http_request:
   useragent: esphome/ink
-  timeout: 30s
+  timeout: 10s          # fail fast when the server is unreachable (was 30s)
   verify_ssl: false
 
 time:
