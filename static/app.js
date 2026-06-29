@@ -47,10 +47,13 @@ function setScreen(name) {
   // Home is a single, fixed viewport (no scroll); every other screen scrolls
   // normally. Lock #app to the viewport only on home so its padding can't push
   // the page past 100dvh.
-  $("app").classList.toggle("locked", name === "home");
-  // Also lock the <body> on home so the page itself can't scroll/rubber-band a
-  // few pixels (overflow:hidden on #app alone doesn't stop body-level scroll).
-  document.body.classList.toggle("home-locked", name === "home");
+  // Home and the Frame screen are each a single fixed viewport (no scroll); the
+  // other screens scroll normally.
+  const fixed = name === "home" || name === "frame";
+  $("app").classList.toggle("locked", fixed);
+  // Also lock the <body> so the page itself can't scroll/rubber-band a few pixels
+  // (overflow:hidden on #app alone doesn't stop body-level scroll).
+  document.body.classList.toggle("home-locked", fixed);
   window.scrollTo(0, 0);
   currentScreen = name;
   // Refresh the home image on EVERY entry — including the back button (popstate),
@@ -277,24 +280,22 @@ async function homeRefresh() {
 
 // Pull-to-refresh. Home is one locked viewport, so we own the gesture entirely
 // (touch-action:none covers the children too). The page UI never moves — only
-// the spinner descends and a warm glow blooms from the top edge; releasing past
-// the threshold refreshes, a short pull springs back.
+// the spinner descends; releasing past the threshold refreshes, a short pull
+// springs back.
 const PULL_START = 5, PULL_THRESHOLD = 64, PULL_MAX = 130, PULL_REST = 38;
 function wirePullToRefresh() {
   const screen = $("screen-home");
   const sp = $("pull-spinner");
-  const glow = $("pull-glow");
   let startY = null, active = false, dist = 0, busy = false;
 
   const render = (d) => {
     const p = Math.min(1, d / PULL_THRESHOLD);
-    sp.style.transition = ""; glow.style.transition = "";
+    sp.style.transition = "";
     sp.style.opacity = String(p);
     sp.style.transform = `translateY(${d * 0.42}px) scale(${0.7 + p * 0.3}) rotate(${d * 2.6}deg)`;
-    glow.style.opacity = String(p * 0.9);
   };
-  const ease = () => { sp.style.transition = "opacity .25s var(--ease), transform .25s var(--ease)"; glow.style.transition = "opacity .3s var(--ease)"; };
-  const springBack = () => { ease(); sp.style.opacity = ""; sp.style.transform = ""; glow.style.opacity = ""; };
+  const ease = () => { sp.style.transition = "opacity .25s var(--ease), transform .25s var(--ease)"; };
+  const springBack = () => { ease(); sp.style.opacity = ""; sp.style.transform = ""; };
 
   screen.addEventListener("pointerdown", (e) => {
     if (busy || currentScreen !== "home" || $("home-frame").hidden) return;
@@ -318,7 +319,6 @@ function wirePullToRefresh() {
     ease();
     sp.classList.add("spin");
     sp.style.opacity = "1"; sp.style.transform = `translateY(${PULL_REST}px) scale(1)`;
-    glow.style.opacity = "0.85";
     try { await homeRefresh(); }
     finally {
       sp.classList.remove("spin");
