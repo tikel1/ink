@@ -444,9 +444,11 @@ function openArtwork() {
   if (!currentDevice) return;
   const d = currentDevice;
   $("city-name").value = d.city_name || "";
-  $("city-edit").hidden = !d.city_name;
+  $("city-display").textContent = d.city_name || "";
   $("lat").value = d.lat; $("lon").value = d.lon;
   $("manual-coords").checked = false; $("coords-row").hidden = true;
+  hideSuggest();
+  setLocEdit(!d.city_name);  // unset → start in edit mode; otherwise show static text
   $("show_weather").checked = d.show_weather !== false;
   $("show_date").checked = d.show_date !== false;
   $("date-format").value = d.date_format || "weekday";
@@ -494,9 +496,13 @@ function wireArtwork() {
   $("artwork-back").addEventListener("click", () => go("frame"));
   $("manual-coords").addEventListener("change", (e) => { $("coords-row").hidden = !e.target.checked; });
   $("show_date").addEventListener("change", (e) => { $("date-format-row").hidden = !e.target.checked; });
-  $("city-edit").addEventListener("click", () => { $("city-name").focus(); $("city-name").select(); });
+  $("city-edit").addEventListener("click", () => { setLocEdit(true); $("city-name").focus(); $("city-name").select(); });
   $("city-find").addEventListener("click", geocode);
   $("geo-btn").addEventListener("click", useMyLocation);
+  const cityInput = $("city-name");
+  cityInput.addEventListener("input", onCityInput);
+  cityInput.addEventListener("keydown", onSuggestKey);
+  cityInput.addEventListener("blur", () => setTimeout(hideSuggest, 150));
   $("artwork-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body: artworkBody() }); flash("save-msg", "Saved."); toast("Saved"); }
@@ -532,9 +538,86 @@ function useMyLocation() {
 
 function applyLocation(lat, lon, tz, label) {
   $("lat").value = (+lat).toFixed(4); $("lon").value = (+lon).toFixed(4);
-  $("city-name").value = label; $("city-edit").hidden = false;
+  $("city-name").value = label;
+  $("city-display").textContent = label;
   if (tz) resolvedTz = tz;
+  hideSuggest();
+  setLocEdit(false);            // collapse back to static text once a location is chosen
   flash("loc-msg", `Set to ${label}.`);
+}
+
+// Toggle between the static "City, Country + pencil" view and the edit controls.
+function setLocEdit(on) {
+  $("loc-view").hidden = on;
+  $("loc-edit").hidden = !on;
+  if (!on) hideSuggest();
+}
+
+// ── City autocomplete ──────────────────────────────────────────────────
+const SUGGEST_MIN_CHARS = 2;
+const SUGGEST_DEBOUNCE_MS = 280;
+const SUGGEST_LIMIT = 6;
+let suggestTimer = null;
+let suggestResults = [];
+
+function onCityInput() {
+  clearTimeout(suggestTimer);
+  const q = $("city-name").value.trim();
+  if (q.length < SUGGEST_MIN_CHARS) { hideSuggest(); return; }
+  suggestTimer = setTimeout(() => fetchSuggest(q), SUGGEST_DEBOUNCE_MS);
+}
+
+async function fetchSuggest(q) {
+  try {
+    const data = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?count=${SUGGEST_LIMIT}&name=` + encodeURIComponent(q)
+    ).then((r) => r.json());
+    renderSuggest(data.results || []);
+  } catch { hideSuggest(); }
+}
+
+const suggestLabel = (h) => [h.name, h.admin1, h.country].filter(Boolean).join(", ");
+
+function renderSuggest(results) {
+  suggestResults = results;
+  const ul = $("city-suggest");
+  ul.innerHTML = "";
+  if (!results.length) { hideSuggest(); return; }
+  results.forEach((hit, i) => {
+    const li = document.createElement("li");
+    li.textContent = suggestLabel(hit);
+    li.dataset.index = String(i);
+    // mousedown (not click) so it fires before the input's blur handler hides the list
+    li.addEventListener("mousedown", (e) => { e.preventDefault(); chooseSuggest(i); });
+    ul.appendChild(li);
+  });
+  ul.hidden = false;
+}
+
+function chooseSuggest(i) {
+  const h = suggestResults[i];
+  if (!h) return;
+  applyLocation(h.latitude, h.longitude, h.timezone, [h.name, h.country].filter(Boolean).join(", "));
+}
+
+function hideSuggest() {
+  suggestResults = [];
+  const ul = $("city-suggest");
+  if (ul) { ul.hidden = true; ul.innerHTML = ""; }
+}
+
+// Keyboard nav: ↑/↓ move the highlight, Enter picks it.
+function onSuggestKey(e) {
+  const ul = $("city-suggest");
+  if (ul.hidden || !suggestResults.length) return;
+  const items = [...ul.children];
+  let active = items.findIndex((li) => li.classList.contains("active"));
+  if (e.key === "ArrowDown") { e.preventDefault(); active = (active + 1) % items.length; }
+  else if (e.key === "ArrowUp") { e.preventDefault(); active = (active - 1 + items.length) % items.length; }
+  else if (e.key === "Enter" && active >= 0) { e.preventDefault(); chooseSuggest(active); return; }
+  else if (e.key === "Escape") { hideSuggest(); return; }
+  else return;
+  items.forEach((li, i) => li.classList.toggle("active", i === active));
 }
 
 // --------------------------------------------------------------------------
