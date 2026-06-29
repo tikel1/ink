@@ -50,12 +50,18 @@ async def current_version(device_id: str) -> Response:
     """Tiny version stamp the frame polls so it re-fetches only when the artwork
     actually changed (avoids constant e-ink refreshes). Also counts as a check-in."""
     repositories.update_telemetry(device_id)
-    path = generation.current_image_path(device_id)
-    ver = str(int(path.stat().st_mtime)) if path.exists() else "0"
+    device = repositories.get_device(device_id)
+    if device is not None and device.status != "paired":
+        # Unpaired (e.g. just unbound from the app) -> a version distinct from the
+        # stale artwork's, so the frame re-fetches .png and shows the pairing
+        # splash instead of holding the last image. Stable while the code stands.
+        ver = "pair-" + (device.pairing_code or "0")
+    else:
+        path = generation.current_image_path(device_id)
+        ver = str(int(path.stat().st_mtime)) if path.exists() else "0"
     # Expose version + power/sleep config as response headers — the frame's
     # Arduino HTTP client reads collected headers reliably (the body does not).
     headers = {"X-Ver": ver}
-    device = repositories.get_device(device_id)
     if device is not None:
         headers["X-Power"] = device.power_source            # usb | battery
         headers["X-Sleep"] = str(device.sleep_after_minutes)  # minutes awake before sleep
