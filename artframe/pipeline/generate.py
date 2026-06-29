@@ -92,12 +92,15 @@ async def _select_event(
         for interest in ordered:
             event = await generation_client.generate_text(
                 settings, prompts.INTEREST_EVENT_PROMPT.format(date=date_label, interest=interest))
-            if event.strip().upper().startswith("NONE"):
+            if event.strip().upper().startswith("NONE") or not event.strip():
                 logger.info("no %s event recalled for %s", interest, date_label)
                 continue
-            if await _fact_check(settings, event, date_label):
+            # Light check only (is it real?) — the topic is already guaranteed by
+            # the forced ask, and an on-interest event beats bouncing to an
+            # off-interest fallback over an uncertain exact date.
+            if await _is_real_event(settings, event):
                 return event
-            logger.info("%s event failed fact-check: %s", interest, event)
+            logger.info("%s event looked fabricated: %s", interest, event)
 
     # 2) General interest-aware selector.
     holiday_block = prompts.format_holiday_context(
@@ -121,6 +124,19 @@ async def _select_event(
         return generic
     logger.warning("%s: all events failed fact-check — drawing without an event", config.id)
     return ""
+
+
+async def _is_real_event(settings: Settings, event: str) -> bool:
+    """True if the event is a real (non-fabricated) event — date is NOT checked."""
+    if not event or not event.strip():
+        return False
+    try:
+        verdict = await generation_client.generate_text(
+            settings, prompts.REAL_EVENT_CHECK_PROMPT.format(event=event.strip()))
+    except Exception:  # noqa: BLE001
+        logger.warning("real-event check failed", exc_info=True)
+        return False
+    return verdict.strip().upper().startswith("REAL")
 
 
 async def _fact_check(settings: Settings, event: str, date_label: str) -> bool:

@@ -59,6 +59,18 @@ Otherwise — the event is real and plausibly tied to {date} — reply ACCURATE.
 Do not reject a real event just because you are unsure of its exact date.
 Answer with a single word on the first line: ACCURATE or INACCURATE."""
 
+# Light check for the topic-forced path: only verify the event is real (not
+# fabricated). We deliberately DON'T re-check the exact date here — the strict
+# date check rejected real sports/music events and bounced selection to an
+# off-interest fallback. Topic correctness matters more than an exact day.
+REAL_EVENT_CHECK_PROMPT = """Is the following a real, actual event that genuinely
+happened (not invented or fabricated)? Ignore the exact date — judge ONLY whether
+the event itself is real.
+
+Event: "{event}"
+
+Reply with a single word: REAL or FAKE."""
+
 # Topic-forced selection: ask explicitly for ONE interest category, so the model
 # can't default to its favourite topics (space/tech) and ignore the interests.
 INTEREST_EVENT_PROMPT = """Name one real, well-known, positive event in the category
