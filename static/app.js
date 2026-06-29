@@ -532,7 +532,10 @@ function updateRefreshState() {
   const st = currentDevice ? frameState(currentDevice) : null;
   const asleep = st && st.cls === "s-sleep";
   const offline = st && st.cls === "s-off";
-  $("refresh-btn").disabled = false;
+  // Refresh + sleep both need the frame awake (a sleeping frame won't pick up
+  // the command until it wakes), so disable them when asleep/offline.
+  $("refresh-btn").disabled = !!(asleep || offline);
+  $("refresh-btn").title = (asleep || offline) ? "Frame must be awake to refresh" : "Refresh the frame";
   $("sleep-btn").disabled = !!(asleep || offline);
   $("sleep-btn").title = asleep ? "Frame is already asleep" : "Sleep the frame";
   const hint = $("refresh-hint");
