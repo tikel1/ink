@@ -116,17 +116,24 @@ function relTime(iso) {
 }
 function batteryPct(v) { return v == null ? null : Math.round(Math.max(0, Math.min(1, (v - 3.3) / 0.9)) * 100); }
 // Status shown as "<State> · <when>": State = Online / Sleep / Offline, when =
-// "now" (just checked in) or "Xm/Xh/Xd ago". The frame reports sleep explicitly,
-// so that's reflected immediately rather than waiting for the check-in to lapse.
+// "now" (just checked in) or "Xm/Xh/Xd ago".
+//
+// The backend is the source of truth: it stamps last_seen on every frame
+// check-in (the frame polls .ver every 60s while awake) and sets a 'sleeping'
+// flag when the frame pings it just before deep sleep. So we trust the explicit
+// flag immediately, and otherwise treat the device as Online only if it has
+// checked in within ~2.5 poll cycles — a frame that stopped polling has gone to
+// sleep (covers a dropped sleep-ping too).
+const AWAKE_GRACE_MS = 150000;   // ~2.5 × the frame's 60s poll
 function statusWhen(iso) {
   if (!iso) return "";
-  return (Date.now() - new Date(iso).getTime()) < 2 * MIN ? "now" : relTime(iso);
+  return (Date.now() - new Date(iso).getTime()) < 90000 ? "now" : relTime(iso);
 }
 function frameState(d) {
   if (d && d.sleeping) return { label: "Sleep", cls: "s-sleep", sub: statusWhen(d.last_seen) };
   const seen = d.last_seen ? Date.now() - new Date(d.last_seen).getTime() : null;
   if (seen == null) return { label: "Setting up", cls: "s-setup", sub: "first check-in" };
-  if (seen < 5 * MIN) return { label: "Online", cls: "s-on", sub: statusWhen(d.last_seen) };
+  if (seen < AWAKE_GRACE_MS) return { label: "Online", cls: "s-on", sub: statusWhen(d.last_seen) };
   if (seen < 26 * HOUR) return { label: "Sleep", cls: "s-sleep", sub: statusWhen(d.last_seen) };
   return { label: "Offline", cls: "s-off", sub: statusWhen(d.last_seen) };
 }
