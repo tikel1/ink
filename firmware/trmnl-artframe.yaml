@@ -354,19 +354,18 @@ display:
       // the last frame before deep sleep, so the retained e-ink shows it the
       // whole time the frame is asleep.
       if (id(g_asleep)) {
-        // Small black crescent in the artwork's top-right corner (the panel has a
-        // white margin there, so a bare black moon reads cleanly — no plate).
         // White moon disc with a black crescent inside ("white on black"), small
-        // and tucked in the corner. The white plate keeps it visible over dark
-        // artwork; a thin black outline keeps it visible over white margins too.
-        // It tracks orientation: landscape sits top-right; portrait art is
-        // rotated 90deg into the panel, so the moon moves to the panel's top-left
-        // and its crescent rotates with it (cut-out opens "up" in panel space ->
-        // opens right once the frame is mounted portrait).
+        // and tucked in the artwork's BOTTOM-LEFT corner (as the viewer sees it).
+        // The white plate keeps it visible over dark artwork; a thin black outline
+        // keeps it visible over white margins too. It tracks orientation: with no
+        // display rotation, panel coords map straight to the view, so landscape's
+        // bottom-left is panel (M, 480-M). Portrait art is rotated 90deg CCW into
+        // the panel (mounted 90deg CW to view), so the viewer's bottom-left maps to
+        // panel (800-M, 480-M) and the crescent rotates with it.
         const bool portrait = id(g_portrait);
         const int R = 7, d = 4, M = 20, PLATE = R + 3;  // crescent r, offset, margin, plate r
-        const int cx = portrait ? M : (800 - M);
-        const int cy = M;
+        const int cx = portrait ? (800 - M) : M;
+        const int cy = 480 - M;
         const int ox = portrait ? 0 : d;           // cut-disc offset (panel space)
         const int oy = portrait ? -d : 0;
         it.filled_circle(cx, cy, PLATE, Color::WHITE);  // white disc (visible on dark art)
