@@ -17,6 +17,7 @@
   --shadow-lg: 0 2px 6px rgba(27,24,19,.08), 0 24px 60px rgba(27,24,19,.16);
   --ease:     cubic-bezier(.2,.7,.2,1);
   --maxw:     560px;
+  --glow:     214, 178, 116;   /* warm amber for AI-magic glows: rgba(var(--glow), a) */
 }
 
 * { box-sizing: border-box; }
@@ -40,6 +41,19 @@ body::before {
   opacity: .04;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
+/* Ambient "AI" aura — warm glows that slowly breathe + drift behind everything. */
+body::after {
+  content: ""; position: fixed; inset: -25%; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(38% 30% at 24% 20%, rgba(var(--glow), .18), transparent 70%),
+    radial-gradient(42% 34% at 80% 82%, rgba(var(--glow), .12), transparent 72%);
+  filter: blur(48px);
+  animation: aura-drift 26s ease-in-out infinite alternate;
+}
+@keyframes aura-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(2%, -3%, 0) scale(1.1); }
+}
 
 #app { position: relative; z-index: 1; max-width: var(--maxw); margin: 0 auto;
        padding: max(18px, env(safe-area-inset-top)) 20px 60px; }
@@ -58,7 +72,10 @@ body.home-locked { overflow: hidden; height: 100dvh; }
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .screen.center { min-height: 86dvh; display: flex; flex-direction: column;
                  align-items: center; justify-content: center; text-align: center; }
-@media (prefers-reduced-motion: reduce) { .screen, .float, .bl { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  .screen, .float, .bl, body::after, .inkmark-anim::after,
+  .brand-word, .word, .btn-primary.busy, .spin-sm { animation: none !important; }
+}
 
 /* ── Typography ───────────────────────────────────────────────────────── */
 h1, h2, h3, .word, .brand, .brand-text, .placard-body, .status-state {
@@ -117,7 +134,8 @@ button { font-family: inherit; }
   font-size: 15px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--ink);
   transition: transform .12s var(--ease), box-shadow .2s, background .2s, opacity .2s;
 }
-.btn-primary { background: var(--ink); color: var(--paper); box-shadow: var(--shadow); }
+.btn-primary { background: var(--ink); color: var(--paper);
+               box-shadow: var(--shadow), 0 8px 26px -10px rgba(var(--glow), .45); }
 .btn-primary:hover { box-shadow: var(--shadow-lg); }
 .btn-primary:active { transform: scale(.978); }
 .btn-ghost { background: transparent; color: var(--ink); }
@@ -126,9 +144,12 @@ button { font-family: inherit; }
 .btn-danger:hover { background: rgba(155,59,47,.07); }
 .btn-primary:disabled { opacity: .55; cursor: default; transform: none; }
 .btn-ghost:disabled { opacity: .4; cursor: default; background: transparent; }
-/* Regenerating: gentle pulse so the loading state reads without verbose text. */
-.btn-primary.busy { animation: btn-pulse 1.3s ease-in-out infinite; }
-@keyframes btn-pulse { 0%,100% { opacity: .7; } 50% { opacity: 1; } }
+/* Generating: a warm shimmer sweeps the button — "AI at work". */
+.btn-primary.busy {
+  background-image: linear-gradient(100deg, var(--ink) 35%, #4a3d2c 50%, var(--ink) 65%);
+  background-size: 220% 100%;
+  animation: ink-sheen 1.3s linear infinite;
+}
 button.inline { width: auto; white-space: nowrap; padding: 0 16px; }
 .wide { margin-top: 8px; }
 .danger-link { color: var(--danger); display: block; width: 100%; text-align: center;
@@ -385,10 +406,26 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 /* ═══════════════════════ v2 — home as a hung work of art ═══════════════ */
 .home { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
 .home-top { display: flex; align-items: center; gap: 12px; margin: 2px 0 8px; position: relative; }
-.brand-word { font-family: "Fraunces"; font-weight: 800; font-size: 30px; letter-spacing: -.01em; line-height: 1; }
+.brand-word { font-family: "Fraunces"; font-weight: 800; font-size: 32px; letter-spacing: -.01em; line-height: 1; }
+/* Warm sheen sweeping the wordmark (falls back to solid ink without bg-clip). */
+.brand-word, .word {
+  background-image: linear-gradient(100deg, var(--ink) 22%, #6b5838 50%, var(--ink) 78%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: ink-sheen 7s ease-in-out infinite;
+}
+@keyframes ink-sheen { from { background-position: 200% 0; } to { background-position: -100% 0; } }
 .brand-word.small { font-size: 22px; }
-.inkmark-anim { width: 40px; height: 40px; }
+.inkmark-anim { width: 48px; height: 48px; position: relative; }
 .home-top .inkmark-anim { margin-left: 4px; }
+/* Warm glow that breathes behind the ink blob — the "alive/AI" cue. */
+.inkmark-anim::after {
+  content: ""; position: absolute; inset: -40%; z-index: -1; border-radius: 50%;
+  background: radial-gradient(circle, rgba(var(--glow), .6), transparent 66%);
+  filter: blur(6px); animation: blob-glow 4.5s ease-in-out infinite;
+}
+@keyframes blob-glow { 0%,100% { transform: scale(.82); opacity: .4; } 50% { transform: scale(1.2); opacity: .85; } }
 .gear-btn { margin-left: auto; background: none; border: none; cursor: pointer; padding: 8px;
             border-radius: 50%; color: var(--ink-soft); transition: background .2s, color .2s; }
 .gear-btn:hover { background: rgba(27,24,19,.07); color: var(--ink); }
