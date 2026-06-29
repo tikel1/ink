@@ -20,8 +20,12 @@ have educational value and be inspiring. Avoid events that are war or violence
 related, or events with negative subjects. Try to avoid events where the main
 subject will be subjected to copyright restrictions like Disney.
 
-When several events qualify, favor those that align with the viewer's interests:
-{interests}.
+The event MUST have occurred on {date} — this exact month and day — in some past
+year. Do not pick events from any other calendar date. Only if absolutely nothing
+notable exists for {date} may you fall back to a major current/holiday event.
+
+When several events qualify on {date}, strongly prefer ones connected to the
+viewer's interests: {interests}.
 
 Additionally:
 2. Today might be a holiday. Today's holiday context (may be empty):
@@ -39,15 +43,19 @@ description of the event."""
 # --------------------------------------------------------------------------- #
 # Step 1b — fact-check the chosen event before drawing it.
 # --------------------------------------------------------------------------- #
-FACT_CHECK_PROMPT = """You are a strict historical fact-checker.
+FACT_CHECK_PROMPT = """You are a careful fact-checker for a daily "on this day" artwork.
 
-Claim (intended for {date}):
-"{event}"
+Target date: {date} (month and day).
+Claim: "{event}"
 
-Did this actually happen, roughly on that date, and is it described accurately?
-Be skeptical — if you are not highly confident it is true AND correctly dated,
-treat it as false. Reply with a single word on the first line: ACCURATE or
-INACCURATE."""
+Reply INACCURATE if EITHER is true:
+- the claim is fabricated, false, or not a real event; or
+- you are confident the event actually happened on a clearly different month/day
+  than {date} (e.g. the claim is about Dec 8 but the target is June 29).
+
+Otherwise — the event is real and plausibly tied to {date} — reply ACCURATE.
+Do not reject a real event just because you are unsure of its exact date.
+Answer with a single word on the first line: ACCURATE or INACCURATE."""
 
 # Fallback if the model's picks keep failing the fact-check.
 GENERIC_EVENT_PROMPT = """Name one very well-known, indisputable event or fact
