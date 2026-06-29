@@ -63,6 +63,7 @@ async def generate_for_device(device: Device) -> bool:
             event_text_en=result.event_text_en,
             event_text_he=result.event_text_he,
             weather_summary=result.weather_summary,
+            orientation=device.orientation,
             status=READY,
             created_at=artwork_repo.make_now(),
         )

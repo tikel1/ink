@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS daily_artwork (
     event_text_en  TEXT,
     event_text_he  TEXT,
     weather_summary TEXT,
+    orientation    TEXT,
     status         TEXT NOT NULL DEFAULT 'pending',
     created_at     TEXT NOT NULL,
     PRIMARY KEY (device_id, date)
@@ -91,6 +92,10 @@ def init_db() -> None:
         for column, ddl in _MIGRATIONS.items():
             if column not in existing:
                 conn.execute(f"ALTER TABLE devices ADD COLUMN {column} {ddl}")
+        # daily_artwork: orientation per generated image (mixed over time).
+        aw_cols = {row["name"] for row in conn.execute("PRAGMA table_info(daily_artwork)")}
+        if "orientation" not in aw_cols:
+            conn.execute("ALTER TABLE daily_artwork ADD COLUMN orientation TEXT")
 
 
 @contextmanager

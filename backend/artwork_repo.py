@@ -23,6 +23,7 @@ class DailyArtwork:
     weather_summary: Optional[str]
     status: str
     created_at: str
+    orientation: Optional[str] = None
 
     @staticmethod
     def from_row(row: sqlite3.Row) -> "DailyArtwork":
@@ -34,19 +35,21 @@ def upsert(artwork: DailyArtwork) -> None:
         conn.execute(
             """INSERT INTO daily_artwork
                (device_id, date, image_path, archive_path, event_text_en,
-                event_text_he, weather_summary, status, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                event_text_he, weather_summary, orientation, status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(device_id, date) DO UPDATE SET
                  image_path = excluded.image_path,
                  archive_path = excluded.archive_path,
                  event_text_en = excluded.event_text_en,
                  event_text_he = excluded.event_text_he,
                  weather_summary = excluded.weather_summary,
+                 orientation = excluded.orientation,
                  status = excluded.status""",
             (
                 artwork.device_id, artwork.date, artwork.image_path,
                 artwork.archive_path, artwork.event_text_en, artwork.event_text_he,
-                artwork.weather_summary, artwork.status, artwork.created_at,
+                artwork.weather_summary, artwork.orientation, artwork.status,
+                artwork.created_at,
             ),
         )
 

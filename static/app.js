@@ -67,6 +67,7 @@ function go(name) {
 
 // Hardware/browser back: restore the previous in-app screen.
 window.addEventListener("popstate", (e) => {
+  if (closeLightbox()) return;   // a back press first dismisses an open lightbox
   const name = e.state && e.state.screen;
   if (name && SCREENS.includes(name)) setScreen(name);
 });
@@ -255,23 +256,55 @@ function slideCard(portrait, inner) {
   return `<div class="slide"><div class="art-card${portrait ? " is-portrait" : ""}"><div class="art-card-inner">${inner}</div></div></div>`;
 }
 
+// Each archived work carries its own orientation (the gallery can mix portrait +
+// landscape). Older rows predate the column → fall back to the device's setting.
+const isPortraitItem = (m) =>
+  (((m && m.orientation) || (currentDevice && currentDevice.orientation)) === "portrait");
+
 async function loadGallery(id) {
   let items = [];
   try { ({ items } = await api(`/devices/${id}/archive?limit=10`)); } catch {}
   frameItems = items || [];
-  const portrait = currentDevice && currentDevice.orientation === "portrait";
   const g = $("gallery");
   if (!frameItems.length) {
-    g.innerHTML = slideCard(portrait, `<div class="art-empty">No artwork yet —<br>tap Regenerate to create today's work.</div>`);
+    g.innerHTML = slideCard(isPortraitItem(null), `<div class="art-empty">No artwork yet —<br>tap Regenerate to create today's work.</div>`);
     setPlacard(null); renderDots(0, 0); return;
   }
-  g.innerHTML = frameItems.map(() => slideCard(portrait, `<img alt="artwork" />`)).join("");
+  g.innerHTML = frameItems.map((m) => slideCard(isPortraitItem(m), `<img alt="artwork" />`)).join("");
   g.querySelectorAll(".slide img").forEach((img, i) => {
     img.onload = () => img.classList.add("loaded");
     img.src = serverBase() + frameItems[i].image_url + `?t=${Date.now()}`;
+    img.style.cursor = "zoom-in";
+    img.addEventListener("click", () => openLightbox(frameItems[i]));
   });
   g.scrollLeft = 0;
   setPlacard(frameItems[0]); renderDots(0, frameItems.length);
+}
+
+// --------------------------------------------------------------------------
+// Lightbox — tap an artwork to view it large (orientation-aware)
+// --------------------------------------------------------------------------
+function openLightbox(item) {
+  if (!item) return;
+  const lb = $("lightbox"), img = $("lb-img");
+  lb.classList.toggle("is-portrait", isPortraitItem(item));
+  img.classList.remove("loaded");
+  img.onload = () => img.classList.add("loaded");
+  img.src = serverBase() + item.image_url + `?t=${Date.now()}`;
+  lb.hidden = false;
+  // Push a history entry so the back button / Android back closes the lightbox.
+  history.pushState({ screen: currentScreen, lightbox: 1 }, "");
+}
+function closeLightbox() {
+  const lb = $("lightbox");
+  if (!lb || lb.hidden) return false;
+  lb.hidden = true; $("lb-img").removeAttribute("src");
+  return true;
+}
+function wireLightbox() {
+  // Click anywhere except the image (backdrop or close button) dismisses.
+  $("lightbox").addEventListener("click", (e) => { if (e.target !== $("lb-img")) history.back(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("lightbox").hidden) history.back(); });
 }
 
 function setPlacard(m) {
@@ -686,7 +719,7 @@ async function resolveServer() {
 
 async function init() {
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
-  wireWelcome(); wireConnect(); wireFrame(); wireArtwork(); wireSettings(); wireAccount(); wireInstall(); wireScanner();
+  wireWelcome(); wireConnect(); wireFrame(); wireArtwork(); wireSettings(); wireAccount(); wireInstall(); wireScanner(); wireLightbox();
   const params = new URLSearchParams(location.search);
   const server = params.get("server"); if (server) setServer(server);
   await resolveServer();   // published server.txt wins unless the user pinned one

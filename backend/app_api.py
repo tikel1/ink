@@ -122,6 +122,7 @@ async def archive(device_id: str, limit: int = 30, account: Account = auth.Accou
         "event_text_en": a.event_text_en,
         "event_text_he": a.event_text_he,
         "weather_summary": a.weather_summary,
+        "orientation": a.orientation,
     } for a in items]}
 
 
