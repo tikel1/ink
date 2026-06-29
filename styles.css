@@ -579,17 +579,29 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 /* ── Location field ──────────────────────────────────────────────────── */
 .field-label { display: block; font-size: 13px; font-weight: 600;
                color: var(--ink-soft); margin-bottom: 8px; }
-.loc-view { display: flex; align-items: center; gap: 10px; }
+
+/* static view: the saved location, shown inside a field-styled surface */
+.loc-view { display: flex; align-items: center; gap: 8px;
+            padding: 10px 8px 10px 14px; background: var(--paper-2);
+            border: 1.5px solid var(--line); border-radius: var(--radius-sm); }
 .loc-text { flex: 1; font-size: 15px; font-weight: 600; color: var(--ink);
             min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .loc-text:empty::before { content: "Not set yet"; color: var(--muted); font-weight: 500; }
-.icon-edit { flex: none; display: grid; place-items: center; width: 34px; height: 34px;
-             background: var(--paper-2); border: 1.5px solid var(--line);
-             border-radius: 50%; color: var(--ink-soft); cursor: pointer;
-             transition: border-color .2s, color .2s, background .2s; }
-.icon-edit:hover { border-color: var(--ink); color: var(--ink); }
-.icon-edit:active { background: rgba(27,24,19,.06); }
-.loc-edit { margin-top: 4px; }
+.loc-edit-btn { flex: none; display: grid; place-items: center; width: 34px; height: 34px;
+                background: none; border: none; border-radius: 9px; color: var(--ink-soft);
+                cursor: pointer; transition: color .2s, background .2s; }
+.loc-edit-btn:hover { color: var(--ink); background: rgba(27,24,19,.07); }
+
+/* edit view */
+.loc-edit { margin-top: 2px; }
+.loc-input-row { display: flex; gap: 8px; align-items: stretch; }
+.loc-input-row > input { flex: 1; margin-top: 0; min-width: 0; }
+.loc-input-row .btn-ghost.inline { margin-top: 0; }
+.btn-accept { flex: none; display: grid; place-items: center; width: 48px; padding: 0;
+              background: var(--ink); color: var(--paper); border: 1.5px solid var(--ink);
+              border-radius: var(--radius-sm); cursor: pointer; transition: opacity .2s; }
+.btn-accept:hover { opacity: .88; }
+.btn-accept:active { opacity: .75; }
 .field-with-icon { position: relative; align-items: center; }
 
 /* autocomplete suggestions */
