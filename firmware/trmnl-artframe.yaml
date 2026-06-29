@@ -258,24 +258,26 @@ interval:
                   if (!sm.empty()) id(g_sleep_min) = atoi(sm.c_str());
                   std::string wh = response->get_response_header("x-wake");
                   if (!wh.empty()) id(g_wake_hour) = atoi(wh.c_str());
-                  // Refresh the artwork only when the version changed.
+                  // Decide whether to redraw — from a version change and/or an
+                  // app 'refresh' command — but redraw at most ONCE per poll so a
+                  // freshly generated image (new version + queued refresh) doesn't
+                  // flash the e-ink twice.
+                  bool do_refresh = false;
                   std::string v = response->get_response_header("x-ver");
                   if (!v.empty()) {
                     if (id(last_ver).empty()) { id(last_ver) = v; }
-                    else if (v != id(last_ver)) {
-                      id(last_ver) = v;
-                      ESP_LOGI("ink", "new artwork version %s — refreshing", v.c_str());
-                      id(online_artwork)->update();
-                    }
+                    else if (v != id(last_ver)) { id(last_ver) = v; do_refresh = true; }
                   }
-                  // One-shot command from the app (refresh / sleep).
                   std::string cmd = response->get_response_header("x-cmd");
-                  if (cmd == "refresh") {
-                    ESP_LOGI("ink", "app command: refresh");
-                    id(online_artwork)->update();
-                  } else if (cmd == "sleep") {
+                  if (cmd == "sleep") {
                     ESP_LOGI("ink", "app command: sleep");
                     id(go_to_sleep)->execute();
+                    return;                       // don't also redraw when sleeping
+                  }
+                  if (cmd == "refresh") do_refresh = true;
+                  if (do_refresh) {
+                    ESP_LOGI("ink", "refreshing artwork");
+                    id(online_artwork)->update();
                   }
       # On battery: after the awake window, sleep until the next update hour.
       # Sleep rules: plugged in (usb) -> always awake; on battery -> sleep after

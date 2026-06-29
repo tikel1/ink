@@ -68,4 +68,8 @@ async def generate_for_device(device: Device) -> bool:
             created_at=artwork_repo.make_now(),
         )
     )
+    # Guarantee the physical frame shows the new art: queue a refresh the device
+    # picks up on its next poll. (The version stamp also bumps; the firmware
+    # redraws at most once per poll, so this never double-flashes the e-ink.)
+    repositories.set_pending_command(device.id, "refresh")
     return True
