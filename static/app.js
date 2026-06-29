@@ -48,6 +48,9 @@ function setScreen(name) {
   // normally. Lock #app to the viewport only on home so its padding can't push
   // the page past 100dvh.
   $("app").classList.toggle("locked", name === "home");
+  // Also lock the <body> on home so the page itself can't scroll/rubber-band a
+  // few pixels (overflow:hidden on #app alone doesn't stop body-level scroll).
+  document.body.classList.toggle("home-locked", name === "home");
   window.scrollTo(0, 0);
   currentScreen = name;
 }
