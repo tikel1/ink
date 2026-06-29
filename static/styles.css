@@ -595,17 +595,33 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .dot-i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: all .25s var(--ease); }
 .dot-i.on { background: var(--ink); width: 18px; border-radius: 3px; }
 
-/* ── Frame screen ─────────────────────────────────────────────────────
-   The screen scrolls so the full daily description is always shown (the
-   artwork is capped by the base .art-card rules so it doesn't dominate). */
+/* ── Frame screen: one fixed viewport ─────────────────────────────────
+   The gallery flexes and its artwork shrinks to fit, so status, placard,
+   controls + nav stay on screen. The daily description is clamped to 4 lines;
+   "Read more" expands it and unlocks the screen so the rest is reachable. */
+.frame-screen { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+.frame-screen .gallery { flex: 1 1 auto; min-height: 0; align-items: center; margin: 4px -20px 0; padding: 6px 0; }
+.frame-screen .slide { height: 100%; }
+.frame-screen .art-card { max-height: 100%; }
+.frame-screen .art-card:not(.is-portrait) img { max-height: 100%; max-width: 100%; width: auto; height: auto; }
+.frame-screen .art-card.is-portrait { height: 100%; max-height: 100%; }
 .frame-screen .artframe { margin: 4px 0 12px; }
 .status-line { display: flex; align-items: center; justify-content: center; gap: 8px;
                font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin: 6px 0 8px; }
-.placard { padding: 0 6px; }
-.frame-controls { margin-top: 14px; }
-.nav-list.compact { margin-top: 12px; gap: 8px; }
+.placard { padding: 0 6px; flex: none; }
+.placard-body { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.read-more { display: inline-block; margin: 4px 0 0; padding: 2px 6px; background: none; border: none;
+             color: var(--ink-soft); font: inherit; font-size: 13px; font-weight: 600;
+             text-decoration: underline; cursor: pointer; }
+.frame-controls { margin-top: 14px; flex: none; }
+.nav-list.compact { margin-top: 12px; gap: 8px; flex: none; }
 .nav-list.compact .nav-row { padding: 11px 14px; }
 .nav-list.compact .nav-t { font-family: "Fraunces"; font-size: 15px; font-weight: 600; flex: 1; }
+
+/* Expanded: full description, screen scrolls (the #app lock is also removed). */
+.frame-screen.expanded { height: auto; min-height: 100%; overflow: visible; }
+.frame-screen.expanded .gallery { flex: none; }
+.frame-screen.expanded .placard-body { -webkit-line-clamp: unset; overflow: visible; display: block; }
 
 /* ── Radio groups ────────────────────────────────────────────────────── */
 .radios { border: none; padding: 0; margin: 14px 0 0; }
