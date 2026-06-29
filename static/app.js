@@ -236,6 +236,11 @@ async function loadExplain(id) {
     const { items } = await api(`/devices/${id}/archive?limit=1`);
     const m = items && items[0];
     $("home-explain").textContent = (m && m.event_text_en) ? m.event_text_en : "Today's work hasn't been created yet.";
+    // The frame's orientation should match the ACTUAL artwork on screen, not the
+    // device's current setting (which may have changed after this image was made).
+    if (m && m.orientation) {
+      $("home-frame").classList.toggle("is-portrait", m.orientation === "portrait");
+    }
   } catch { $("home-explain").textContent = "—"; }
 }
 

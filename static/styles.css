@@ -441,13 +441,15 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .gear-btn:hover { background: rgba(27,24,19,.07); color: var(--ink); }
 .frame-screen .home-top .back { font-size: 26px; line-height: 1; padding: 0 6px 0 0; color: var(--ink-soft); }
 
+/* Sit the artwork toward the top (just below the header) rather than vertically
+   centered — otherwise a short landscape frame leaves a big gap up top. */
 .home-frame { flex: 1; min-height: 0; display: flex; flex-direction: column;
-              justify-content: center; align-items: center; gap: 8px; }
+              justify-content: flex-start; align-items: center; gap: 8px; }
 
 /* Fine-art print frame — slim walnut molding, wide white mat, soft wall shadow
    (inspired by gallery print mockups). */
-.gallery-frame { display: flex; justify-content: center; margin: 0 auto 4px; cursor: pointer;
-                 padding: 0; background: none; border: none; max-width: 100%; }
+.gallery-frame { display: flex; justify-content: center; margin: clamp(10px, 5vh, 44px) auto 4px;
+                 cursor: pointer; padding: 0; background: none; border: none; max-width: 100%; }
 /* Walnut molding — real wood-grain photo, beveled with inner light/shade. */
 .gframe-wood {
   display: inline-block; position: relative;
