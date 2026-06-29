@@ -79,7 +79,12 @@ wifi:
 captive_portal:
 
 # Native API enables reliable log streaming over WiFi (no flaky USB serial).
+# reboot_timeout 0s: there is no persistent API client (we use http_request, not
+# Home Assistant), so disable the default 15-min "reboot if no client connected"
+# behaviour — otherwise the frame reboots every 15 min and flashes the pairing
+# screen on each reboot.
 api:
+  reboot_timeout: 0s
 
 ota:
   - platform: esphome
@@ -275,12 +280,18 @@ online_image:
   update_interval: never
   on_download_finished:
     then:
+      # Only redraw on a successful decode. A failed re-fetch leaves get_width()==0,
+      # so redrawing would blank a working frame back to the pairing screen — keep
+      # showing the last good artwork instead.
       - lambda: |-
           int w = id(online_artwork).get_width();
-          int h = id(online_artwork).get_height();
-          ESP_LOGI("ink", "download finished: decoded %dx%d", w, h);
-          if (w > 0) { id(image_loaded) = true; }
-      - component.update: my_display
+          ESP_LOGI("ink", "download finished: decoded %dx%d", w, id(online_artwork).get_height());
+          if (w > 0) {
+            id(image_loaded) = true;
+            id(my_display)->update();
+          } else {
+            ESP_LOGW("ink", "image fetch failed — keeping the previous frame");
+          }
 
 spi:
   clk_pin: GPIO7
