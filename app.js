@@ -106,6 +106,9 @@ function relTime(iso) {
 }
 function batteryPct(v) { return v == null ? null : Math.round(Math.max(0, Math.min(1, (v - 3.3) / 0.9)) * 100); }
 function frameState(d) {
+  // The frame reports sleep explicitly, so reflect it immediately rather than
+  // waiting ~5 min for the missed check-in to time out.
+  if (d && d.sleeping) return { label: "Asleep", cls: "s-sleep", sub: d.last_seen ? `since ${relTime(d.last_seen)}` : "sleeping" };
   const seen = d.last_seen ? Date.now() - new Date(d.last_seen).getTime() : null;
   if (seen == null) return { label: "Setting up", cls: "s-setup", sub: "waiting for first check‑in" };
   if (seen < 5 * MIN) return { label: "Awake", cls: "s-on", sub: `checked in ${relTime(d.last_seen)}` };
@@ -371,21 +374,29 @@ async function pollGeneration(id) {
   toast("Still working — check back shortly");
 }
 
-// Refresh always re-pulls the latest artwork from the server (the "real" image)
-// — it never depends on the frame being awake. The sleep/offline state is shown
-// only as an informational note about the physical frame.
+// Refresh re-pulls the app view AND tells the physical frame to re-fetch+redraw.
+// Sleep tells the frame to go to sleep. Both reach the frame on its next poll
+// (≤60s). Sleep is disabled when the frame is already asleep/offline.
 function updateRefreshState() {
   const st = currentDevice ? frameState(currentDevice) : null;
-  const hint = $("refresh-hint");
+  const asleep = st && st.cls === "s-sleep";
+  const offline = st && st.cls === "s-off";
   $("refresh-btn").disabled = false;
-  $("refresh-btn").title = "Show the latest artwork";
-  if (st && st.cls === "s-sleep") {
-    hint.textContent = "💤 Frame is asleep — press KEY1 on it to show new art there";
+  $("sleep-btn").disabled = !!(asleep || offline);
+  $("sleep-btn").title = asleep ? "Frame is already asleep" : "Sleep the frame";
+  const hint = $("refresh-hint");
+  if (asleep) {
+    hint.textContent = "💤 Frame is asleep — press KEY1 on it to wake it";
     hint.hidden = false;
-  } else if (st && st.cls === "s-off") {
+  } else if (offline) {
     hint.textContent = "⚠ Frame is offline — check it's powered and on Wi‑Fi";
     hint.hidden = false;
   } else { hint.hidden = true; }
+}
+
+async function sendCommand(cmd, msg) {
+  try { await api(`/devices/${currentId}/command`, { method: "POST", body: { cmd } }); toast(msg); }
+  catch (e) { toast(e.message); }
 }
 
 function wireFrame() {
@@ -396,9 +407,13 @@ function wireFrame() {
   $("home-more").addEventListener("click", () => openFrame(currentId));
   $("gallery").addEventListener("scroll", onGalleryScroll, { passive: true });
   $("refresh-btn").addEventListener("click", async () => {
-    $("refresh-btn").disabled = true;
-    await loadGallery(currentId);
-    $("refresh-btn").disabled = false; toast("Refreshed");
+    const btn = $("refresh-btn"); btn.classList.add("busy");
+    await loadGallery(currentId);                       // refresh the app view now
+    await sendCommand("refresh", "Refreshing the frame…");  // and the physical frame (≤1 min)
+    btn.classList.remove("busy");
+  });
+  $("sleep-btn").addEventListener("click", async () => {
+    await sendCommand("sleep", "Putting the frame to sleep…");
   });
   $("regen-btn").addEventListener("click", async () => {
     const id = currentId; setBusy(true);

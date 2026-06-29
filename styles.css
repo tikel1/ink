@@ -230,6 +230,19 @@ input:focus, select:focus { outline: none; border-color: var(--ink);
 /* ── Actions + nav list ──────────────────────────────────────────────── */
 .actions { margin: 22px 0 8px; }
 .actions-row { display: flex; gap: 12px; margin-top: 26px; }
+/* Frame controls: circular icon buttons (Refresh, Sleep) flanking Regenerate. */
+.frame-controls { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 26px; }
+.frame-controls .btn-primary { flex: 1; max-width: 260px; margin: 0; }
+.icon-action { flex: none; width: 52px; height: 52px; border-radius: 50%; cursor: pointer;
+               border: 1.5px solid var(--line); background: var(--paper-2); color: var(--ink);
+               display: inline-flex; align-items: center; justify-content: center;
+               transition: transform .12s var(--ease), box-shadow .2s, background .2s, opacity .2s; }
+.icon-action svg { width: 23px; height: 23px; display: block; }
+.icon-action:hover { box-shadow: var(--shadow); background: var(--paper); }
+.icon-action:active { transform: scale(.93); }
+.icon-action:disabled { opacity: .38; cursor: default; box-shadow: none; }
+.icon-action.busy svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .actions-row .btn-ghost { flex: 0 0 38%; }
 .actions-row .btn-primary { flex: 1; }
 .nav-list { margin-top: 18px; display: grid; gap: 10px; }
