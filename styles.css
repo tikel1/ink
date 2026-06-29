@@ -117,6 +117,12 @@ h1, h2, h3, .word, .brand, .brand-text, .placard-body, .status-state {
          letter-spacing: -.01em; }
 .brand-text { font-size: 19px; font-weight: 600; flex: 1; text-align: center; }
 .spacer { width: 38px; }
+/* Global Save in a settings header — enabled only when something changed. */
+.btn-save-top { flex: none; background: var(--ink); color: var(--paper); border: none;
+  border-radius: 999px; font: inherit; font-weight: 600; font-size: 14px; padding: 7px 18px;
+  cursor: pointer; transition: opacity .2s, transform .12s var(--ease); }
+.btn-save-top:disabled { opacity: .32; cursor: default; }
+.btn-save-top:not(:disabled):active { transform: scale(.95); }
 .link { background: none; border: none; color: var(--ink); font: inherit; cursor: pointer;
         font-weight: 500; padding: 6px 2px; }
 .link.back { color: var(--ink-soft); }
