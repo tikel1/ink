@@ -51,6 +51,7 @@ function setScreen(name) {
   // Also lock the <body> on home so the page itself can't scroll/rubber-band a
   // few pixels (overflow:hidden on #app alone doesn't stop body-level scroll).
   document.body.classList.toggle("home-locked", name === "home");
+  if (name !== "home" && typeof stopHomeAutoRefresh === "function") stopHomeAutoRefresh();
   window.scrollTo(0, 0);
   currentScreen = name;
 }
@@ -168,8 +169,29 @@ async function showHome(preferId) {
   const dev = devices.find((d) => d.id === preferId) || devices[0];
   renderHomeFrame(dev);
   renderFrameSwitch(dev.id);
+  startHomeAutoRefresh();
   maybeShowInstallBanner();
 }
+
+// Keep the home image current without a manual button: re-pull silently (preload
+// then swap, so no skeleton flash) on a timer while home is visible, and on focus
+// / tab-visibility. Guarantees the home always shows the real, latest artwork.
+function refreshHomeArt() {
+  if (!currentId || currentScreen !== "home") return;
+  const url = artworkUrl(currentId);
+  const probe = new Image();
+  probe.onload = () => { const el = $("home-art-img"); if (el) { el.src = url; el.classList.add("loaded"); } };
+  probe.src = url;
+  loadExplain(currentId);
+}
+let homeArtTimer = null;
+function startHomeAutoRefresh() {
+  stopHomeAutoRefresh();
+  homeArtTimer = setInterval(() => {
+    if (currentScreen === "home" && document.visibilityState === "visible") refreshHomeArt();
+  }, 45000);
+}
+function stopHomeAutoRefresh() { if (homeArtTimer) { clearInterval(homeArtTimer); homeArtTimer = null; } }
 
 function renderHomeFrame(d) {
   currentId = d.id; currentDevice = d;
@@ -349,23 +371,21 @@ async function pollGeneration(id) {
   toast("Still working — check back shortly");
 }
 
-// Refresh re-pulls the artwork; it's only meaningful when the frame is awake.
-// When asleep/offline, disable it and show a friendly hint.
+// Refresh always re-pulls the latest artwork from the server (the "real" image)
+// — it never depends on the frame being awake. The sleep/offline state is shown
+// only as an informational note about the physical frame.
 function updateRefreshState() {
   const st = currentDevice ? frameState(currentDevice) : null;
-  const btn = $("refresh-btn"), hint = $("refresh-hint");
-  const sleeping = st && st.cls === "s-sleep";
-  const offline = st && st.cls === "s-off";
-  btn.disabled = !!(sleeping || offline);
-  if (sleeping) {
-    btn.title = "Frame is asleep — press KEY1 on the frame to wake it";
-    hint.textContent = "💤 Frame is asleep — press KEY1 to wake it";
+  const hint = $("refresh-hint");
+  $("refresh-btn").disabled = false;
+  $("refresh-btn").title = "Show the latest artwork";
+  if (st && st.cls === "s-sleep") {
+    hint.textContent = "💤 Frame is asleep — press KEY1 on it to show new art there";
     hint.hidden = false;
-  } else if (offline) {
-    btn.title = "Frame is offline";
+  } else if (st && st.cls === "s-off") {
     hint.textContent = "⚠ Frame is offline — check it's powered and on Wi‑Fi";
     hint.hidden = false;
-  } else { btn.title = "Refresh the artwork"; hint.hidden = true; }
+  } else { hint.hidden = true; }
 }
 
 function wireFrame() {
@@ -737,6 +757,9 @@ async function resolveServer() {
 async function init() {
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
   wireWelcome(); wireConnect(); wireFrame(); wireArtwork(); wireSettings(); wireAccount(); wireInstall(); wireScanner(); wireLightbox();
+  // When the app/tab regains focus, make sure the home shows the latest artwork.
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshHomeArt(); });
+  window.addEventListener("focus", refreshHomeArt);
   const params = new URLSearchParams(location.search);
   const server = params.get("server"); if (server) setServer(server);
   await resolveServer();   // published server.txt wins unless the user pinned one
