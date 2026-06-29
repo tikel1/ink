@@ -263,7 +263,8 @@
     <section id="screen-settings" class="screen" hidden>
       <header class="topbar">
         <button class="link back" id="settings-back">‹ Frame</button>
-        <span class="brand-text">Frame settings</span><span class="spacer"></span>
+        <span class="brand-text">Frame settings</span>
+        <button id="settings-save" class="btn-save-top" type="button" disabled>Save</button>
       </header>
 
       <div class="card status-card">
@@ -273,10 +274,7 @@
 
       <div class="card">
         <h3>Name</h3>
-        <div class="row">
-          <input id="set-name" maxlength="40" placeholder="Ink Frame" />
-          <button type="button" id="set-name-save" class="btn-ghost inline">Save</button>
-        </div>
+        <input id="set-name" maxlength="40" placeholder="Ink Frame" />
       </div>
 
       <div class="card">
@@ -289,7 +287,6 @@
         </fieldset>
         <fieldset class="chips days" id="day-chips" hidden></fieldset>
         <label>Daily update time<input id="wake" type="time" step="300" /></label>
-        <button type="button" id="sched-save" class="btn-ghost">Save schedule</button>
       </div>
 
       <div class="card">
@@ -301,14 +298,12 @@
         </fieldset>
         <label id="sleep-row" hidden>Stay awake after update (minutes)<input id="sleep-after" type="number" min="1" max="240" /></label>
         <p class="hint">On battery the frame wakes at the update time, shows the new work, then sleeps to save power. Plugged in, it stays on.</p>
-        <button type="button" id="power-save" class="btn-ghost">Save power</button>
       </div>
 
       <div class="card">
         <h3>Time zone</h3>
         <label class="toggle"><span>Automatic (match the location)</span><input type="checkbox" id="auto-tz" /><i></i></label>
         <label id="tz-row" hidden>Time zone<input id="tz" placeholder="Asia/Jerusalem" /></label>
-        <button type="button" id="tz-save" class="btn-ghost">Save time zone</button>
       </div>
 
       <dl class="spec">

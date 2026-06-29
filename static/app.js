@@ -822,46 +822,58 @@ function openSettings() {
   $("spec-wifi").textContent = wifiLabel(d.wifi_rssi);
   const bat = batteryPct(d.battery); $("spec-batt").textContent = bat != null ? `${bat}%` : "—";
   $("spec-fw").textContent = d.fw_version || "—"; $("spec-id").textContent = d.id;
+  setSettingsDirty(false);   // freshly loaded → nothing to save yet
   go("settings");
+}
+
+// The Frame-settings screen has a single Save in the header, enabled only once
+// the user changes something.
+let settingsDirty = false;
+function setSettingsDirty(on) {
+  settingsDirty = on;
+  const b = $("settings-save");
+  if (b) b.disabled = !on;
 }
 
 function wireSettings() {
   $("settings-back").addEventListener("click", () => go("frame"));
-  $("set-name-save").addEventListener("click", async (e) => {
-    const btn = e.currentTarget;
-    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body: { name: $("set-name").value.trim() } }); buttonSaved(btn); }
-    catch (err) { toast(err.message); }
-  });
+  // Section-wide dirty tracking: any edit enables the header Save.
+  const section = $("screen-settings");
+  section.addEventListener("input", () => setSettingsDirty(true));
+  section.addEventListener("change", () => setSettingsDirty(true));
+  // Conditional rows follow their controls.
   document.querySelectorAll('input[name="sched"]').forEach((r) =>
     r.addEventListener("change", () => { $("day-chips").hidden = getRadio("sched") === "daily"; }));
-  $("sched-save").addEventListener("click", async (e) => {
-    const btn = e.currentTarget;
-    const sched = getRadio("sched");
-    const days = sched === "daily" ? "" : [...document.querySelectorAll(".day:checked")].map((c) => c.value).join(",");
-    const [wh, wm] = ($("wake").value || "").split(":").map((n) => parseInt(n, 10));
-    const body = { schedule: sched, schedule_days: days };
-    if (!isNaN(wh)) { body.wake_hour = wh; body.wake_minute = isNaN(wm) ? 0 : wm; }
-    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body }); buttonSaved(btn); }
-    catch (err) { toast(err.message); }
-  });
   document.querySelectorAll('input[name="power"]').forEach((r) =>
     r.addEventListener("change", () => { $("sleep-row").hidden = getRadio("power") !== "battery"; }));
-  $("power-save").addEventListener("click", async (e) => {
-    const btn = e.currentTarget;
-    const body = { power_source: getRadio("power") };
-    const s = parseInt($("sleep-after").value, 10);
-    if (!isNaN(s)) body.sleep_after_minutes = s;
-    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body }); buttonSaved(btn); }
-    catch (err) { toast(err.message); }
-  });
   $("auto-tz").addEventListener("change", (e) => { $("tz-row").hidden = e.target.checked; });
-  $("tz-save").addEventListener("click", async (e) => {
+
+  // One global save: send only what actually changed.
+  $("settings-save").addEventListener("click", async (e) => {
     const btn = e.currentTarget;
+    const d = currentDevice || {};
+    const body = {};
+    const name = $("set-name").value.trim();
+    if (name !== (d.name || "")) body.name = name;
+    const sched = getRadio("sched");
+    if (sched !== d.schedule) body.schedule = sched;
+    const days = sched === "daily" ? "" : [...document.querySelectorAll(".day:checked")].map((c) => c.value).join(",");
+    if (days !== (d.schedule_days || "")) body.schedule_days = days;
+    const [wh, wm] = ($("wake").value || "").split(":").map((n) => parseInt(n, 10));
+    const m = isNaN(wm) ? 0 : wm;
+    if (!isNaN(wh) && (wh !== d.wake_hour || m !== d.wake_minute)) { body.wake_hour = wh; body.wake_minute = m; }
+    const power = getRadio("power");
+    if (power !== d.power_source) body.power_source = power;
+    const s = parseInt($("sleep-after").value, 10);
+    if (!isNaN(s) && s !== d.sleep_after_minutes) body.sleep_after_minutes = s;
     const auto = $("auto-tz").checked;
-    const body = { auto_timezone: auto };
-    if (!auto && $("tz").value.trim()) body.tz = $("tz").value.trim();
-    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body }); buttonSaved(btn); }
-    catch (err) { toast(err.message); }
+    if (auto !== (d.auto_timezone !== false)) body.auto_timezone = auto;
+    const tz = $("tz").value.trim();
+    if (!auto && tz && tz !== d.tz) body.tz = tz;
+    if (!Object.keys(body).length) { setSettingsDirty(false); return; }
+    btn.disabled = true;
+    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body }); setSettingsDirty(false); toast("Saved"); }
+    catch (err) { toast(err.message); setSettingsDirty(true); }
   });
   $("disconnect-btn").addEventListener("click", async () => {
     if (!confirm("Disconnect and forget this frame?\n\nIts settings are cleared and it returns to onboarding.")) return;
