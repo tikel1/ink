@@ -182,12 +182,24 @@ def update_device_config(device_id: str, **fields: object) -> None:
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return
+    # If the schedule or update time changed, re-arm today's automatic generation
+    # so the scheduler fires at the NEW time today (even if it already ran earlier).
+    if any(k in updates for k in ("wake_hour", "wake_minute", "schedule", "schedule_days")):
+        updates["last_auto_gen"] = ""
     columns = ", ".join(f"{k} = ?" for k in updates)
     with get_connection() as conn:
         conn.execute(
             f"UPDATE devices SET {columns} WHERE id = ?",
             list(updates.values()) + [device_id],
         )
+
+
+def mark_auto_generated(device_id: str, date_str: str) -> None:
+    """Record that the scheduler auto-generated for this device on `date_str`,
+    so it fires once per day (independent of manual regenerations)."""
+    with get_connection() as conn:
+        conn.execute("UPDATE devices SET last_auto_gen = ? WHERE id = ?",
+                     (date_str, device_id))
 
 
 def set_pending_command(device_id: str, command: str) -> None:

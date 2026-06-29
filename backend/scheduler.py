@@ -37,6 +37,8 @@ async def run_due_generations() -> None:
             if _is_due(device, lead):
                 logger.info("generating for %s", device.id)
                 await generate_for_device(device)
+                today = now_in_tz(device.tz).date().isoformat()
+                repositories.mark_auto_generated(device.id, today)
         except Exception:  # noqa: BLE001
             logger.exception("scheduler tick failed for %s", device.id)
 
@@ -45,8 +47,10 @@ def _is_due(device, lead_minutes: int) -> bool:
     now = now_in_tz(device.tz)
     if not _scheduled_today(device, now):
         return False
-    existing = artwork_repo.get(device.id, now.date().isoformat())
-    if existing and existing.status == artwork_repo.READY:
+    # Fire once per day at the scheduled time, independent of manual regenerations.
+    # `last_auto_gen` is cleared when the time/schedule changes, so editing the time
+    # re-arms today. (Manual "Regenerate" never sets it, so it can't suppress this.)
+    if device.last_auto_gen == now.date().isoformat():
         return False
     wake = now.replace(hour=device.wake_hour, minute=device.wake_minute, second=0, microsecond=0)
     # Generate in the window just before the frame's wake time, so the new image

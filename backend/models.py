@@ -62,6 +62,7 @@ class Device:
     power_source: str
     sleep_after_minutes: int
     sleeping: bool
+    last_auto_gen: str
     custom_prompt_override: Optional[str]
     enabled: bool
     last_seen: Optional[str]
@@ -102,6 +103,7 @@ class Device:
             power_source=row["power_source"],
             sleep_after_minutes=row["sleep_after_minutes"],
             sleeping=bool(row["sleeping"]),
+            last_auto_gen=row["last_auto_gen"],
             custom_prompt_override=row["custom_prompt_override"],
             enabled=bool(row["enabled"]),
             last_seen=row["last_seen"],
