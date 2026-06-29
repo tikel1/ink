@@ -44,12 +44,10 @@ let currentScreen = null;
 // Toggle which screen is visible (no history side effects).
 function setScreen(name) {
   for (const s of SCREENS) $(`screen-${s}`).hidden = s !== name;
-  // Home is a single, fixed viewport (no scroll); every other screen scrolls
-  // normally. Lock #app to the viewport only on home so its padding can't push
-  // the page past 100dvh.
-  // Home and the Frame screen are each a single fixed viewport (no scroll); the
-  // other screens scroll normally.
-  const fixed = name === "home" || name === "frame";
+  // Home is the only single, fixed viewport (no scroll). Every other screen —
+  // including the Frame screen — scrolls so long content (e.g. the full daily
+  // description) is always reachable.
+  const fixed = name === "home";
   $("app").classList.toggle("locked", fixed);
   // Also lock the <body> so the page itself can't scroll/rubber-band a few pixels
   // (overflow:hidden on #app alone doesn't stop body-level scroll).
@@ -138,7 +136,7 @@ function frameState(d) {
   return { label: "Offline", cls: "s-off", sub: statusWhen(d.last_seen) };
 }
 function wifiLabel(r) {
-  if (r == null) return "—";
+  if (r == null || r === 0) return "—";   // real RSSI is always negative; 0 = no reading yet
   const q = r >= -60 ? "Strong" : r >= -70 ? "Good" : r >= -80 ? "Weak" : "Poor";
   return `${q} (${r} dBm)`;
 }
@@ -261,11 +259,28 @@ function syncDeviceCache(d) {
 // the backend 'sleeping' flag + last check-in are picked up automatically.
 const FRAME_STATUS_MS = 15000;
 let frameStatusTimer = null;
+let otaInFlight = false;   // true between pushing an OTA and the frame rebooting
 function renderFrameStatus(d) {
   if (!d) return;
   const st = frameState(d);
   $("fr-dot").className = `dot ${st.cls}`;
   $("fr-status").textContent = st.sub ? `${st.label} · ${st.sub}` : st.label;
+  renderFrameUpdate(d, st);
+}
+// The frame pulls firmware over the air, but only while it's awake and polling
+// (cls "s-on"). So we surface the banner whenever an update exists, but only
+// enable the push when the frame is online — otherwise it would never arrive.
+function renderFrameUpdate(d, st) {
+  const banner = $("fw-update");
+  if (!banner) return;
+  const has = !!(d && d.update_available);
+  banner.hidden = !has;
+  if (!has) return;
+  const online = (st || frameState(d)).cls === "s-on";
+  $("fw-update-ver").textContent = `${d.fw_version || "?"} → ${d.latest_fw || "?"}`;
+  const btn = $("fw-update-btn");
+  btn.disabled = !online || otaInFlight;
+  btn.textContent = otaInFlight ? "Updating…" : (online ? "Update" : "Frame offline");
 }
 async function pollFrameStatus() {
   renderFrameStatus(currentDevice);              // age the relative time first
@@ -570,6 +585,15 @@ function wireFrame() {
   $("sleep-btn").addEventListener("click", async () => {
     await sendCommand("sleep", "Putting the frame to sleep…");
   });
+  $("fw-update-btn").addEventListener("click", async () => {
+    if (!confirm(`Update the frame to ${currentDevice?.latest_fw || "the latest version"}?\n\nIt downloads the new firmware and restarts — this takes about a minute.`)) return;
+    otaInFlight = true;
+    renderFrameUpdate(currentDevice);
+    await sendCommand("ota", "Updating… the frame will download and restart.");
+    // The frame reboots and re-checks in on the new version; clear the in-flight
+    // lock after a grace period so the banner re-evaluates from fresh telemetry.
+    setTimeout(() => { otaInFlight = false; pollFrameStatus(); }, 90000);
+  });
   $("regen-btn").addEventListener("click", async () => {
     const id = currentId; setBusy(true);
     try { await api(`/devices/${id}/regenerate`, { method: "POST" }); await pollGeneration(id); }
@@ -820,7 +844,11 @@ function openSettings() {
   $("tz-row").hidden = d.auto_timezone !== false; $("tz").value = d.tz || "";
   $("spec-conn").textContent = d.last_seen ? relTime(d.last_seen) : "never";
   $("spec-wifi").textContent = wifiLabel(d.wifi_rssi);
-  const bat = batteryPct(d.battery); $("spec-batt").textContent = bat != null ? `${bat}%` : "—";
+  // On USB there's no battery to read (the BAT-pad ADC reads ~0V), so show the
+  // power source instead of a misleading "0%". On battery, show the charge level.
+  const onUsb = (d.power_source || "usb") !== "battery";
+  const bat = batteryPct(d.battery);
+  $("spec-batt").textContent = onUsb ? "Plugged in" : (bat != null ? `${bat}%` : "—");
   $("spec-fw").textContent = d.fw_version || "—"; $("spec-id").textContent = d.id;
   setSettingsDirty(false);   // freshly loaded → nothing to save yet
   go("settings");
@@ -887,6 +915,22 @@ function wireSettings() {
     } catch (e) {
       // Unbind didn't go through: keep the frame connected, stay on this screen.
       toast("Couldn't disconnect — frame is still connected");
+    } finally { btn.disabled = false; }
+  });
+  $("factory-btn").addEventListener("click", async () => {
+    if (frameState(currentDevice).cls !== "s-on") {
+      toast("Wake the frame first — it must be online to factory restore");
+      return;
+    }
+    if (!confirm("Factory restore this frame?\n\nIt wipes Wi‑Fi AND pairing on the device and returns it to onboarding from scratch. You'll set it up again like new.")) return;
+    const btn = $("factory-btn"); btn.disabled = true;
+    try {
+      // 'reset' both queues the on-device wipe and unbinds server-side (one call).
+      await api(`/devices/${currentId}/command`, { method: "POST", body: { cmd: "reset" } });
+      toast("Factory restore sent — the frame will wipe and reboot");
+      await showHome();
+    } catch (e) {
+      toast("Couldn't reach the server — frame not reset");
     } finally { btn.disabled = false; }
   });
 }
