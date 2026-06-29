@@ -253,7 +253,6 @@
 
         <div class="sticky-save">
           <button type="submit" class="btn-primary">Save</button>
-          <p id="save-msg" class="ok" hidden></p>
         </div>
       </form>
     </section>
@@ -276,7 +275,6 @@
           <input id="set-name" maxlength="40" placeholder="Ink Frame" />
           <button type="button" id="set-name-save" class="btn-ghost inline">Save</button>
         </div>
-        <p id="name-msg" class="ok" hidden></p>
       </div>
 
       <div class="card">
@@ -290,7 +288,6 @@
         <fieldset class="chips days" id="day-chips" hidden></fieldset>
         <label>Daily update time (hour 0–23)<input id="wake" type="number" min="0" max="23" /></label>
         <button type="button" id="sched-save" class="btn-ghost">Save schedule</button>
-        <p id="sched-msg" class="ok" hidden></p>
       </div>
 
       <div class="card">
@@ -303,7 +300,6 @@
         <label id="sleep-row" hidden>Stay awake after update (minutes)<input id="sleep-after" type="number" min="1" max="240" /></label>
         <p class="hint">On battery the frame wakes at the update time, shows the new work, then sleeps to save power. Plugged in, it stays on.</p>
         <button type="button" id="power-save" class="btn-ghost">Save power</button>
-        <p id="power-msg" class="ok" hidden></p>
       </div>
 
       <div class="card">
@@ -311,7 +307,6 @@
         <label class="toggle"><span>Automatic (match the location)</span><input type="checkbox" id="auto-tz" /><i></i></label>
         <label id="tz-row" hidden>Time zone<input id="tz" placeholder="Asia/Jerusalem" /></label>
         <button type="button" id="tz-save" class="btn-ghost">Save time zone</button>
-        <p id="tz-msg" class="ok" hidden></p>
       </div>
 
       <dl class="spec">
