@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     openai_image_quality: str = "medium"
     # Smart-but-cheap text model for event selection + fact-checking.
     openai_text_model: str = "gpt-5.4-mini"
+    # Gemini (free tier) for text + grounded web search. When set, the pipeline
+    # uses it for event selection/narration and falls back to OpenAI on any
+    # error or quota limit. The image always uses OpenAI.
+    gemini_api_key: str = ""
+    gemini_text_model: str = "gemini-2.5-flash"
 
     # Fernet key (base64, 32 bytes) for encrypting per-account API keys at rest.
     master_encryption_key: str = ""

@@ -50,6 +50,8 @@ def resolve_settings(account: Account) -> Settings:
         openai_image_model=backend.openai_image_model,
         openai_image_quality=backend.openai_image_quality,
         openai_text_model=backend.openai_text_model,
+        gemini_api_key=backend.gemini_api_key,
+        gemini_text_model=backend.gemini_text_model,
     )
 
 

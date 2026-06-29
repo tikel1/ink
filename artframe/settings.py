@@ -16,3 +16,7 @@ class Settings:
     openai_image_model: str
     openai_image_quality: str
     openai_text_model: str
+    # Optional Gemini (free-tier) for text + grounded search; falls back to OpenAI
+    # on any error/quota. Empty key = use OpenAI for text too.
+    gemini_api_key: str = ""
+    gemini_text_model: str = "gemini-2.5-flash"

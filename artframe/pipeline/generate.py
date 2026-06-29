@@ -61,6 +61,8 @@ async def generate_artwork(settings: Settings, config: DeviceConfig) -> ArtworkR
     )
 
     pick = await _select_event(settings, config, today, holiday_ctx)
+    if pick.caption and not pick.visual:
+        pick = pick._replace(visual=await _derive_visual(settings, pick.caption))
     image_prompt = _build_image_prompt(config, wx, today, pick)
 
     # The image render dominates latency; run narration alongside it so the
@@ -96,6 +98,16 @@ def _extract_json(raw: str, array: bool):
         return None
 
 
+async def _derive_visual(settings: Settings, caption: str) -> str:
+    """Best-effort iconic image for an event when the picker didn't supply one."""
+    try:
+        v = await generation_client.generate_text(
+            settings, prompts.VISUAL_PROMPT.format(event=caption))
+        return v.strip().strip('"').splitlines()[0][:120]
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 async def _search_event(settings: Settings, date_label: str, interest: str) -> EventPick | None:
     """One web search returns 3-5 date-verified candidates; a cheap no-search
     curator then picks the most iconic. Returns an EventPick or None."""
@@ -115,21 +127,23 @@ async def _search_event(settings: Settings, date_label: str, interest: str) -> E
         c = on_date[0]
         return EventPick(c["event"].strip(), (c.get("iconic_visual") or "").strip())
 
-    # Curate the most iconic one (cheap, no search).
+    # Curate the most iconic one (cheap, no search). The curator returns an INDEX
+    # so we keep the original candidate's iconic_visual intact.
     listing = "\n".join(
         f'{i+1}. {c["event"].strip()}  [visual: {(c.get("iconic_visual") or "").strip()}]'
         for i, c in enumerate(on_date))
+    chosen = on_date[0]
     try:
-        choice_raw = await generation_client.generate_text(
+        reply = await generation_client.generate_text(
             settings, prompts.CURATE_EVENT_PROMPT.format(date=date_label, candidates=listing))
-        choice = _extract_json(choice_raw, array=False) or {}
-    except Exception:  # noqa: BLE001
-        choice = {}
-    if (choice.get("event") or "").strip():
-        return EventPick(choice["event"].strip(), (choice.get("iconic_visual") or "").strip())
-    # Curation failed → fall back to the first verified candidate.
-    c = on_date[0]
-    return EventPick(c["event"].strip(), (c.get("iconic_visual") or "").strip())
+        m = re.search(r"\d+", reply)
+        if m:
+            idx = int(m.group(0))
+            if 1 <= idx <= len(on_date):
+                chosen = on_date[idx - 1]
+    except Exception:  # noqa: BLE001 — curation is best-effort; keep first candidate
+        logger.warning("event curation failed; using first candidate", exc_info=True)
+    return EventPick(chosen["event"].strip(), (chosen.get("iconic_visual") or "").strip())
 
 
 async def _select_event(

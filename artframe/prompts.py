@@ -98,16 +98,21 @@ If web search finds no real "{interest}" event on {date}, reply: []"""
 CURATE_EVENT_PROMPT = """These candidate events were each found via web search and
 claimed to have happened on {date}. Pick the SINGLE best one for a daily artwork:
 the most iconic and celebrated (a championship, record, legendary performance, or
-famous debut) — not a routine or minor event. Skip any that seem fabricated or
-clearly not on {date}.
+famous debut) — not a routine or minor event. If you know one is clearly NOT on
+{date} or seems fabricated, don't pick it.
 
 Candidates:
 {candidates}
 
-Reply with ONLY compact JSON for your choice:
-{{"event": "<chosen event description, incl. year>",
-  "iconic_visual": "<chosen event's iconic visual>"}}
-If none are suitable, reply: {{}}"""
+Reply with ONLY the number of the best candidate (e.g. 3). If none are suitable,
+reply 0."""
+
+# Fallback when the chosen event has no iconic_visual (some providers omit it).
+VISUAL_PROMPT = """In 5-12 words, name the single most iconic, recognizable image of
+this event — a simple, concrete subject suitable for a hand-cut paper silhouette.
+Reply with ONLY the phrase (no quotes, no extra words).
+
+Event: {event}"""
 
 # Topic-forced selection: ask explicitly for ONE interest category, so the model
 # can't default to its favourite topics (space/tech) and ignore the interests.

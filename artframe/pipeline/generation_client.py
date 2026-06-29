@@ -1,16 +1,20 @@
 """Thin wrapper around the image/text generation provider.
 
 The API key is read from settings (environment) and never leaves the server.
-Currently implements OpenAI; `gemini` raises NotImplementedError until wired.
+Text + grounded search prefer Gemini (free tier) when a key is set, and fall
+back to OpenAI on any error/quota. Images always use OpenAI.
 """
 from __future__ import annotations
 
 import base64
+import logging
 
 from openai import AsyncOpenAI
 
 from ..constants import DISPLAY_HEIGHT, DISPLAY_WIDTH
 from ..settings import Settings
+
+logger = logging.getLogger(__name__)
 
 # gpt-image only accepts a fixed set of sizes; pick the closest one per
 # orientation and let the imaging step crop to the exact panel geometry.
@@ -27,28 +31,31 @@ def _require_openai(settings: Settings) -> AsyncOpenAI:
     return AsyncOpenAI(api_key=settings.openai_api_key)
 
 
-async def generate_text(settings: Settings, prompt: str) -> str:
-    """Return a short text completion for the given prompt."""
-    if settings.image_provider != "openai":
-        raise NotImplementedError(f"text provider {settings.image_provider}")
+async def _gemini_text(settings: Settings, prompt: str, search: bool) -> str:
+    """Gemini text (optionally with Google Search grounding). Raises on failure."""
+    from google import genai
+    from google.genai import types
 
+    client = genai.Client(api_key=settings.gemini_api_key)
+    config = None
+    if search:
+        config = types.GenerateContentConfig(
+            tools=[types.Tool(google_search=types.GoogleSearch())])
+    resp = await client.aio.models.generate_content(
+        model=settings.gemini_text_model, contents=prompt, config=config)
+    return (resp.text or "").strip()
+
+
+async def _openai_text(settings: Settings, prompt: str) -> str:
     client = _require_openai(settings)
     response = await client.chat.completions.create(
         model=settings.openai_text_model,
         messages=[{"role": "user", "content": prompt}],
     )
-    text = (response.choices[0].message.content or "").strip()
-    if not text:
-        raise GenerationError("empty text completion")
-    return text
+    return (response.choices[0].message.content or "").strip()
 
 
-async def generate_text_with_search(settings: Settings, prompt: str) -> str:
-    """Like generate_text, but the model can run a live web search to ground its
-    answer (used to verify event dates). Returns the model's text output."""
-    if settings.image_provider != "openai":
-        raise NotImplementedError(f"text provider {settings.image_provider}")
-
+async def _openai_search(settings: Settings, prompt: str) -> str:
     client = _require_openai(settings)
     response = await client.responses.create(
         model=settings.openai_text_model,
@@ -56,6 +63,34 @@ async def generate_text_with_search(settings: Settings, prompt: str) -> str:
         input=prompt,
     )
     return (getattr(response, "output_text", "") or "").strip()
+
+
+async def generate_text(settings: Settings, prompt: str) -> str:
+    """Short text completion. Gemini (free) first, OpenAI fallback on error/quota."""
+    if settings.gemini_api_key:
+        try:
+            text = await _gemini_text(settings, prompt, search=False)
+            if text:
+                return text
+        except Exception:  # noqa: BLE001 — any Gemini error/quota -> OpenAI
+            logger.warning("gemini text failed; falling back to OpenAI", exc_info=True)
+    text = await _openai_text(settings, prompt)
+    if not text:
+        raise GenerationError("empty text completion")
+    return text
+
+
+async def generate_text_with_search(settings: Settings, prompt: str) -> str:
+    """Text grounded by live web search (to verify event dates). Gemini's free
+    Google Search grounding first; OpenAI's web_search as fallback on error/quota."""
+    if settings.gemini_api_key:
+        try:
+            text = await _gemini_text(settings, prompt, search=True)
+            if text:
+                return text
+        except Exception:  # noqa: BLE001 — any Gemini error/quota -> OpenAI
+            logger.warning("gemini search failed; falling back to OpenAI", exc_info=True)
+    return await _openai_search(settings, prompt)
 
 
 async def generate_image(
