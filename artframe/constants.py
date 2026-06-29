@@ -36,6 +36,17 @@ TEMP_UNITS = ("c", "f")
 # Frame orientation (affects composition, generation size, and panel rotation).
 ORIENTATIONS = ("landscape", "portrait")
 
+# Date-format presets embedded in the artwork (key -> strftime pattern). Sample
+# is for 2026-06-28 (a Sunday).
+DATE_FORMATS = {
+    "weekday":   "%a, %b %d",   # Sun, Jun 28
+    "month_day": "%B %d",       # June 28
+    "abbr_year": "%b %d, %Y",   # Jun 28, 2026
+    "dmy":       "%d/%m/%Y",    # 28/06/2026
+    "mdy":       "%m/%d/%Y",    # 06/28/2026
+}
+DEFAULT_DATE_FORMAT = "weekday"
+
 # Curated interest fields offered in the app (plus free-text "other").
 INTEREST_FIELDS = ("science", "history", "sports", "astronomy", "art")
 

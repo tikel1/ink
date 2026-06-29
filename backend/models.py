@@ -52,6 +52,7 @@ class Device:
     holiday_global: bool
     orientation: str
     show_date: bool
+    date_format: str
     show_weather: bool
     city_name: str
     auto_timezone: bool
@@ -90,6 +91,7 @@ class Device:
             holiday_global=bool(row["holiday_global"]),
             orientation=row["orientation"],
             show_date=bool(row["show_date"]),
+            date_format=row["date_format"],
             show_weather=bool(row["show_weather"]),
             city_name=row["city_name"],
             auto_timezone=bool(row["auto_timezone"]),
@@ -125,6 +127,7 @@ class Device:
             holiday_global=self.holiday_global,
             orientation=self.orientation,
             show_date=self.show_date,
+            date_format=self.date_format,
             show_weather=self.show_weather,
             custom_prompt_override=self.custom_prompt_override,
             enabled=self.enabled,

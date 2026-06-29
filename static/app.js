@@ -51,9 +51,12 @@ function setScreen(name) {
   // Also lock the <body> on home so the page itself can't scroll/rubber-band a
   // few pixels (overflow:hidden on #app alone doesn't stop body-level scroll).
   document.body.classList.toggle("home-locked", name === "home");
-  if (name !== "home" && typeof stopHomeAutoRefresh === "function") stopHomeAutoRefresh();
   window.scrollTo(0, 0);
   currentScreen = name;
+  // Refresh the home image on EVERY entry — including the back button (popstate),
+  // which bypasses showHome — and (re)start its auto-refresh, so it's never stale.
+  if (name === "home") { startHomeAutoRefresh(); refreshHomeArt(); }
+  else stopHomeAutoRefresh();
 }
 
 // Navigate to a screen and record it in history so the Android/browser back
@@ -446,6 +449,8 @@ function openArtwork() {
   $("manual-coords").checked = false; $("coords-row").hidden = true;
   $("show_weather").checked = d.show_weather !== false;
   $("show_date").checked = d.show_date !== false;
+  $("date-format").value = d.date_format || "weekday";
+  $("date-format-row").hidden = d.show_date === false;
   setRadio("unit", d.temp_unit || "c");
   setRadio("orient", d.orientation || "landscape");
   $("language").value = d.language || "en";
@@ -474,6 +479,7 @@ function artworkBody() {
     lat: parseFloat($("lat").value), lon: parseFloat($("lon").value),
     temp_unit: getRadio("unit"), orientation: getRadio("orient"),
     show_weather: $("show_weather").checked, show_date: $("show_date").checked,
+    date_format: $("date-format").value,
     interests: [...chips, ...other].join(", "),
     signature: $("signature").value.trim() || "Ink.", language: $("language").value,
     holiday_jewish: $("h-jewish").checked, holiday_israeli: $("h-israeli").checked, holiday_global: $("h-global").checked,
@@ -487,6 +493,7 @@ function wireArtwork() {
   renderInterestChips();
   $("artwork-back").addEventListener("click", () => go("frame"));
   $("manual-coords").addEventListener("change", (e) => { $("coords-row").hidden = !e.target.checked; });
+  $("show_date").addEventListener("change", (e) => { $("date-format-row").hidden = !e.target.checked; });
   $("city-edit").addEventListener("click", () => { $("city-name").focus(); $("city-name").select(); });
   $("city-find").addEventListener("click", geocode);
   $("geo-btn").addEventListener("click", useMyLocation);

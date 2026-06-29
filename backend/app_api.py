@@ -40,6 +40,7 @@ class ConfigUpdate(BaseModel):
     holiday_global: bool | None = None
     orientation: str | None = Field(default=None, pattern=r"^(landscape|portrait)$")
     show_date: bool | None = None
+    date_format: str | None = Field(default=None, pattern=r"^(weekday|month_day|abbr_year|dmy|mdy)$")
     show_weather: bool | None = None
     city_name: str | None = Field(default=None, max_length=80)
     auto_timezone: bool | None = None
@@ -220,6 +221,7 @@ def _device_payload(device: Device) -> dict:
         "holiday_global": device.holiday_global,
         "orientation": device.orientation,
         "show_date": device.show_date,
+        "date_format": device.date_format,
         "show_weather": device.show_weather,
         "city_name": device.city_name,
         "auto_timezone": device.auto_timezone,

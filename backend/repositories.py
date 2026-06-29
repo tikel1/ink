@@ -174,7 +174,7 @@ def update_device_config(device_id: str, **fields: object) -> None:
         "name",
         "tz", "lat", "lon", "wake_hour", "language", "temp_unit", "interests",
         "signature", "holiday_jewish", "holiday_israeli", "holiday_global",
-        "orientation", "show_date", "show_weather",
+        "orientation", "show_date", "date_format", "show_weather",
         "city_name", "auto_timezone", "schedule", "schedule_days",
         "power_source", "sleep_after_minutes",
         "custom_prompt_override", "enabled",

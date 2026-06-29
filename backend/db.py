@@ -84,6 +84,7 @@ _MIGRATIONS = {
     "sleep_after_minutes": "INTEGER NOT NULL DEFAULT 10",
     "sleeping": "INTEGER NOT NULL DEFAULT 0",   # frame reported deep sleep
     "pending_command": "TEXT NOT NULL DEFAULT ''",  # one-shot cmd the frame picks up on its next poll
+    "date_format": "TEXT NOT NULL DEFAULT 'weekday'",  # embedded-date style
 }
 
 
