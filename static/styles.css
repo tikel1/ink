@@ -628,7 +628,6 @@ h4.sub { font-size: 13px; font-weight: 600; color: var(--muted); margin: 18px 0 
 .chips.days { margin-top: 10px; }
 
 /* ── Messages + toast ────────────────────────────────────────────────── */
-.ok { color: var(--ok); font-size: 13px; margin: 10px 0 0; font-weight: 600; }
 .error { color: var(--danger); font-size: 13px; margin: 10px 0 0; font-weight: 600; }
 .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom));
          transform: translateX(-50%) translateY(20px); z-index: 50;

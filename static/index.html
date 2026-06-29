@@ -45,7 +45,6 @@
         <summary>Ink server address</summary>
         <label>Server URL<input id="server-url" placeholder="https://your-ink-server" /></label>
         <button id="server-save" type="button" class="btn-ghost">Save server</button>
-        <p id="server-msg" class="ok" hidden></p>
       </details>
       <p class="returning-hint">Already set up a frame? <button type="button" id="restore-open" class="link inline-link">Restore your account ›</button></p>
       <details class="disclosure" id="restore-details">
@@ -159,7 +158,6 @@
         </button>
       </div>
       <p id="refresh-hint" class="sleep-hint center-text" hidden></p>
-      <p id="action-msg" class="ok center-text" hidden></p>
 
       <nav class="nav-list compact">
         <button class="nav-row" id="goto-artwork"><span class="nav-ico">🎨</span><span class="nav-t">Artwork</span><span class="nav-chev">›</span></button>
@@ -210,7 +208,6 @@
               <label>Longitude<input id="lon" type="number" step="0.0001" /></label>
             </div>
           </div>
-          <p id="loc-msg" class="hint" hidden></p>
           <label class="toggle"><span>Show the weather</span><input type="checkbox" id="show_weather" /><i></i></label>
           <fieldset class="radios" id="unit-radios">
             <legend>Temperature units</legend>
@@ -349,7 +346,6 @@
           <button id="save-key-btn" type="button" class="btn-primary">Save key</button>
         </div>
         <p id="key-required-note" class="hint" hidden>Your own key is required for this account.</p>
-        <p id="key-msg" class="ok" hidden></p>
         <p id="key-err" class="error" hidden></p>
       </div>
 
@@ -370,7 +366,6 @@
         <div class="adv-body">
           <label>Server URL<input id="acct-server-url" placeholder="https://your-ink-server" /></label>
           <button id="acct-server-save" type="button" class="btn-ghost">Save server</button>
-          <p id="acct-server-msg" class="ok" hidden></p>
           <hr class="adv-rule" />
           <p class="hint">Account key — restores this account on another device (temporary, until sign‑in). Keep it private.</p>
           <input id="token-display" readonly class="mono" />
@@ -378,7 +373,6 @@
       </details>
 
       <button id="logout-btn" type="button" class="link danger-link">Log out</button>
-      <p id="update-msg" class="ok center-text" hidden></p>
     </section>
 
   </main>

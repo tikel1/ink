@@ -163,7 +163,7 @@ function loadArtwork(imgEl, skelEl, id, onMissing) {
 // --------------------------------------------------------------------------
 function wireWelcome() {
   $("server-url").value = serverBase();
-  $("server-save").addEventListener("click", () => { setServer($("server-url").value); localStorage.setItem(SERVER_MANUAL_KEY, "1"); flash("server-msg", "Saved. Now tap Get started."); });
+  $("server-save").addEventListener("click", () => { setServer($("server-url").value); localStorage.setItem(SERVER_MANUAL_KEY, "1"); toast("Saved — now tap Get started"); });
   $("start-btn").addEventListener("click", async () => {
     if (!confirm("Create a NEW Ink account?\n\nIf you've set up a frame before, tap Cancel and use “I already have an account” to restore it — a new account won't show your existing frame.")) return;
     try { const { token: t } = await api("/account", { method: "POST", auth: false }); localStorage.setItem(TOKEN_KEY, t); toast("New account created"); await showHome(); }
@@ -264,9 +264,9 @@ function wireConnect() {
       const dev = await api("/devices/pair", { method: "POST", body: { pairing_code: $("pair-code").value.trim() } });
       const nm = $("pair-name").value.trim();
       if (nm) { try { await api(`/devices/${dev.id}/config`, { method: "PUT", body: { name: nm } }); } catch {} }
-      $("pair-code").value = ""; $("pair-name").value = ""; toast("Paired!");
+      $("pair-code").value = ""; $("pair-name").value = "";
       await openFrame(dev.id);
-      flash("action-msg", "Paired! Go ahead and tap Generate to create your first artwork.");
+      toast("Paired! Tap Generate to make your first artwork");
     } catch (e2) { showError("pair-error", e2); }
   });
 }
@@ -286,7 +286,7 @@ async function openFrame(id) {
     $("fr-dot").className = `dot ${st.cls}`;
     $("fr-status").textContent = `${st.label} · ${st.sub}`;
     updateRefreshState();
-  } catch (e) { showError("action-msg", e); }
+  } catch (e) { toast(e.message); }
   await loadGallery(id);
 }
 
@@ -480,7 +480,6 @@ function openArtwork() {
   const chosen = tokens.length ? tokens : ["israel"];
   document.querySelectorAll(".interest").forEach((cb) => { cb.checked = chosen.includes(cb.value); });
   $("interest-other").value = tokens.filter((t) => !INTEREST_KEYS.includes(t)).join(", ");
-  $("loc-msg").hidden = true;
   resolvedTz = null;
   go("artwork");
 }
@@ -531,18 +530,18 @@ function wireArtwork() {
 
 async function geocode() {
   const q = $("city-name").value.trim(); if (!q) return;
-  flash("loc-msg", "Searching…");
+  toast("Searching…");
   try {
     const data = await fetch("https://geocoding-api.open-meteo.com/v1/search?count=1&name=" + encodeURIComponent(q)).then((r) => r.json());
     const hit = (data.results || [])[0];
-    if (!hit) { flash("loc-msg", "Location not found.", true); return; }
+    if (!hit) { toast("Location not found"); return; }
     applyLocation(hit.latitude, hit.longitude, hit.timezone, [hit.name, hit.country].filter(Boolean).join(", "));
-  } catch { flash("loc-msg", "Couldn't search right now.", true); }
+  } catch { toast("Couldn't search right now"); }
 }
 
 function useMyLocation() {
-  if (!navigator.geolocation) { flash("loc-msg", "Location isn't available on this device.", true); return; }
-  flash("loc-msg", "Locating…");
+  if (!navigator.geolocation) { toast("Location isn't available on this device"); return; }
+  toast("Locating…");
   navigator.geolocation.getCurrentPosition(async (pos) => {
     const { latitude, longitude } = pos.coords; let label = "your location", tz;
     try {
@@ -552,7 +551,7 @@ function useMyLocation() {
     } catch {}
     if (!tz) tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     applyLocation(latitude, longitude, tz, label);
-  }, () => flash("loc-msg", "Couldn't get your location — allow access or search instead.", true), { timeout: 10000 });
+  }, () => toast("Couldn't get your location — allow access or search instead"), { timeout: 10000 });
 }
 
 function applyLocation(lat, lon, tz, label) {
@@ -561,7 +560,7 @@ function applyLocation(lat, lon, tz, label) {
   $("city-display").textContent = label;
   if (tz) resolvedTz = tz;
   hideSuggest();
-  flash("loc-msg", `${label} — tap ✓ to confirm.`);
+  toast(`${label} — tap ✓ to confirm`);
 }
 
 // ✓ accept: commit the current location and collapse back to the static text.
@@ -572,9 +571,9 @@ async function acceptLocation() {
   // A typed name that wasn't resolved yet (and we're not in manual mode) → look it up.
   if (!$("manual-coords").checked && typed && typed !== display) await geocode();
   const hasCoords = isFinite(parseFloat($("lat").value)) && isFinite(parseFloat($("lon").value));
-  if ($("city-display").textContent.trim()) { setLocEdit(false); $("loc-msg").hidden = true; }
-  else if (hasCoords) { $("city-display").textContent = typed || "Custom location"; setLocEdit(false); $("loc-msg").hidden = true; }
-  else flash("loc-msg", "Pick a location first.", true);
+  if ($("city-display").textContent.trim()) setLocEdit(false);
+  else if (hasCoords) { $("city-display").textContent = typed || "Custom location"; setLocEdit(false); }
+  else toast("Pick a location first");
 }
 
 // Toggle between the static "City, Country + pencil" view and the edit controls.
@@ -730,8 +729,17 @@ function wireSettings() {
   });
   $("disconnect-btn").addEventListener("click", async () => {
     if (!confirm("Disconnect and forget this frame?\n\nIts settings are cleared and it returns to onboarding.")) return;
-    try { await api(`/devices/${currentId}/unbind`, { method: "POST" }); toast("Frame forgotten"); await showHome(); }
-    catch (e) { alert(e.message); }
+    const btn = $("disconnect-btn"); btn.disabled = true;
+    try {
+      // Only treat the frame as removed once the server confirms the unbind —
+      // otherwise a failed call would falsely "disconnect" it in the app.
+      await api(`/devices/${currentId}/unbind`, { method: "POST" });
+      toast("Frame forgotten");
+      await showHome();
+    } catch (e) {
+      // Unbind didn't go through: keep the frame connected, stay on this screen.
+      toast("Couldn't disconnect — frame is still connected");
+    } finally { btn.disabled = false; }
   });
 }
 
@@ -741,7 +749,7 @@ function wireSettings() {
 async function showAccount() {
   go("account");
   $("token-display").value = token(); $("acct-server-url").value = serverBase();
-  $("app-version").textContent = APP_VERSION; $("key-msg").hidden = true; $("key-err").hidden = true;
+  $("app-version").textContent = APP_VERSION; $("key-err").hidden = true;
   refreshInstallUI();
   try { const a = await api("/account"); setKeyMode(a.key_status); $("acct-id").textContent = a.account_id || "—"; }
   catch (e) { showError("key-err", e); }
@@ -759,8 +767,8 @@ function wireAccount() {
   $("acct-back").addEventListener("click", () => showHome(currentId));
   $("acct-server-save").addEventListener("click", () => {
     const v = $("acct-server-url").value.trim();
-    if (v) { setServer(v); localStorage.setItem(SERVER_MANUAL_KEY, "1"); flash("acct-server-msg", "Saved (pinned to this server)."); }
-    else { setServer(""); localStorage.removeItem(SERVER_MANUAL_KEY); flash("acct-server-msg", "Cleared — following the published server again."); }
+    if (v) { setServer(v); localStorage.setItem(SERVER_MANUAL_KEY, "1"); toast("Saved — pinned to this server"); }
+    else { setServer(""); localStorage.removeItem(SERVER_MANUAL_KEY); toast("Cleared — following the published server"); }
   });
   $("seg-own").addEventListener("click", () => { setKeyMode("own"); $("api-key").focus(); });
   $("seg-platform").addEventListener("click", async () => {
@@ -771,13 +779,13 @@ function wireAccount() {
   $("save-key-btn").addEventListener("click", async () => {
     const v = $("api-key").value.trim();
     if (!v) { showError("key-err", new Error("Enter your API key first.")); return; }
-    try { await api("/account/key", { method: "PUT", body: { openai_api_key: v } }); $("api-key").value = ""; setKeyMode("own"); flash("key-msg", "Saved your key."); toast("Saved your key"); }
+    try { await api("/account/key", { method: "PUT", body: { openai_api_key: v } }); $("api-key").value = ""; setKeyMode("own"); toast("Saved your key"); }
     catch (e) { showError("key-err", e); }
   });
   $("update-btn").addEventListener("click", async () => {
-    flash("update-msg", "Checking…");
-    try { if ("serviceWorker" in navigator) { const reg = await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); } flash("update-msg", "Up to date. Reloading…"); setTimeout(() => location.reload(), 700); }
-    catch { flash("update-msg", "Couldn't check for updates.", true); }
+    toast("Checking for updates…");
+    try { if ("serviceWorker" in navigator) { const reg = await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); } toast("Up to date — reloading…"); setTimeout(() => location.reload(), 700); }
+    catch { toast("Couldn't check for updates"); }
   });
   $("logout-btn").addEventListener("click", () => {
     if (!confirm("Log out of this account on this device?\n\nKeep your account token saved if you want to return.")) return;
@@ -885,8 +893,8 @@ function stopScan() {
 async function syncByCode(code) {
   try {
     const dev = await api("/devices/pair", { method: "POST", body: { pairing_code: code } });
-    toast("Paired!"); await openFrame(dev.id);
-    flash("action-msg", "Paired! Go ahead and tap Generate to create your first artwork.");
+    await openFrame(dev.id);
+    toast("Paired! Tap Generate to make your first artwork");
   } catch (e) { await showHome(); go("connect"); $("pair-code").value = code; showError("pair-error", e); }
 }
 
