@@ -143,6 +143,13 @@ globals:
   - id: g_asleep
     type: bool
     initial_value: "false"
+  # Persisted across reboots/sleep (flash). Once the frame has shown art it is a
+  # set-up frame, so reboots/wakes keep the retained artwork instead of flashing
+  # the QR pairing screen. Cleared by factory reset.
+  - id: g_paired_once
+    type: bool
+    initial_value: "false"
+    restore_value: true
 
 # Deep sleep wakes on a daily timer (guaranteed fallback) AND on a press of
 # KEY1 (GPIO2) or KEY3 (GPIO5) — the ext1 multi-button wake is configured in the
@@ -288,6 +295,7 @@ online_image:
           ESP_LOGI("ink", "download finished: decoded %dx%d", w, id(online_artwork).get_height());
           if (w > 0) {
             id(image_loaded) = true;
+            if (!id(g_paired_once)) id(g_paired_once) = true;  // set-up frame now
             id(my_display)->update();
           } else {
             ESP_LOGW("ink", "image fetch failed — keeping the previous frame");
@@ -320,9 +328,10 @@ display:
       // the last frame before deep sleep, so the retained e-ink shows it the
       // whole time the frame is asleep.
       if (id(g_asleep)) {
-        int cx = 744, cy = 56, r = 30;
-        it.filled_circle(cx, cy, r, Color::BLACK);          // full disc
-        it.filled_circle(cx + 15, cy - 11, r, Color::WHITE); // carve -> crescent
+        // small crescent moon, top-right corner
+        int cx = 772, cy = 28, r = 13;
+        it.filled_circle(cx, cy, r, Color::BLACK);           // full disc (~26px)
+        it.filled_circle(cx + 7, cy - 3, r, Color::WHITE);   // carve -> crescent
       }
 
 image:
@@ -339,8 +348,15 @@ script:
       # 1s delay lets the panel finish init so the draw isn't a no-op), so a reset
       # never leaves the stale image up. Fresh art replaces it once downloaded.
       - delay: 1s
-      - lambda: 'id(image_loaded) = false;'
-      - component.update: my_display
+      # Only draw the QR welcome on a frame that has never shown art (fresh or
+      # just factory-reset). A set-up frame keeps its retained artwork on screen
+      # through the reboot/wake — no pairing-screen flash.
+      - if:
+          condition:
+            lambda: 'return !id(g_paired_once);'
+          then:
+            - lambda: 'id(image_loaded) = false;'
+            - component.update: my_display
       - wait_until: wifi.connected    # stays awake through captive-portal onboarding
       - lambda: "id(g_booted) = true;"  # OTA/WiFi reachable — manual sleep now allowed
       - script.execute: resolve_server  # learn the current backend URL (server.txt)
