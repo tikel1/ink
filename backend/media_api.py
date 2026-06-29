@@ -60,7 +60,19 @@ async def current_version(device_id: str) -> Response:
         headers["X-Power"] = device.power_source            # usb | battery
         headers["X-Sleep"] = str(device.sleep_after_minutes)  # minutes awake before sleep
         headers["X-Wake"] = str(device.wake_hour)             # daily wake/update hour
+    # One-shot command queued by the app (delivered once): 'refresh' | 'sleep'.
+    cmd = repositories.take_pending_command(device_id)
+    if cmd:
+        headers["X-Cmd"] = cmd
     return Response(content=ver, media_type="text/plain", headers=headers)
+
+
+@router.get("/sleep/{device_id}")
+async def report_sleep(device_id: str) -> Response:
+    """The frame hits this just before deep sleep so the app reflects 'Asleep'
+    immediately. Cleared on the next check-in (.ver/.png)."""
+    repositories.mark_sleeping(device_id)
+    return Response(content="ok", media_type="text/plain")
 
 
 @router.get("/archive/{device_id}/{date}.png")

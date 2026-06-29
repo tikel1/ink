@@ -190,11 +190,31 @@ def update_device_config(device_id: str, **fields: object) -> None:
         )
 
 
+def set_pending_command(device_id: str, command: str) -> None:
+    """Queue a one-shot command (e.g. 'refresh', 'sleep') the frame picks up on
+    its next version poll."""
+    with get_connection() as conn:
+        conn.execute("UPDATE devices SET pending_command = ? WHERE id = ?",
+                     (command, device_id))
+
+
+def take_pending_command(device_id: str) -> str:
+    """Read + clear the pending command (delivered exactly once)."""
+    with get_connection() as conn:
+        row = conn.execute("SELECT pending_command FROM devices WHERE id = ?",
+                           (device_id,)).fetchone()
+        cmd = (row["pending_command"] if row else "") or ""
+        if cmd:
+            conn.execute("UPDATE devices SET pending_command = '' WHERE id = ?", (device_id,))
+        return cmd
+
+
 def update_telemetry(device_id: str, **fields: object) -> None:
+    # A check-in means the frame is awake — clear the sleeping flag.
     with get_connection() as conn:
         conn.execute(
             """UPDATE devices SET last_seen = ?, battery = ?, wifi_rssi = ?,
-               fw_version = ? WHERE id = ?""",
+               fw_version = ?, sleeping = 0 WHERE id = ?""",
             (
                 now_iso(),
                 fields.get("battery"),
@@ -202,4 +222,14 @@ def update_telemetry(device_id: str, **fields: object) -> None:
                 fields.get("fw_version"),
                 device_id,
             ),
+        )
+
+
+def mark_sleeping(device_id: str) -> None:
+    """Frame reported it's entering deep sleep — flag it so the app shows
+    'Asleep' immediately instead of waiting for a missed check-in to time out."""
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE devices SET last_seen = ?, sleeping = 1 WHERE id = ?",
+            (now_iso(), device_id),
         )

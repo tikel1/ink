@@ -154,6 +154,20 @@ async def _run_generation(device: Device) -> None:
         jobs.set_state(device.id, jobs.ERROR, "Generation failed — try again.")
 
 
+class CommandRequest(BaseModel):
+    cmd: str = Field(pattern=r"^(refresh|sleep)$")
+
+
+@router.post("/devices/{device_id}/command")
+async def send_command(device_id: str, body: CommandRequest,
+                       account: Account = auth.AccountDep):
+    """Queue a one-shot command the physical frame picks up on its next poll
+    (≤60s): 'refresh' = re-fetch + redraw now, 'sleep' = go to sleep."""
+    _owned(device_id, account)
+    repositories.set_pending_command(device_id, body.cmd)
+    return {"status": "queued", "cmd": body.cmd}
+
+
 @router.post("/devices/{device_id}/unbind")
 async def unbind(device_id: str, account: Account = auth.AccountDep):
     _owned(device_id, account)
@@ -213,6 +227,7 @@ def _device_payload(device: Device) -> dict:
         "schedule_days": device.schedule_days,
         "power_source": device.power_source,
         "sleep_after_minutes": device.sleep_after_minutes,
+        "sleeping": device.sleeping,
         "custom_prompt_override": device.custom_prompt_override,
         "enabled": device.enabled,
         "battery": device.battery,
