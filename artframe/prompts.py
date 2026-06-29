@@ -88,8 +88,11 @@ Reply with ONLY a compact JSON array (no prose) of 3-5 objects:
 [{{"event": "<15-25 word description, including the year>",
    "verified_date": "<Month DD, YYYY>",
    "on_date": <true if it really happened on {date}, else false>,
-   "iconic_visual": "<the single most iconic, recognizable image of that moment, in
-   5-12 words, as a simple concrete subject for a hand-cut paper silhouette>"}}, ...]
+   "iconic_visual": "<6-14 words: the single most iconic, instantly recognizable
+   image of that moment, including a SPECIFIC distinctive detail that identifies it
+   (the exact trophy, a famous outfit/uniform, a jersey number, a signature
+   hairstyle, a landmark/monument, an instrument, a signature object or pose) —
+   something unmistakable in silhouette, NOT generic like 'team celebration'>"}}, ...]
 
 If web search finds no real "{interest}" event on {date}, reply: []"""
 
@@ -108,8 +111,16 @@ Reply with ONLY the number of the best candidate (e.g. 3). If none are suitable,
 reply 0."""
 
 # Fallback when the chosen event has no iconic_visual (some providers omit it).
-VISUAL_PROMPT = """In 5-12 words, name the single most iconic, recognizable image of
-this event — a simple, concrete subject suitable for a hand-cut paper silhouette.
+VISUAL_PROMPT = """Name the single most iconic, INSTANTLY recognizable image of this
+event, as one concrete subject for a hand-cut paper silhouette (6-14 words).
+
+It must include the SPECIFIC distinctive detail that identifies THIS event — e.g.
+the exact trophy (the FIFA World Cup globe, the Wimbledon plate), a famous
+outfit/uniform, a jersey number, a signature hairstyle, a landmark building or
+monument, an instrument, a signature pose or object. Pick something whose SHAPE
+is unmistakable in silhouette.
+
+Avoid generic phrases like "team celebration", "a player", or "a crowd".
 Reply with ONLY the phrase (no quotes, no extra words).
 
 Event: {event}"""
