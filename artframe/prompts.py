@@ -11,21 +11,23 @@ from __future__ import annotations
 # --------------------------------------------------------------------------- #
 EVENT_SELECTION_PROMPT = """# Daily Event Generator Prompt
 
-1. Find special events that happened on {date} in previous years, or relevant
-and current events of global importance or national importance to the State of
-Israel. Prefer a positive event, an international holiday, an event of global
-historical significance, or an event in science, culture, or joyful current
-affairs. If it is a major event, sports are also acceptable. The event should
-have educational value and be inspiring. Avoid events that are war or violence
-related, or events with negative subjects. Try to avoid events where the main
-subject will be subjected to copyright restrictions like Disney.
+1. Pick ONE notable event that happened on {date} (this exact month and day) in a
+past year. Apply these rules in priority order:
 
-The event MUST have occurred on {date} — this exact month and day — in some past
-year. Do not pick events from any other calendar date. Only if absolutely nothing
-notable exists for {date} may you fall back to a major current/holiday event.
+   (a) TOPIC — most important: the event's subject MUST relate to one of the
+   viewer's interests: {interests}. Among events on {date}, choose the strongest
+   one that fits an interest. Treat these interests as the category of the event
+   (e.g. "music" → a famous concert, album, performance, or musician; "sports" →
+   a famous match, record, championship, or athlete). Do NOT default to science,
+   technology, or space unless those are listed as interests. Only if truly no
+   event on {date} relates to ANY listed interest may you fall back to another
+   notable {date} event.
 
-When several events qualify on {date}, strongly prefer ones connected to the
-viewer's interests: {interests}.
+   (b) DATE: it must have occurred on {date} — never pick an event from a
+   different calendar date.
+
+The event should be positive, inspiring, and educational. Avoid war, violence,
+tragedy, or negative subjects, and avoid copyrighted characters (e.g. Disney).
 
 Additionally:
 2. Today might be a holiday. Today's holiday context (may be empty):
