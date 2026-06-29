@@ -115,15 +115,20 @@ function relTime(iso) {
   return `${Math.round(d / DAY)}d ago`;
 }
 function batteryPct(v) { return v == null ? null : Math.round(Math.max(0, Math.min(1, (v - 3.3) / 0.9)) * 100); }
+// Status shown as "<State> · <when>": State = Online / Sleep / Offline, when =
+// "now" (just checked in) or "Xm/Xh/Xd ago". The frame reports sleep explicitly,
+// so that's reflected immediately rather than waiting for the check-in to lapse.
+function statusWhen(iso) {
+  if (!iso) return "";
+  return (Date.now() - new Date(iso).getTime()) < 2 * MIN ? "now" : relTime(iso);
+}
 function frameState(d) {
-  // The frame reports sleep explicitly, so reflect it immediately rather than
-  // waiting ~5 min for the missed check-in to time out.
-  if (d && d.sleeping) return { label: "Asleep", cls: "s-sleep", sub: d.last_seen ? `since ${relTime(d.last_seen)}` : "sleeping" };
+  if (d && d.sleeping) return { label: "Sleep", cls: "s-sleep", sub: statusWhen(d.last_seen) };
   const seen = d.last_seen ? Date.now() - new Date(d.last_seen).getTime() : null;
-  if (seen == null) return { label: "Setting up", cls: "s-setup", sub: "waiting for first check‑in" };
-  if (seen < 5 * MIN) return { label: "Awake", cls: "s-on", sub: `checked in ${relTime(d.last_seen)}` };
-  if (seen < 26 * HOUR) return { label: "Asleep", cls: "s-sleep", sub: `last seen ${relTime(d.last_seen)}` };
-  return { label: "Offline", cls: "s-off", sub: `last seen ${relTime(d.last_seen)}` };
+  if (seen == null) return { label: "Setting up", cls: "s-setup", sub: "first check-in" };
+  if (seen < 5 * MIN) return { label: "Online", cls: "s-on", sub: statusWhen(d.last_seen) };
+  if (seen < 26 * HOUR) return { label: "Sleep", cls: "s-sleep", sub: statusWhen(d.last_seen) };
+  return { label: "Offline", cls: "s-off", sub: statusWhen(d.last_seen) };
 }
 function wifiLabel(r) {
   if (r == null) return "—";
@@ -253,7 +258,7 @@ function renderFrameStatus(d) {
   if (!d) return;
   const st = frameState(d);
   $("fr-dot").className = `dot ${st.cls}`;
-  $("fr-status").textContent = `${st.label} · ${st.sub}`;
+  $("fr-status").textContent = st.sub ? `${st.label} · ${st.sub}` : st.label;
 }
 async function pollFrameStatus() {
   renderFrameStatus(currentDevice);              // age the relative time first
@@ -796,7 +801,8 @@ function openSettings() {
   setRadio("sched", d.schedule || "daily");
   renderDayChips((d.schedule_days || "").split(",").map((s) => s.trim()).filter(Boolean));
   $("day-chips").hidden = (d.schedule || "daily") === "daily";
-  $("wake").value = d.wake_hour;
+  const pad2 = (n) => String(n).padStart(2, "0");
+  $("wake").value = `${pad2(d.wake_hour || 0)}:${pad2(d.wake_minute || 0)}`;
   setRadio("power", d.power_source || "usb");
   $("sleep-after").value = d.sleep_after_minutes || 10;
   $("sleep-row").hidden = (d.power_source || "usb") !== "battery";
@@ -822,8 +828,10 @@ function wireSettings() {
     const btn = e.currentTarget;
     const sched = getRadio("sched");
     const days = sched === "daily" ? "" : [...document.querySelectorAll(".day:checked")].map((c) => c.value).join(",");
-    const wake = parseInt($("wake").value, 10);
-    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body: { schedule: sched, schedule_days: days, wake_hour: isNaN(wake) ? undefined : wake } }); buttonSaved(btn); }
+    const [wh, wm] = ($("wake").value || "").split(":").map((n) => parseInt(n, 10));
+    const body = { schedule: sched, schedule_days: days };
+    if (!isNaN(wh)) { body.wake_hour = wh; body.wake_minute = isNaN(wm) ? 0 : wm; }
+    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body }); buttonSaved(btn); }
     catch (err) { toast(err.message); }
   });
   document.querySelectorAll('input[name="power"]').forEach((r) =>
