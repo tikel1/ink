@@ -57,6 +57,10 @@ function setScreen(name) {
   // which bypasses showHome — and (re)start its auto-refresh, so it's never stale.
   if (name === "home") { startHomeAutoRefresh(); refreshHomeArt(); }
   else stopHomeAutoRefresh();
+  // The Frame screen shows a live status that must stay honest on its own
+  // (age "just now" → "5m ago", flip to Asleep) — poll while it's open.
+  if (name === "frame") { renderFrameStatus(currentDevice); startFrameStatusPoll(); }
+  else stopFrameStatusPoll();
 }
 
 // Navigate to a screen and record it in history so the Android/browser back
@@ -229,6 +233,40 @@ function startHomeAutoRefresh() {
 }
 function stopHomeAutoRefresh() { if (homeArtTimer) { clearInterval(homeArtTimer); homeArtTimer = null; } }
 
+// One shared device cache so Home and the Frame screen never disagree: whoever
+// fetches a device writes it back into the `devices` list everyone reads from.
+function syncDeviceCache(d) {
+  if (!d || !Array.isArray(devices)) return;
+  const i = devices.findIndex((x) => x.id === d.id);
+  if (i >= 0) devices[i] = d; else devices.push(d);
+}
+
+// Live status on the Frame screen. Re-render every tick (so the relative time
+// ages and crosses the Awake→Asleep threshold without a refetch) and refetch so
+// the backend 'sleeping' flag + last check-in are picked up automatically.
+const FRAME_STATUS_MS = 15000;
+let frameStatusTimer = null;
+function renderFrameStatus(d) {
+  if (!d) return;
+  const st = frameState(d);
+  $("fr-dot").className = `dot ${st.cls}`;
+  $("fr-status").textContent = `${st.label} · ${st.sub}`;
+}
+async function pollFrameStatus() {
+  renderFrameStatus(currentDevice);              // age the relative time first
+  if (currentScreen !== "frame" || !currentId || document.visibilityState !== "visible") return;
+  try {
+    const d = await api(`/devices/${currentId}`);
+    currentDevice = d; syncDeviceCache(d);
+    renderFrameStatus(d); updateRefreshState();
+  } catch { /* keep the last-known status */ }
+}
+function startFrameStatusPoll() {
+  stopFrameStatusPoll();
+  frameStatusTimer = setInterval(pollFrameStatus, FRAME_STATUS_MS);
+}
+function stopFrameStatusPoll() { if (frameStatusTimer) { clearInterval(frameStatusTimer); frameStatusTimer = null; } }
+
 // Refresh from home: re-pull the latest artwork into the frame on screen and
 // tell the physical frame to re-fetch + redraw.
 async function homeRefresh() {
@@ -364,9 +402,8 @@ async function openFrame(id) {
   $("gallery").innerHTML = ""; $("gallery-dots").innerHTML = "";
   try {
     currentDevice = await api(`/devices/${id}`);
-    const st = frameState(currentDevice);
-    $("fr-dot").className = `dot ${st.cls}`;
-    $("fr-status").textContent = `${st.label} · ${st.sub}`;
+    syncDeviceCache(currentDevice);
+    renderFrameStatus(currentDevice);
     updateRefreshState();
   } catch (e) { toast(e.message); }
   await loadGallery(id);
