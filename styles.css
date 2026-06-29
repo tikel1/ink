@@ -416,7 +416,9 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 /* Landscape: image capped by width + height so the whole home fits one screen. */
 .home-frame:not(.is-portrait) .gframe-mat img {
   display: block; opacity: 0; transition: opacity .5s var(--ease); border-radius: 1px;
-  width: auto; height: auto; max-width: min(92vw, 500px); max-height: 53dvh;
+  /* Cap by viewport width MINUS the mat+molding chrome (~64px) + #app padding,
+     so the whole landscape frame fits and isn't clipped sideways. */
+  width: auto; height: auto; max-width: min(500px, calc(100vw - 112px)); max-height: 53dvh;
 }
 /* Portrait: served PNG is the panel buffer (landscape px); show it upright by
    swapping dims via container-query units + rotating 90° clockwise. */
