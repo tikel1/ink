@@ -174,9 +174,23 @@ def build_data_block(
     sections: list[str] = []
 
     if show_weather or show_date:
+        # Only name the elements that are actually enabled, so weather/temperature
+        # are never mentioned when the device has weather turned off.
+        elems: list[str] = []
+        if show_date:
+            elems.append("date")
+        if show_weather:
+            elems += ["weather icon", "temperature"]
+        if len(elems) == 1:
+            phrase = f"The {elems[0]}"
+        elif len(elems) == 2:
+            phrase = f"The {elems[0]} and {elems[1]}"
+        else:
+            phrase = "The " + ", ".join(elems[:-1]) + f", and {elems[-1]}"
+        title = " & ".join(t for t, on in (("Weather", show_weather), ("Date", show_date)) if on)
         intro = (
             "### Crucially Integrated Dynamic Data (Dissolved Negative Space):\n\n"
-            "The date, weather icon, and temperature must be **carved out of the "
+            f"{phrase} must be **carved out of the "
             "black shapes as negative space**, fully integrated into their form.\n\n"
             "They must:\n"
             "- Follow the **exact curvature and flow** of the shape\n"
@@ -185,7 +199,7 @@ def build_data_block(
             "- Feel like they were **cut blindly by hand**, not typeset\n\n"
             "They should resemble a **calligram dissolving into abstraction**, not "
             "readable typography.\n\n"
-            "### 1. Weather & Date (Embedded and Distorted):\n"
+            f"### 1. {title} (Embedded and Distorted):\n"
         )
         items: list[str] = []
         if show_weather:
