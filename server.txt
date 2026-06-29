@@ -1,1 +1,1 @@
-https://allen-sing-holders-apart.trycloudflare.com
+http://10.0.0.26:8000
