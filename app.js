@@ -5,7 +5,11 @@
 const APP_VERSION = "2.0.0";
 const TOKEN_KEY = "ink.token";
 const SERVER_KEY = "ink.server";
+const SERVER_MANUAL_KEY = "ink.serverManual";   // set when the user pins a server
 const INSTALL_DISMISS_KEY = "ink.installDismissed";
+// Permanent pointer to the current backend URL. Same file the frame reads, so
+// moving the server (e.g. to Fly.io) only needs this one file edited.
+const SERVER_DISCOVERY_URL = "./server.txt";
 const $ = (id) => document.getElementById(id);
 
 // Interest chips (Israel on by default for new frames; no "architecture").
@@ -131,7 +135,7 @@ function loadArtwork(imgEl, skelEl, id, onMissing) {
 // --------------------------------------------------------------------------
 function wireWelcome() {
   $("server-url").value = serverBase();
-  $("server-save").addEventListener("click", () => { setServer($("server-url").value); flash("server-msg", "Saved. Now tap Get started."); });
+  $("server-save").addEventListener("click", () => { setServer($("server-url").value); localStorage.setItem(SERVER_MANUAL_KEY, "1"); flash("server-msg", "Saved. Now tap Get started."); });
   $("start-btn").addEventListener("click", async () => {
     if (!confirm("Create a NEW Ink account?\n\nIf you've set up a frame before, tap Cancel and use “I already have an account” to restore it — a new account won't show your existing frame.")) return;
     try { const { token: t } = await api("/account", { method: "POST", auth: false }); localStorage.setItem(TOKEN_KEY, t); toast("New account created"); await showHome(); }
@@ -528,7 +532,11 @@ function setKeyMode(status) {
 function wireAccount() {
   $("app-settings-btn").addEventListener("click", showAccount);
   $("acct-back").addEventListener("click", () => showHome(currentId));
-  $("acct-server-save").addEventListener("click", () => { setServer($("acct-server-url").value); flash("acct-server-msg", "Saved."); });
+  $("acct-server-save").addEventListener("click", () => {
+    const v = $("acct-server-url").value.trim();
+    if (v) { setServer(v); localStorage.setItem(SERVER_MANUAL_KEY, "1"); flash("acct-server-msg", "Saved (pinned to this server)."); }
+    else { setServer(""); localStorage.removeItem(SERVER_MANUAL_KEY); flash("acct-server-msg", "Cleared — following the published server again."); }
+  });
   $("seg-own").addEventListener("click", () => { setKeyMode("own"); $("api-key").focus(); });
   $("seg-platform").addEventListener("click", async () => {
     $("key-err").hidden = true;
@@ -657,11 +665,24 @@ async function syncByCode(code) {
   } catch (e) { await showHome(); go("connect"); $("pair-code").value = code; showError("pair-error", e); }
 }
 
-function init() {
+// Auto-follow the published backend URL so the app survives a server move.
+// Skipped if the user has pinned a server in Advanced.
+async function resolveServer() {
+  if (localStorage.getItem(SERVER_MANUAL_KEY)) return;
+  try {
+    const r = await fetch(SERVER_DISCOVERY_URL, { cache: "no-store" });
+    if (!r.ok) return;
+    const url = (await r.text()).trim().replace(/\/+$/, "");
+    if (/^https?:\/\//i.test(url)) setServer(url);
+  } catch { /* keep whatever server we already have */ }
+}
+
+async function init() {
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
   wireWelcome(); wireConnect(); wireFrame(); wireArtwork(); wireSettings(); wireAccount(); wireInstall(); wireScanner();
   const params = new URLSearchParams(location.search);
   const server = params.get("server"); if (server) setServer(server);
+  await resolveServer();   // published server.txt wins unless the user pinned one
   const code = params.get("code"); const valid = code && /^\d{6}$/.test(code);
   if (token()) { if (valid) syncByCode(code); else showHome(); }
   else if (valid) {
