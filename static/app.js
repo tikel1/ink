@@ -216,14 +216,69 @@ function startHomeAutoRefresh() {
 }
 function stopHomeAutoRefresh() { if (homeArtTimer) { clearInterval(homeArtTimer); homeArtTimer = null; } }
 
-// Manual refresh from home: re-pull the latest artwork into the frame on screen
-// and tell the physical frame to re-fetch + redraw.
-async function homeRefresh(btn) {
+// Refresh from home: re-pull the latest artwork into the frame on screen and
+// tell the physical frame to re-fetch + redraw.
+async function homeRefresh() {
   if (!currentId) return;
-  if (btn) btn.classList.add("busy");
   refreshHomeArt();
   await sendCommand("refresh", "Refreshing the frame…");
-  if (btn) setTimeout(() => btn.classList.remove("busy"), 900);
+}
+
+// Pull-to-refresh. Home is one locked viewport (no native scroll), so we own the
+// gesture: dragging down past a threshold reveals a spinner and triggers a
+// refresh; a short drag springs back.
+const PULL_START = 6, PULL_THRESHOLD = 64, PULL_MAX = 96, PULL_REST = 24;
+function wirePullToRefresh() {
+  const screen = $("screen-home");
+  const sp = $("pull-spinner");
+  const frame = () => $("home-frame");
+  let startY = null, active = false, dist = 0, busy = false;
+
+  const render = (d) => {
+    const t = d * 0.5;
+    sp.style.opacity = String(Math.min(1, d / PULL_THRESHOLD));
+    sp.style.transform = `translateY(${t}px) scale(${0.7 + Math.min(0.3, (d / PULL_THRESHOLD) * 0.3)}) rotate(${d * 2.4}deg)`;
+    frame().style.transform = `translateY(${t}px)`;
+  };
+  const springBack = () => {
+    sp.style.opacity = ""; sp.style.transform = "";
+    frame().style.transition = "transform .25s var(--ease)";
+    frame().style.transform = "";
+    setTimeout(() => { frame().style.transition = ""; }, 260);
+  };
+
+  screen.addEventListener("pointerdown", (e) => {
+    if (busy || currentScreen !== "home" || frame().hidden) return;
+    startY = e.clientY; active = false; dist = 0;
+  });
+  screen.addEventListener("pointermove", (e) => {
+    if (startY == null) return;
+    const dy = e.clientY - startY;
+    if (dy < PULL_START) { if (active) { active = false; dist = 0; springBack(); } return; }
+    active = true; dist = Math.min(dy, PULL_MAX);
+    render(dist);
+    if (e.cancelable) e.preventDefault();
+  }, { passive: false });
+
+  const end = async () => {
+    if (startY == null) return;
+    const trigger = active && dist >= PULL_THRESHOLD;
+    startY = null; active = false; dist = 0;
+    if (!trigger) { springBack(); return; }
+    busy = true;
+    sp.classList.add("spin");
+    sp.style.opacity = "1"; sp.style.transform = `translateY(${PULL_REST}px) scale(1)`;
+    frame().style.transition = "transform .25s var(--ease)";
+    frame().style.transform = `translateY(${PULL_REST}px)`;
+    try { await homeRefresh(); }
+    finally {
+      sp.classList.remove("spin");
+      springBack();
+      setTimeout(() => { busy = false; }, 200);
+    }
+  };
+  screen.addEventListener("pointerup", end);
+  screen.addEventListener("pointercancel", end);
 }
 
 function renderHomeFrame(d) {
@@ -442,7 +497,7 @@ function wireFrame() {
   $("goto-settings").addEventListener("click", openSettings);
   $("home-art-btn").addEventListener("click", () => openFrame(currentId));
   $("home-more").addEventListener("click", () => openFrame(currentId));
-  $("home-refresh-btn").addEventListener("click", (e) => homeRefresh(e.currentTarget));
+  wirePullToRefresh();
   $("gallery").addEventListener("scroll", onGalleryScroll, { passive: true });
   $("refresh-btn").addEventListener("click", async () => {
     const btn = $("refresh-btn"); btn.classList.add("busy");
