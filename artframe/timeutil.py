@@ -12,13 +12,13 @@ from zoneinfo import ZoneInfo
 from . import constants
 
 
-def seconds_until_next_wake(now: datetime, wake_hour: int) -> int:
-    """Seconds from `now` until the next occurrence of `wake_hour:00` local.
+def seconds_until_next_wake(now: datetime, wake_hour: int, wake_minute: int = 0) -> int:
+    """Seconds from `now` until the next occurrence of `wake_hour:wake_minute` local.
 
     `now` must be timezone-aware. Result is clamped to [MIN, MAX] refresh
-    bounds so a bad wake_hour can never produce a zero/negative sleep.
+    bounds so a bad wake time can never produce a zero/negative sleep.
     """
-    target = now.replace(hour=wake_hour, minute=0, second=0, microsecond=0)
+    target = now.replace(hour=wake_hour, minute=wake_minute, second=0, microsecond=0)
     if target <= now:
         target = target + timedelta(days=1)
     delta = int((target - now).total_seconds())

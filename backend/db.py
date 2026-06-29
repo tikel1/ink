@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS devices (
     lat          REAL NOT NULL,
     lon          REAL NOT NULL,
     wake_hour    INTEGER NOT NULL DEFAULT 6,
+    wake_minute  INTEGER NOT NULL DEFAULT 0,
     language     TEXT NOT NULL DEFAULT 'en',
     temp_unit    TEXT NOT NULL DEFAULT 'c',
     interests    TEXT NOT NULL DEFAULT '',   -- comma separated
@@ -85,6 +86,7 @@ _MIGRATIONS = {
     "sleeping": "INTEGER NOT NULL DEFAULT 0",   # frame reported deep sleep
     "pending_command": "TEXT NOT NULL DEFAULT ''",  # one-shot cmd the frame picks up on its next poll
     "date_format": "TEXT NOT NULL DEFAULT 'weekday'",  # embedded-date style
+    "wake_minute": "INTEGER NOT NULL DEFAULT 0",  # minute of the daily update time
 }
 
 

@@ -47,8 +47,10 @@ class Settings(BaseSettings):
     # Storage
     data_dir: Path = Path("./data")
 
-    # Scheduler
-    generation_lead_minutes: int = 45
+    # Scheduler — generate within this window before the frame's wake time, so
+    # the new art is ready ~5 min before the frame wakes to fetch it. (A window
+    # equal to the 5-min tick interval reliably contains exactly one tick.)
+    generation_lead_minutes: int = 5
     enable_scheduler: bool = True
 
     # New-device defaults

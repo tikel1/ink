@@ -65,7 +65,10 @@ async def current_version(device_id: str) -> Response:
     if device is not None:
         headers["X-Power"] = device.power_source            # usb | battery
         headers["X-Sleep"] = str(device.sleep_after_minutes)  # minutes awake before sleep
-        headers["X-Wake"] = str(device.wake_hour)             # daily wake/update hour
+        headers["X-Wake"] = str(device.wake_hour)             # legacy: bare hour (old firmware)
+        # Minute-precise wake as seconds-since-midnight (new firmware prefers this).
+        headers["X-Wake-Secs"] = str(device.wake_hour * 3600 + device.wake_minute * 60)
+        headers["X-Orient"] = device.orientation              # landscape | portrait
     # One-shot command queued by the app (delivered once): 'refresh' | 'sleep'.
     cmd = repositories.take_pending_command(device_id)
     if cmd:

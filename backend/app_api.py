@@ -31,6 +31,7 @@ class ConfigUpdate(BaseModel):
     lon: float | None = Field(default=None, ge=-180, le=180)
     tz: str | None = None
     wake_hour: int | None = Field(default=None, ge=WAKE_MIN, le=WAKE_MAX)
+    wake_minute: int | None = Field(default=None, ge=0, le=59)
     language: str | None = Field(default=None, pattern=r"^(en|he)$")
     temp_unit: str | None = Field(default=None, pattern=r"^(c|f)$")
     interests: str | None = None
@@ -212,6 +213,7 @@ def _device_payload(device: Device) -> dict:
         "lat": device.lat,
         "lon": device.lon,
         "wake_hour": device.wake_hour,
+        "wake_minute": device.wake_minute,
         "language": device.language,
         "temp_unit": device.temp_unit,
         "interests": device.interests,

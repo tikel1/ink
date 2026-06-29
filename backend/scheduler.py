@@ -48,7 +48,9 @@ def _is_due(device, lead_minutes: int) -> bool:
     existing = artwork_repo.get(device.id, now.date().isoformat())
     if existing and existing.status == artwork_repo.READY:
         return False
-    wake = now.replace(hour=device.wake_hour, minute=0, second=0, microsecond=0)
+    wake = now.replace(hour=device.wake_hour, minute=device.wake_minute, second=0, microsecond=0)
+    # Generate in the window just before the frame's wake time, so the new image
+    # is ready when the frame wakes ~5 min later to fetch it.
     return wake - timedelta(minutes=lead_minutes) <= now < wake
 
 

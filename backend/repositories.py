@@ -134,7 +134,7 @@ def unbind_device(device_id: str) -> None:
             """UPDATE devices SET
                  account_id = NULL, status = ?, pairing_code = ?,
                  name = '',
-                 tz = ?, lat = ?, lon = ?, wake_hour = ?,
+                 tz = ?, lat = ?, lon = ?, wake_hour = ?, wake_minute = 0,
                  language = 'en', temp_unit = 'c', interests = '',
                  signature = ?,
                  holiday_jewish = 1, holiday_israeli = 1, holiday_global = 1,
@@ -172,7 +172,7 @@ def list_enabled_paired_devices() -> list[Device]:
 def update_device_config(device_id: str, **fields: object) -> None:
     allowed = {
         "name",
-        "tz", "lat", "lon", "wake_hour", "language", "temp_unit", "interests",
+        "tz", "lat", "lon", "wake_hour", "wake_minute", "language", "temp_unit", "interests",
         "signature", "holiday_jewish", "holiday_israeli", "holiday_global",
         "orientation", "show_date", "date_format", "show_weather",
         "city_name", "auto_timezone", "schedule", "schedule_days",

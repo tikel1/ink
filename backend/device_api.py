@@ -78,7 +78,7 @@ async def display(
     today = now_in_tz(device.tz).date().isoformat()
     art = artwork_repo.get(device.id, today)
     if art and art.status == artwork_repo.READY:
-        refresh = seconds_until_next_wake(now_in_tz(device.tz), device.wake_hour)
+        refresh = seconds_until_next_wake(now_in_tz(device.tz), device.wake_hour, device.wake_minute)
         return _resp(storage.current_url(device.id), refresh, art.date)
     return _resp(storage.current_url(device.id), RETRY_SECONDS, "pending")
 

@@ -20,6 +20,7 @@ class DeviceConfig:
     lon: float
     tz: str = "Asia/Jerusalem"
     wake_hour: int = 6
+    wake_minute: int = 0
     language: str = "en"
     temp_unit: str = "c"
     interests: tuple[str, ...] = ()
@@ -48,6 +49,8 @@ class DeviceConfig:
             raise ValueError(f"{self.id}: lat/lon out of range")
         if not (0 <= self.wake_hour <= 23):
             raise ValueError(f"{self.id}: wake_hour must be 0-23")
+        if not (0 <= self.wake_minute <= 59):
+            raise ValueError(f"{self.id}: wake_minute must be 0-59")
 
     @staticmethod
     def from_dict(data: dict) -> "DeviceConfig":

@@ -43,6 +43,7 @@ class Device:
     lat: float
     lon: float
     wake_hour: int
+    wake_minute: int
     language: str
     temp_unit: str
     interests: str
@@ -82,6 +83,7 @@ class Device:
             lat=row["lat"],
             lon=row["lon"],
             wake_hour=row["wake_hour"],
+            wake_minute=row["wake_minute"],
             language=row["language"],
             temp_unit=row["temp_unit"],
             interests=row["interests"],
@@ -118,6 +120,7 @@ class Device:
             lon=self.lon,
             tz=self.tz,
             wake_hour=self.wake_hour,
+            wake_minute=self.wake_minute,
             language=self.language,
             temp_unit=self.temp_unit,
             interests=interests,

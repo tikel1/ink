@@ -130,9 +130,16 @@ globals:
   - id: g_sleep_min
     type: int
     initial_value: "10"
-  - id: g_wake_hour
+  # Daily wake time as SECONDS since local midnight (minute precision). The
+  # backend sends seconds; a legacy bare hour (<=23) is upscaled to seconds.
+  - id: g_wake_secs
     type: int
-    initial_value: "6"
+    initial_value: "21600"   # 06:00
+  # Image orientation, polled from the backend. Frames ship portrait, so the moon
+  # defaults to the portrait corner until the backend says otherwise.
+  - id: g_portrait
+    type: bool
+    initial_value: "true"
   # True once boot + WiFi are up. Manual sleep (KEY1) is blocked until then so a
   # stray press during boot can't sleep the frame before OTA/WiFi is reachable.
   - id: g_booted
@@ -246,7 +253,7 @@ interval:
     then:
       - http_request.get:
           url: !lambda 'return id(g_backend) + "/media/current/" + get_mac_address() + ".ver";'
-          collect_headers: ["x-ver", "x-power", "x-sleep", "x-wake", "x-cmd"]
+          collect_headers: ["x-ver", "x-power", "x-sleep", "x-wake", "x-wake-secs", "x-orient", "x-cmd"]
           on_response:
             then:
               - lambda: |-
@@ -256,8 +263,13 @@ interval:
                   if (!p.empty()) id(g_power) = p;
                   std::string sm = response->get_response_header("x-sleep");
                   if (!sm.empty()) id(g_sleep_min) = atoi(sm.c_str());
-                  std::string wh = response->get_response_header("x-wake");
-                  if (!wh.empty()) id(g_wake_hour) = atoi(wh.c_str());
+                  // Prefer minute-precise seconds; fall back to the legacy hour.
+                  std::string ws = response->get_response_header("x-wake-secs");
+                  if (!ws.empty()) { id(g_wake_secs) = atoi(ws.c_str()); }
+                  else { std::string wh = response->get_response_header("x-wake");
+                         if (!wh.empty()) id(g_wake_secs) = atoi(wh.c_str()) * 3600; }
+                  std::string ori = response->get_response_header("x-orient");
+                  if (!ori.empty()) id(g_portrait) = (ori == "portrait");
                   // Decide whether to redraw — from a version change and/or an
                   // app 'refresh' command — but redraw at most ONCE per poll so a
                   // freshly generated image (new version + queued refresh) doesn't
@@ -342,19 +354,30 @@ display:
       // the last frame before deep sleep, so the retained e-ink shows it the
       // whole time the frame is asleep.
       if (id(g_asleep)) {
-        // Moon badge, inset from the corner. Drawn on its own WHITE plate with a
-        // BLACK outline so it stays visible over any artwork (a bare black
-        // crescent vanished where it landed on a dark shape). The crescent itself
-        // is filled per-scanline (black) — a disc minus an x-offset disc.
-        const int cx = 752, cy = 50, R = 13, d = 7, PLATE = R + 7;
-        it.filled_circle(cx, cy, PLATE, Color::WHITE);   // contrast plate
-        it.circle(cx, cy, PLATE, Color::BLACK);          // outline (defines the badge)
-        for (int dy = -R; dy <= R; dy++) {
-          int hh = (int) lroundf(sqrtf((float)(R * R - dy * dy)));
-          int xL = cx - hh;                       // outer (disc) left edge
-          int inner = (cx + d) - hh;              // where the offset disc begins
-          int xR = (cx + hh < inner) ? (cx + hh) : inner;
-          if (xR > xL) it.line(xL, cy + dy, xR, cy + dy, Color::BLACK);
+        // Small black crescent in the artwork's top-right corner (the panel has a
+        // white margin there, so a bare black moon reads cleanly — no plate).
+        // White moon disc with a black crescent inside ("white on black"), small
+        // and tucked in the corner. The white plate keeps it visible over dark
+        // artwork; a thin black outline keeps it visible over white margins too.
+        // It tracks orientation: landscape sits top-right; portrait art is
+        // rotated 90deg into the panel, so the moon moves to the panel's top-left
+        // and its crescent rotates with it (cut-out opens "up" in panel space ->
+        // opens right once the frame is mounted portrait).
+        const bool portrait = id(g_portrait);
+        const int R = 7, d = 4, M = 20, PLATE = R + 3;  // crescent r, offset, margin, plate r
+        const int cx = portrait ? M : (800 - M);
+        const int cy = M;
+        const int ox = portrait ? 0 : d;           // cut-disc offset (panel space)
+        const int oy = portrait ? -d : 0;
+        it.filled_circle(cx, cy, PLATE, Color::WHITE);  // white disc (visible on dark art)
+        it.circle(cx, cy, PLATE, Color::BLACK);         // outline (visible on white margins)
+        for (int yy = -R; yy <= R; yy++) {
+          for (int xx = -R; xx <= R; xx++) {
+            bool in_main = (xx * xx + yy * yy) <= R * R;
+            int rx = xx - ox, ry = yy - oy;
+            bool in_cut = (rx * rx + ry * ry) <= R * R;
+            if (in_main && !in_cut) it.draw_pixel_at(cx + xx, cy + yy, Color::BLACK);
+          }
         }
       }
 
@@ -449,7 +472,7 @@ script:
           uint32_t delta = 3600;  // 1h fallback if the clock isn't set
           if (t.is_valid()) {
             int now_s = t.hour * 3600 + t.minute * 60 + t.second;
-            int wake_s = id(g_wake_hour) * 3600;
+            int wake_s = id(g_wake_secs);
             int d = wake_s - now_s;
             if (d <= 0) d += 86400;
             delta = (uint32_t) d;
