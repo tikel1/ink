@@ -180,8 +180,8 @@
           <span class="field-label">Location</span>
           <div class="loc-view" id="loc-view">
             <span id="city-display" class="loc-text"></span>
-            <button type="button" id="city-edit" class="icon-edit" aria-label="Change location">
-              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+            <button type="button" id="city-edit" class="loc-edit-btn" aria-label="Edit location">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
                    stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 20h9" />
                 <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
@@ -190,10 +190,16 @@
           </div>
           <div class="loc-edit" id="loc-edit" hidden>
             <div class="autocomplete">
-              <div class="row field-with-icon">
+              <div class="loc-input-row">
                 <input id="city-name" placeholder="Type a city…" autocomplete="off"
                        autocapitalize="words" spellcheck="false" />
                 <button type="button" id="city-find" class="btn-ghost inline">Find</button>
+                <button type="button" id="city-accept" class="btn-accept" aria-label="Accept location">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+                       stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                </button>
               </div>
               <ul id="city-suggest" class="suggest" hidden></ul>
             </div>

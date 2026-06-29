@@ -498,6 +498,7 @@ function wireArtwork() {
   $("show_date").addEventListener("change", (e) => { $("date-format-row").hidden = !e.target.checked; });
   $("city-edit").addEventListener("click", () => { setLocEdit(true); $("city-name").focus(); $("city-name").select(); });
   $("city-find").addEventListener("click", geocode);
+  $("city-accept").addEventListener("click", acceptLocation);
   $("geo-btn").addEventListener("click", useMyLocation);
   const cityInput = $("city-name");
   cityInput.addEventListener("input", onCityInput);
@@ -542,8 +543,20 @@ function applyLocation(lat, lon, tz, label) {
   $("city-display").textContent = label;
   if (tz) resolvedTz = tz;
   hideSuggest();
-  setLocEdit(false);            // collapse back to static text once a location is chosen
-  flash("loc-msg", `Set to ${label}.`);
+  flash("loc-msg", `${label} — tap ✓ to confirm.`);
+}
+
+// ✓ accept: commit the current location and collapse back to the static text.
+async function acceptLocation() {
+  hideSuggest();
+  const typed = $("city-name").value.trim();
+  const display = $("city-display").textContent.trim();
+  // A typed name that wasn't resolved yet (and we're not in manual mode) → look it up.
+  if (!$("manual-coords").checked && typed && typed !== display) await geocode();
+  const hasCoords = isFinite(parseFloat($("lat").value)) && isFinite(parseFloat($("lon").value));
+  if ($("city-display").textContent.trim()) { setLocEdit(false); $("loc-msg").hidden = true; }
+  else if (hasCoords) { $("city-display").textContent = typed || "Custom location"; setLocEdit(false); $("loc-msg").hidden = true; }
+  else flash("loc-msg", "Pick a location first.", true);
 }
 
 // Toggle between the static "City, Country + pencil" view and the edit controls.
@@ -609,12 +622,19 @@ function hideSuggest() {
 // Keyboard nav: ↑/↓ move the highlight, Enter picks it.
 function onSuggestKey(e) {
   const ul = $("city-suggest");
-  if (ul.hidden || !suggestResults.length) return;
+  const open = !ul.hidden && suggestResults.length;
+  if (e.key === "Enter") {
+    // Never let Enter submit the whole settings form from the city field.
+    e.preventDefault();
+    const active = open ? [...ul.children].findIndex((li) => li.classList.contains("active")) : -1;
+    if (active >= 0) chooseSuggest(active); else acceptLocation();
+    return;
+  }
+  if (!open) return;
   const items = [...ul.children];
   let active = items.findIndex((li) => li.classList.contains("active"));
   if (e.key === "ArrowDown") { e.preventDefault(); active = (active + 1) % items.length; }
   else if (e.key === "ArrowUp") { e.preventDefault(); active = (active - 1 + items.length) % items.length; }
-  else if (e.key === "Enter" && active >= 0) { e.preventDefault(); chooseSuggest(active); return; }
   else if (e.key === "Escape") { hideSuggest(); return; }
   else return;
   items.forEach((li, i) => li.classList.toggle("active", i === active));
