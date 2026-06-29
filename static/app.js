@@ -199,13 +199,27 @@ async function showHome(preferId) {
 // Keep the home image current without a manual button: re-pull silently (preload
 // then swap, so no skeleton flash) on a timer while home is visible, and on focus
 // / tab-visibility. Guarantees the home always shows the real, latest artwork.
-function refreshHomeArt() {
+async function refreshHomeArt() {
   if (!currentId || currentScreen !== "home") return;
   const url = artworkUrl(currentId);
   const probe = new Image();
   probe.onload = () => { const el = $("home-art-img"); if (el) { el.src = url; el.classList.add("loaded"); } };
   probe.src = url;
   loadExplain(currentId);
+  // Also refresh the frame's STATUS so the Asleep moon + hint update on their
+  // own (no manual reload) — picks up the backend 'sleeping' flag, and falls
+  // back to the last-seen timeout if the sleep ping didn't land.
+  try {
+    const r = await api("/devices");
+    const d = r && r.devices && r.devices.find((x) => x.id === currentId);
+    if (d) {
+      currentDevice = d;
+      const asleep = frameState(d).cls === "s-sleep";
+      const m = $("home-sleep"), h = $("home-sleep-hint");
+      if (m) m.hidden = !asleep;
+      if (h) h.hidden = !asleep;
+    }
+  } catch { /* keep the last-known status */ }
 }
 let homeArtTimer = null;
 function startHomeAutoRefresh() {
