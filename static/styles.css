@@ -73,7 +73,7 @@ body.home-locked { overflow: hidden; height: 100dvh; }
 .screen.center { min-height: 86dvh; display: flex; flex-direction: column;
                  align-items: center; justify-content: center; text-align: center; }
 @media (prefers-reduced-motion: reduce) {
-  .screen, .float, .bl, body::after, .inkmark-anim::after,
+  .screen, .float, .bl, body::after,
   .brand-word, .word, .btn-primary.busy, .spin-sm { animation: none !important; }
 }
 
@@ -151,6 +151,23 @@ button { font-family: inherit; }
   animation: ink-sheen 1.3s linear infinite;
 }
 button.inline { width: auto; white-space: nowrap; padding: 0 16px; }
+
+/* Transient "✓ Saved" confirmation shown on the save button itself. */
+.btn-saved { animation: saved-glow .9s var(--ease); }
+.btn-saved .saved-ico { display: inline-grid; place-items: center; width: 1.05em; height: 1.05em;
+                        margin-right: 7px; vertical-align: -2px;
+                        animation: saved-pop .34s var(--ease) both; }
+.btn-saved .saved-ico svg { width: 100%; height: 100%; }
+.btn-saved .saved-ico path { stroke-dasharray: 24; stroke-dashoffset: 24;
+                             animation: saved-draw .42s var(--ease) .06s forwards; }
+.btn-saved .saved-label { animation: saved-fade .34s var(--ease) both; }
+@keyframes saved-pop  { 0% { transform: scale(.3); opacity: 0; } 62% { transform: scale(1.18); } 100% { transform: scale(1); opacity: 1; } }
+@keyframes saved-draw { to { stroke-dashoffset: 0; } }
+@keyframes saved-fade { from { opacity: .25; } to { opacity: 1; } }
+@keyframes saved-glow { 0% { box-shadow: 0 0 0 0 rgba(var(--glow), .5); } 100% { box-shadow: 0 0 0 8px rgba(var(--glow), 0); } }
+@media (prefers-reduced-motion: reduce) {
+  .btn-saved, .btn-saved .saved-ico, .btn-saved .saved-ico path, .btn-saved .saved-label { animation: none !important; stroke-dashoffset: 0 !important; }
+}
 .wide { margin-top: 8px; }
 .danger-link { color: var(--danger); display: block; width: 100%; text-align: center;
                margin-top: 18px; font-weight: 600; }
@@ -419,13 +436,6 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .brand-word.small { font-size: 22px; }
 .inkmark-anim { width: 48px; height: 48px; position: relative; }
 .home-top .inkmark-anim { margin-left: 4px; }
-/* Warm glow that breathes behind the ink blob — the "alive/AI" cue. */
-.inkmark-anim::after {
-  content: ""; position: absolute; inset: -40%; z-index: -1; border-radius: 50%;
-  background: radial-gradient(circle, rgba(var(--glow), .6), transparent 66%);
-  filter: blur(6px); animation: blob-glow 4.5s ease-in-out infinite;
-}
-@keyframes blob-glow { 0%,100% { transform: scale(.82); opacity: .4; } 50% { transform: scale(1.2); opacity: .85; } }
 .gear-btn { margin-left: auto; background: none; border: none; cursor: pointer; padding: 8px;
             border-radius: 50%; color: var(--ink-soft); transition: background .2s, color .2s; }
 .gear-btn:hover { background: rgba(27,24,19,.07); color: var(--ink); }

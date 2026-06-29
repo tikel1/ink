@@ -134,6 +134,23 @@ function toast(text) {
   const el = $("toast"); el.textContent = text; el.classList.add("show");
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
 }
+
+// Confirm a save on the button itself: "✓ Saved" with a subtle animation,
+// then revert to the original label.
+const SAVED_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+const SAVED_DURATION_MS = 1800;
+function buttonSaved(btn) {
+  if (!btn) return;
+  if (btn.dataset.savedTimer) clearTimeout(Number(btn.dataset.savedTimer));
+  else btn.dataset.label = btn.textContent;     // remember the real label once
+  btn.classList.add("btn-saved");
+  btn.innerHTML = `<span class="saved-ico" aria-hidden="true">${SAVED_CHECK}</span><span class="saved-label">Saved</span>`;
+  btn.dataset.savedTimer = String(setTimeout(() => {
+    btn.classList.remove("btn-saved");
+    btn.textContent = btn.dataset.label;
+    delete btn.dataset.savedTimer; delete btn.dataset.label;
+  }, SAVED_DURATION_MS));
+}
 function loadArtwork(imgEl, skelEl, id, onMissing) {
   imgEl.classList.remove("loaded"); if (skelEl) skelEl.hidden = false;
   imgEl.onload = () => { imgEl.classList.add("loaded"); if (skelEl) skelEl.hidden = true; };
@@ -463,7 +480,7 @@ function openArtwork() {
   const chosen = tokens.length ? tokens : ["israel"];
   document.querySelectorAll(".interest").forEach((cb) => { cb.checked = chosen.includes(cb.value); });
   $("interest-other").value = tokens.filter((t) => !INTEREST_KEYS.includes(t)).join(", ");
-  $("loc-msg").hidden = true; $("save-msg").hidden = true;
+  $("loc-msg").hidden = true;
   resolvedTz = null;
   go("artwork");
 }
@@ -506,8 +523,9 @@ function wireArtwork() {
   cityInput.addEventListener("blur", () => setTimeout(hideSuggest, 150));
   $("artwork-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body: artworkBody() }); flash("save-msg", "Saved."); toast("Saved"); }
-    catch (e2) { showError("save-msg", e2); }
+    const btn = e.submitter || $("artwork-form").querySelector('button[type="submit"]');
+    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body: artworkBody() }); buttonSaved(btn); }
+    catch (e2) { toast(e2.message); }
   });
 }
 
@@ -671,41 +689,44 @@ function openSettings() {
   $("spec-wifi").textContent = wifiLabel(d.wifi_rssi);
   const bat = batteryPct(d.battery); $("spec-batt").textContent = bat != null ? `${bat}%` : "—";
   $("spec-fw").textContent = d.fw_version || "—"; $("spec-id").textContent = d.id;
-  ["name-msg", "sched-msg", "tz-msg", "power-msg"].forEach((i) => { $(i).hidden = true; });
   go("settings");
 }
 
 function wireSettings() {
   $("settings-back").addEventListener("click", () => go("frame"));
-  $("set-name-save").addEventListener("click", async () => {
-    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body: { name: $("set-name").value.trim() } }); flash("name-msg", "Saved."); toast("Name updated"); }
-    catch (e) { showError("name-msg", e); }
+  $("set-name-save").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body: { name: $("set-name").value.trim() } }); buttonSaved(btn); }
+    catch (err) { toast(err.message); }
   });
   document.querySelectorAll('input[name="sched"]').forEach((r) =>
     r.addEventListener("change", () => { $("day-chips").hidden = getRadio("sched") === "daily"; }));
-  $("sched-save").addEventListener("click", async () => {
+  $("sched-save").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
     const sched = getRadio("sched");
     const days = sched === "daily" ? "" : [...document.querySelectorAll(".day:checked")].map((c) => c.value).join(",");
     const wake = parseInt($("wake").value, 10);
-    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body: { schedule: sched, schedule_days: days, wake_hour: isNaN(wake) ? undefined : wake } }); flash("sched-msg", "Saved."); toast("Schedule saved"); }
-    catch (e) { showError("sched-msg", e); }
+    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body: { schedule: sched, schedule_days: days, wake_hour: isNaN(wake) ? undefined : wake } }); buttonSaved(btn); }
+    catch (err) { toast(err.message); }
   });
   document.querySelectorAll('input[name="power"]').forEach((r) =>
     r.addEventListener("change", () => { $("sleep-row").hidden = getRadio("power") !== "battery"; }));
-  $("power-save").addEventListener("click", async () => {
+  $("power-save").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
     const body = { power_source: getRadio("power") };
     const s = parseInt($("sleep-after").value, 10);
     if (!isNaN(s)) body.sleep_after_minutes = s;
-    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body }); flash("power-msg", "Saved."); toast("Power saved"); }
-    catch (e) { showError("power-msg", e); }
+    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body }); buttonSaved(btn); }
+    catch (err) { toast(err.message); }
   });
   $("auto-tz").addEventListener("change", (e) => { $("tz-row").hidden = e.target.checked; });
-  $("tz-save").addEventListener("click", async () => {
+  $("tz-save").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
     const auto = $("auto-tz").checked;
     const body = { auto_timezone: auto };
     if (!auto && $("tz").value.trim()) body.tz = $("tz").value.trim();
-    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body }); flash("tz-msg", "Saved."); toast("Time zone saved"); }
-    catch (e) { showError("tz-msg", e); }
+    try { currentDevice = await api(`/devices/${currentId}/config`, { method: "PUT", body }); buttonSaved(btn); }
+    catch (err) { toast(err.message); }
   });
   $("disconnect-btn").addEventListener("click", async () => {
     if (!confirm("Disconnect and forget this frame?\n\nIts settings are cleared and it returns to onboarding.")) return;
