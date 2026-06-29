@@ -446,6 +446,16 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
              transition: transform .12s var(--ease), box-shadow .2s; }
 .open-chip:hover { box-shadow: var(--shadow-lg); }
 .open-chip:active { transform: scale(.95); }
+
+/* Asleep indicator — small moon in the frame's corner + a wake hint. */
+.sleep-badge { position: absolute; top: 10px; right: 10px; z-index: 3;
+               width: 32px; height: 32px; border-radius: 50%; display: flex;
+               align-items: center; justify-content: center; color: var(--paper);
+               background: rgba(27,24,19,.82); box-shadow: var(--shadow); }
+.sleep-badge[hidden] { display: none; }
+.sleep-hint { font-family: "Inter"; font-size: 12.5px; font-weight: 600; color: var(--muted);
+              margin: 10px 0 0; letter-spacing: .01em; }
+.sleep-hint[hidden] { display: none; }
 .frame-switch { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 6px; }
 .frame-switch button { background: var(--paper-2); border: 1.5px solid var(--line); border-radius: 999px;
                        padding: 6px 13px; font: inherit; font-size: 12.5px; font-weight: 600;

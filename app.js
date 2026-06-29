@@ -171,6 +171,10 @@ function renderHomeFrame(d) {
   currentId = d.id; currentDevice = d;
   $("home-frame").classList.toggle("is-portrait", d.orientation === "portrait");
   $("home-frame-name").textContent = displayName(d);
+  // Sleep indicator: moon badge + wake hint when the frame is asleep.
+  const asleep = frameState(d).cls === "s-sleep";
+  $("home-sleep").hidden = !asleep;
+  $("home-sleep-hint").hidden = !asleep;
   $("home-explain").textContent = "Loading today's work…";
   loadArtwork($("home-art-img"), $("home-skeleton"), d.id, () => {
     $("home-explain").textContent = "No artwork yet — open the frame and tap Regenerate.";
