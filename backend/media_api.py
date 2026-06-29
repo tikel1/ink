@@ -33,8 +33,10 @@ async def current(device_id: str) -> Response:
     # First fetch from a new frame auto-registers it (idempotent), so it gets a
     # pairing code without a separate setup call.
     device = repositories.register_device(device_id)
-    # Each image fetch is a check-in — bump last_seen so the app shows "Connected".
-    repositories.update_telemetry(device_id)
+    # NOTE: do NOT treat an image fetch as a check-in. The control app also loads
+    # this same .png (home/frame/gallery), so stamping last_seen here made the
+    # frame look "Online" every time the app opened. Only the frame's .ver poll
+    # (frame-only) counts as a check-in.
     if device.status != "paired":
         code = device.pairing_code or ""
         return _png(splash.pairing_splash(code, _pair_url(code)))
