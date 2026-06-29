@@ -67,23 +67,45 @@ async def generate_artwork(settings: Settings, config: DeviceConfig) -> ArtworkR
     )
 
 
-_EVENT_ATTEMPTS = 3
+_EVENT_ATTEMPTS = 2
 
 
 async def _select_event(
     settings: Settings, config: DeviceConfig, today: date_cls, holiday_ctx
 ) -> str:
-    """Pick a fact-checked event. Try the interest-aware selector a few times;
-    fall back to a generic well-known event; if even that fails the fact-check,
-    return "" so the artwork is drawn with no event at all (rather than a
-    fabricated one like a made-up "UN football day")."""
+    """Pick a fact-checked event for today.
+
+    Strategy: first FORCE the topic — ask explicitly for an event in each of the
+    user's interest categories (left to itself the model defaults to its favourite
+    topics like space/tech and ignores the interests). If none pass the date/fact
+    check, fall back to the general interest-aware selector, then a generic
+    well-known event; if even that fails, return "" so the artwork is drawn with
+    no event rather than a fabricated one.
+    """
+    date_label = today.strftime("%B %d")
+    interests = [i.strip() for i in config.interests if i and i.strip()]
+
+    # 1) Topic-forced: one explicit ask per interest, rotated by day for variety.
+    if interests:
+        start = today.toordinal() % len(interests)
+        ordered = interests[start:] + interests[:start]
+        for interest in ordered:
+            event = await generation_client.generate_text(
+                settings, prompts.INTEREST_EVENT_PROMPT.format(date=date_label, interest=interest))
+            if event.strip().upper().startswith("NONE"):
+                logger.info("no %s event recalled for %s", interest, date_label)
+                continue
+            if await _fact_check(settings, event, date_label):
+                return event
+            logger.info("%s event failed fact-check: %s", interest, event)
+
+    # 2) General interest-aware selector.
     holiday_block = prompts.format_holiday_context(
         holiday_ctx.jewish, holiday_ctx.israeli, holiday_ctx.global_
     )
-    interests = ", ".join(config.interests) if config.interests else "general curiosity"
-    date_label = today.strftime("%B %d")
+    interest_str = ", ".join(interests) if interests else "general curiosity"
     prompt = prompts.EVENT_SELECTION_PROMPT.format(
-        date=date_label, holiday_context=holiday_block, interests=interests,
+        date=date_label, holiday_context=holiday_block, interests=interest_str,
     )
     for attempt in range(_EVENT_ATTEMPTS):
         event = await generation_client.generate_text(settings, prompt)
@@ -91,7 +113,8 @@ async def _select_event(
             return event
         logger.info("event failed fact-check (try %d/%d): %s",
                     attempt + 1, _EVENT_ATTEMPTS, event)
-    # Fallback: a generic, well-known event — also fact-checked.
+
+    # 3) Generic, well-known fallback — also fact-checked.
     generic = await generation_client.generate_text(
         settings, prompts.GENERIC_EVENT_PROMPT.format(date=date_label))
     if await _fact_check(settings, generic, date_label):

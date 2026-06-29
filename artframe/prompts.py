@@ -59,6 +59,21 @@ Otherwise — the event is real and plausibly tied to {date} — reply ACCURATE.
 Do not reject a real event just because you are unsure of its exact date.
 Answer with a single word on the first line: ACCURATE or INACCURATE."""
 
+# Topic-forced selection: ask explicitly for ONE interest category, so the model
+# can't default to its favourite topics (space/tech) and ignore the interests.
+INTEREST_EVENT_PROMPT = """Name one real, well-known, positive event in the category
+"{interest}" that happened on {date} — this exact month and day — in some past year.
+
+Rules:
+- It MUST have occurred on {date} (this month and day). Do not use other dates.
+- It must clearly belong to "{interest}" (sports → a match, record, championship,
+  or athlete; music → a concert, album, performance, composer, or musician;
+  cinema → a film release, premiere, or filmmaker; and so on).
+- Positive and inspiring. Avoid war, violence, tragedy, and copyrighted characters.
+
+Write 15-25 words describing it, with no introduction. If you genuinely cannot
+recall a real "{interest}" event on {date}, reply with exactly: NONE"""
+
 # Fallback if the model's picks keep failing the fact-check.
 GENERIC_EVENT_PROMPT = """Name one very well-known, indisputable event or fact
 associated with {date} (for example a famous birth, a discovery, an invention,
