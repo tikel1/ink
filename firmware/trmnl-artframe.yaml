@@ -328,10 +328,11 @@ display:
       // the last frame before deep sleep, so the retained e-ink shows it the
       // whole time the frame is asleep.
       if (id(g_asleep)) {
-        // small crescent moon, top-right corner
-        int cx = 772, cy = 28, r = 13;
-        it.filled_circle(cx, cy, r, Color::BLACK);           // full disc (~26px)
-        it.filled_circle(cx + 7, cy - 3, r, Color::WHITE);   // carve -> crescent
+        // small crescent moon, top-right corner. A small black disc carved by a
+        // slightly larger, offset white disc -> a thin, clear crescent (~18px).
+        int cx = 778, cy = 24;
+        it.filled_circle(cx, cy, 9, Color::BLACK);
+        it.filled_circle(cx + 6, cy - 4, 10, Color::WHITE);
       }
 
 image:
