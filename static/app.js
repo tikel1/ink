@@ -216,6 +216,16 @@ function startHomeAutoRefresh() {
 }
 function stopHomeAutoRefresh() { if (homeArtTimer) { clearInterval(homeArtTimer); homeArtTimer = null; } }
 
+// Manual refresh from home: re-pull the latest artwork into the frame on screen
+// and tell the physical frame to re-fetch + redraw.
+async function homeRefresh(btn) {
+  if (!currentId) return;
+  if (btn) btn.classList.add("busy");
+  refreshHomeArt();
+  await sendCommand("refresh", "Refreshing the frame…");
+  if (btn) setTimeout(() => btn.classList.remove("busy"), 900);
+}
+
 function renderHomeFrame(d) {
   currentId = d.id; currentDevice = d;
   $("home-frame").classList.toggle("is-portrait", d.orientation === "portrait");
@@ -432,6 +442,7 @@ function wireFrame() {
   $("goto-settings").addEventListener("click", openSettings);
   $("home-art-btn").addEventListener("click", () => openFrame(currentId));
   $("home-more").addEventListener("click", () => openFrame(currentId));
+  $("home-refresh-btn").addEventListener("click", (e) => homeRefresh(e.currentTarget));
   $("gallery").addEventListener("scroll", onGalleryScroll, { passive: true });
   $("refresh-btn").addEventListener("click", async () => {
     const btn = $("refresh-btn"); btn.classList.add("busy");

@@ -439,6 +439,10 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .gear-btn { margin-left: auto; background: none; border: none; cursor: pointer; padding: 8px;
             border-radius: 50%; color: var(--ink-soft); transition: background .2s, color .2s; }
 .gear-btn:hover { background: rgba(27,24,19,.07); color: var(--ink); }
+/* Refresh sits with the gear in the right-hand cluster of the home header. */
+.home-top .home-refresh { margin-left: auto; }
+.home-top .home-refresh + .gear-btn { margin-left: 0; }
+.home-refresh.busy svg { animation: spin 1s linear infinite; }
 .frame-screen .home-top .back { font-size: 26px; line-height: 1; padding: 0 6px 0 0; color: var(--ink-soft); }
 
 /* Sit the artwork toward the top (just below the header) rather than vertically
