@@ -150,6 +150,7 @@
       <section class="placard">
         <p class="placard-eyebrow" id="ev-meta">On view today</p>
         <p class="placard-body" id="ev-text">—</p>
+        <button type="button" id="ev-more" class="read-more" hidden>Read more</button>
         <p class="placard-sign" id="ev-sign" hidden></p>
       </section>
 
@@ -313,18 +314,24 @@
         <div><dt>Firmware</dt><dd id="spec-fw">—</dd></div>
         <div><dt>Frame ID</dt><dd id="spec-id" class="mono">—</dd></div>
       </dl>
+      <button id="check-fw-btn" type="button" class="btn-ghost wide">Check for updates</button>
+      <p id="fw-status-hint" class="hint center-text"></p>
 
       <div class="card">
         <h3>Buttons</h3>
         <ul class="buttons-help">
-          <li><b>KEY1</b><span>Sleep / wake — press to put the frame to sleep, press again to wake it.</span></li>
+          <li><b>KEY1</b><span>Sleep / wake — tap to put the frame to sleep, tap again to wake it.</span></li>
           <li><b>KEY2</b><span>Refresh — re‑fetch and redraw the current artwork.</span></li>
-          <li><b>KEY3</b><span>Wake — also wakes the frame from sleep. Hold ~15 s to factory‑reset (clears Wi‑Fi &amp; pairing, returns to the welcome screen).</span></li>
+          <li><b>KEY3</b><span>Wake — wakes the frame from sleep.</span></li>
+          <li><b>KEY1 + KEY3</b><span>Factory reset — hold both together for ~15 s to wipe Wi‑Fi &amp; pairing and return to onboarding.</span></li>
         </ul>
       </div>
 
       <button id="disconnect-btn" type="button" class="btn-danger">Disconnect &amp; forget this frame</button>
-      <p class="hint center-text">Forgetting clears this frame's settings and returns it to onboarding.</p>
+      <p class="hint center-text">Forgetting unpairs this frame from your account. It keeps its Wi‑Fi and shows the pairing screen, ready to re‑add.</p>
+
+      <button id="factory-btn" type="button" class="btn-danger">Factory restore</button>
+      <p class="hint center-text">Full wipe: clears Wi‑Fi <em>and</em> pairing on the frame and returns it to onboarding from scratch — for re‑gifting or moving networks. The frame must be online.</p>
     </section>
 
     <!-- ───────────────────────── App settings ───────────────────────────── -->
@@ -391,6 +398,17 @@
   </div>
 
   <div id="toast" class="toast" hidden></div>
+
+  <!-- Firmware-update toast: pinned to the top, black on white text. Re-checked
+       on every app launch; "Close" dismisses it for this session only. -->
+  <div id="fw-toast" class="fw-toast" hidden role="status">
+    <div class="fw-toast-text">
+      <strong id="fw-toast-title">A frame update is ready</strong>
+      <span id="fw-toast-sub" class="fw-toast-sub"></span>
+    </div>
+    <button id="fw-toast-update" type="button" class="fw-toast-btn">Update</button>
+    <button id="fw-toast-close" type="button" class="fw-toast-x" aria-label="Close">✕</button>
+  </div>
 
   <!-- Zoom lightbox: tap an artwork in the gallery to view it large -->
   <div id="lightbox" class="lightbox" hidden>

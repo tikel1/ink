@@ -44,10 +44,10 @@ let currentScreen = null;
 // Toggle which screen is visible (no history side effects).
 function setScreen(name) {
   for (const s of SCREENS) $(`screen-${s}`).hidden = s !== name;
-  // Home is the only single, fixed viewport (no scroll). Every other screen —
-  // including the Frame screen — scrolls so long content (e.g. the full daily
-  // description) is always reachable.
-  const fixed = name === "home";
+  // Home and the Frame screen are fixed single viewports (no scroll). The Frame
+  // screen can temporarily unlock when its description is expanded via "Read
+  // more" (handled in setFrameExpanded).
+  const fixed = name === "home" || name === "frame";
   $("app").classList.toggle("locked", fixed);
   // Also lock the <body> so the page itself can't scroll/rubber-band a few pixels
   // (overflow:hidden on #app alone doesn't stop body-level scroll).
@@ -211,6 +211,7 @@ async function showHome(preferId) {
   renderFrameSwitch(dev.id);
   startHomeAutoRefresh();
   maybeShowInstallBanner();
+  checkFirmwareUpdates();   // re-evaluated on every app launch / home entry
 }
 
 // Keep the home image current without a manual button: re-pull silently (preload
@@ -265,22 +266,77 @@ function renderFrameStatus(d) {
   const st = frameState(d);
   $("fr-dot").className = `dot ${st.cls}`;
   $("fr-status").textContent = st.sub ? `${st.label} · ${st.sub}` : st.label;
-  renderFrameUpdate(d, st);
 }
-// The frame pulls firmware over the air, but only while it's awake and polling
-// (cls "s-on"). So we surface the banner whenever an update exists, but only
-// enable the push when the frame is online — otherwise it would never arrive.
-function renderFrameUpdate(d, st) {
-  const banner = $("fw-update");
-  if (!banner) return;
-  const has = !!(d && d.update_available);
-  banner.hidden = !has;
-  if (!has) return;
-  const online = (st || frameState(d)).cls === "s-on";
-  $("fw-update-ver").textContent = `${d.fw_version || "?"} → ${d.latest_fw || "?"}`;
-  const btn = $("fw-update-btn");
-  btn.disabled = !online || otaInFlight;
-  btn.textContent = otaInFlight ? "Updating…" : (online ? "Update" : "Frame offline");
+
+// --------------------------------------------------------------------------
+// Firmware updates: the app is the moderator. It compares each frame's reported
+// version (fw_version) to the backend's published version (update_available),
+// surfaces a top toast, and lets the user start the OTA — which the frame pulls
+// + flashes itself. We never push to the frame from the browser.
+// --------------------------------------------------------------------------
+let updateDismissed = false;     // session-only: a Close hides the toast until relaunch
+let otaTargetId = null;          // the frame the toast's Update button targets
+const OTA_MIN_BATTERY = 50;      // %; below this we require USB power (flash safety)
+
+// OTA can only succeed when the frame is awake/polling AND safely powered: on USB,
+// or on a battery with enough charge to survive the write. Mirrors the firmware
+// backstop so the app never offers an update that would be refused or risky.
+function otaBlockReason(d) {
+  if (!d || !d.update_available) return "no-update";
+  if (frameState(d).cls !== "s-on") return "offline";
+  const bat = batteryPct(d.battery);
+  if (d.power_source !== "usb" && bat != null && bat < OTA_MIN_BATTERY) return "battery";
+  return null;   // good to go
+}
+
+// Scan all paired frames for an available update and show the toast for the
+// first one (unless dismissed this session). Runs on every app launch via showHome.
+function checkFirmwareUpdates() {
+  const d = (devices || []).find((x) => x.update_available);
+  if (!d || updateDismissed) { hideUpdateToast(); return d || null; }
+  showUpdateToast(d);
+  return d;
+}
+
+function showUpdateToast(d) {
+  otaTargetId = d.id;
+  const many = (devices || []).length > 1;
+  $("fw-toast-title").textContent = many
+    ? `Update ready for ${displayName(d)}`
+    : "A frame update is ready";
+  const reason = otaBlockReason(d);
+  const sub = reason === "offline" ? "Wake the frame to update"
+            : reason === "battery" ? `Plug in to update (battery ${batteryPct(d.battery)}%)`
+            : `Version ${d.fw_version || "?"} → ${d.latest_fw || "?"}`;
+  $("fw-toast-sub").textContent = sub;
+  const btn = $("fw-toast-update");
+  btn.disabled = otaInFlight || (reason && reason !== null);
+  btn.textContent = otaInFlight ? "Updating…" : "Update";
+  $("fw-toast").hidden = false;
+}
+function hideUpdateToast() { $("fw-toast").hidden = true; }
+
+// Start the OTA for a frame: re-validate gating, confirm, queue the 'ota' command.
+async function startFrameOta(deviceId) {
+  const d = (devices || []).find((x) => x.id === deviceId) || currentDevice;
+  const reason = otaBlockReason(d);
+  if (reason === "offline") return toast("Wake the frame first — it must be online to update");
+  if (reason === "battery") return toast("Plug the frame into power before updating");
+  if (reason) return;
+  if (!confirm(`Update ${displayName(d)} to ${d.latest_fw || "the latest version"}?\n\nThe frame downloads the new firmware and restarts — about a minute. Keep it powered.`)) return;
+  otaInFlight = true;
+  $("fw-toast-update").disabled = true; $("fw-toast-update").textContent = "Updating…";
+  try {
+    await api(`/devices/${deviceId}/command`, { method: "POST", body: { cmd: "ota" } });
+    toast("Updating… the frame will download and restart.");
+  } catch (e) { otaInFlight = false; return toast(e.message); }
+  // The frame reboots onto the new version and re-checks in; clear the lock after
+  // a grace period and re-evaluate from fresh telemetry.
+  setTimeout(async () => {
+    otaInFlight = false;
+    try { ({ devices } = await api("/devices")); } catch {}
+    checkFirmwareUpdates();
+  }, 90000);
 }
 async function pollFrameStatus() {
   renderFrameStatus(currentDevice);              // age the relative time first
@@ -504,6 +560,25 @@ function setPlacard(m) {
   en.textContent = m.event_text_en || "—";
   const sig = currentDevice && currentDevice.signature;
   if (sig) { sign.textContent = `— ${sig}`; sign.hidden = false; } else sign.hidden = true;
+  updateReadMore();
+}
+
+// The Frame screen is a fixed one viewport. The description is clamped to 4
+// lines; if it's longer, a "Read more" toggle expands it (and lets the screen
+// scroll while expanded so the full text is reachable).
+function setFrameExpanded(on) {
+  $("screen-frame").classList.toggle("expanded", on);
+  $("ev-more").textContent = on ? "Read less" : "Read more";
+  // Expanded → allow the page to scroll; collapsed → fixed one viewport.
+  $("app").classList.toggle("locked", !on);
+  document.body.classList.toggle("home-locked", !on);
+  if (!on) window.scrollTo(0, 0);
+}
+function updateReadMore() {
+  const ev = $("ev-text"), btn = $("ev-more");
+  if (!btn) return;
+  setFrameExpanded(false);                       // collapse + measure the clamped text
+  btn.hidden = ev.scrollHeight <= ev.clientHeight + 2;
 }
 
 function renderDots(active, total) {
@@ -574,6 +649,7 @@ function wireFrame() {
   $("goto-settings").addEventListener("click", openSettings);
   $("home-art-btn").addEventListener("click", () => openFrame(currentId));
   $("home-more").addEventListener("click", () => openFrame(currentId));
+  $("ev-more").addEventListener("click", () => setFrameExpanded(!$("screen-frame").classList.contains("expanded")));
   wirePullToRefresh();
   $("gallery").addEventListener("scroll", onGalleryScroll, { passive: true });
   $("refresh-btn").addEventListener("click", async () => {
@@ -584,15 +660,6 @@ function wireFrame() {
   });
   $("sleep-btn").addEventListener("click", async () => {
     await sendCommand("sleep", "Putting the frame to sleep…");
-  });
-  $("fw-update-btn").addEventListener("click", async () => {
-    if (!confirm(`Update the frame to ${currentDevice?.latest_fw || "the latest version"}?\n\nIt downloads the new firmware and restarts — this takes about a minute.`)) return;
-    otaInFlight = true;
-    renderFrameUpdate(currentDevice);
-    await sendCommand("ota", "Updating… the frame will download and restart.");
-    // The frame reboots and re-checks in on the new version; clear the in-flight
-    // lock after a grace period so the banner re-evaluates from fresh telemetry.
-    setTimeout(() => { otaInFlight = false; pollFrameStatus(); }, 90000);
   });
   $("regen-btn").addEventListener("click", async () => {
     const id = currentId; setBusy(true);
@@ -917,6 +984,23 @@ function wireSettings() {
       toast("Couldn't disconnect — frame is still connected");
     } finally { btn.disabled = false; }
   });
+  $("check-fw-btn").addEventListener("click", async () => {
+    const btn = $("check-fw-btn"); btn.disabled = true;
+    const hint = $("fw-status-hint"); hint.textContent = "Checking…";
+    try {
+      const d = await api(`/devices/${currentId}`);
+      currentDevice = d; syncDeviceCache(d);
+      $("spec-fw").textContent = d.fw_version || "—";
+      if (d.update_available) {
+        updateDismissed = false;             // user explicitly asked → allow the toast again
+        hint.textContent = `Update available: ${d.fw_version || "?"} → ${d.latest_fw || "?"}`;
+        showUpdateToast(d);
+      } else {
+        hint.textContent = `Up to date (${d.fw_version || "—"})`;
+      }
+    } catch (e) { hint.textContent = "Couldn't check — " + e.message; }
+    finally { btn.disabled = false; }
+  });
   $("factory-btn").addEventListener("click", async () => {
     if (frameState(currentDevice).cls !== "s-on") {
       toast("Wake the frame first — it must be online to factory restore");
@@ -1036,6 +1120,12 @@ function wireScanner() {
   $("scan-cancel").addEventListener("click", stopScan);
 }
 
+function wireUpdateToast() {
+  $("fw-toast-update").addEventListener("click", () => { if (otaTargetId) startFrameOta(otaTargetId); });
+  // Close hides it for this session only — a relaunch re-checks and re-shows it.
+  $("fw-toast-close").addEventListener("click", () => { updateDismissed = true; hideUpdateToast(); });
+}
+
 async function startScan() {
   $("pair-error").hidden = true;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -1104,7 +1194,7 @@ async function resolveServer() {
 
 async function init() {
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
-  wireWelcome(); wireConnect(); wireFrame(); wireArtwork(); wireSettings(); wireAccount(); wireInstall(); wireScanner(); wireLightbox();
+  wireWelcome(); wireConnect(); wireFrame(); wireArtwork(); wireSettings(); wireAccount(); wireInstall(); wireScanner(); wireLightbox(); wireUpdateToast();
   // When the app/tab regains focus, make sure the home shows the latest artwork.
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshHomeArt(); });
   window.addEventListener("focus", refreshHomeArt);
