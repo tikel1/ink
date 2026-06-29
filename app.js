@@ -206,7 +206,7 @@ function renderHomeFrame(d) {
   $("home-sleep-hint").hidden = !asleep;
   $("home-explain").textContent = "Loading today's work…";
   loadArtwork($("home-art-img"), $("home-skeleton"), d.id, () => {
-    $("home-explain").textContent = "No artwork yet — open the frame and tap Regenerate.";
+    $("home-explain").textContent = "No artwork yet — open the frame and tap Generate.";
   });
   loadExplain(d.id);
 }
@@ -246,7 +246,7 @@ function wireConnect() {
       if (nm) { try { await api(`/devices/${dev.id}/config`, { method: "PUT", body: { name: nm } }); } catch {} }
       $("pair-code").value = ""; $("pair-name").value = ""; toast("Paired!");
       await openFrame(dev.id);
-      flash("action-msg", "Paired! Go ahead and tap Regenerate to create your first artwork.");
+      flash("action-msg", "Paired! Go ahead and tap Generate to create your first artwork.");
     } catch (e2) { showError("pair-error", e2); }
   });
 }
@@ -293,7 +293,7 @@ async function loadGallery(id) {
   frameItems = items || [];
   const g = $("gallery");
   if (!frameItems.length) {
-    g.innerHTML = slideCard(isPortraitItem(null), `<div class="art-empty">No artwork yet —<br>tap Regenerate to create today's work.</div>`);
+    g.innerHTML = slideCard(isPortraitItem(null), `<div class="art-empty">No artwork yet —<br>tap Generate to create today's work.</div>`);
     setPlacard(null); renderDots(0, 0); return;
   }
   g.innerHTML = frameItems.map((m) => slideCard(isPortraitItem(m), `<img alt="artwork" />`)).join("");
@@ -360,8 +360,10 @@ function onGalleryScroll() {
 }
 
 function setBusy(on) {
-  $("regen-btn").disabled = on; $("regen-btn").textContent = on ? "Regenerating…" : "Regenerate";
-  $("regen-btn").classList.toggle("busy", on);
+  const b = $("regen-btn");
+  b.disabled = on;
+  b.innerHTML = on ? '<span class="spin-sm" aria-hidden="true"></span>Generating…' : "Generate";
+  b.classList.toggle("busy", on);
   $("gallery").classList.toggle("busy", on);
 }
 async function pollGeneration(id) {
@@ -753,7 +755,7 @@ async function syncByCode(code) {
   try {
     const dev = await api("/devices/pair", { method: "POST", body: { pairing_code: code } });
     toast("Paired!"); await openFrame(dev.id);
-    flash("action-msg", "Paired! Go ahead and tap Regenerate to create your first artwork.");
+    flash("action-msg", "Paired! Go ahead and tap Generate to create your first artwork.");
   } catch (e) { await showHome(); go("connect"); $("pair-code").value = code; showError("pair-error", e); }
 }
 

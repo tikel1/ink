@@ -243,6 +243,10 @@ input:focus, select:focus { outline: none; border-color: var(--ink);
 .icon-action:disabled { opacity: .38; cursor: default; box-shadow: none; }
 .icon-action.busy svg { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* In-button spinner for the Generate loading state — clearly animated. */
+.spin-sm { display: inline-block; width: 15px; height: 15px; margin-right: 8px; vertical-align: -2px;
+           border: 2px solid rgba(231,223,206,.35); border-top-color: var(--paper);
+           border-radius: 50%; animation: spin .8s linear infinite; }
 .actions-row .btn-ghost { flex: 0 0 38%; }
 .actions-row .btn-primary { flex: 1; }
 .nav-list { margin-top: 18px; display: grid; gap: 10px; }
