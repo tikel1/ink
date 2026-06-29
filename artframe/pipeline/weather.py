@@ -55,21 +55,38 @@ class WeatherSummary:
 
 
 async def fetch_weather(lat: float, lon: float) -> WeatherSummary:
-    """Fetch today's condition + max temperature for the given location."""
+    """Fetch today's representative condition + temperature for the location.
+
+    Uses the condition at the *warmest hour* rather than the daily aggregate
+    `weather_code` (which reports the day's "most significant" weather — e.g. a
+    brief morning coastal fog — and would otherwise be shown next to the
+    afternoon max temperature, giving nonsense like "fog, 30°C").
+    """
     params = {
         "latitude": lat,
         "longitude": lon,
-        "daily": "weather_code,temperature_2m_max",
+        "hourly": "weather_code,temperature_2m",
+        "daily": "temperature_2m_max",
         "timezone": "auto",
         "forecast_days": 1,
     }
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
         response = await client.get(OPEN_METEO_URL, params=params)
         response.raise_for_status()
-        daily = response.json()["daily"]
+        data = response.json()
 
-    code = int(daily["weather_code"][0])
-    temp = round(float(daily["temperature_2m_max"][0]))
+    hourly = data.get("hourly") or {}
+    temps = hourly.get("temperature_2m") or []
+    codes = hourly.get("weather_code") or []
+    if temps and codes:
+        warmest = max(range(len(temps)), key=lambda i: temps[i])
+        code = int(codes[warmest])
+        temp = round(float(temps[warmest]))
+    else:  # fallback to the daily aggregate if hourly is unavailable
+        daily = data.get("daily") or {}
+        code = int((daily.get("weather_code") or [0])[0])
+        temp = round(float((daily.get("temperature_2m_max") or [0])[0]))
+
     return WeatherSummary(
         condition=_WMO_CONDITIONS.get(code, "clear"), temperature_c=temp
     )
