@@ -26,6 +26,7 @@ substitutions:
   # edit this one file — no reflash. Falls back to backend_base if unreachable.
   config_url: "https://tikel1.github.io/ink/server.txt"
   app_url: "https://tikel1.github.io/ink/"   # QR on the setup screen points here
+  fw_label: "ink-1.0"                         # firmware version reported to the app
   timezone: "Asia/Jerusalem"
   idle_minutes: "10"               # battery: sleep after this much idle time
   powered_voltage: "4.15"          # >= this reads as "on USB power" (calibrate)
@@ -252,7 +253,13 @@ interval:
   - interval: 60s
     then:
       - http_request.get:
-          url: !lambda 'return id(g_backend) + "/media/current/" + get_mac_address() + ".ver";'
+          # Piggyback telemetry on the poll so the app can show battery / Wi-Fi /
+          # firmware (the backend reads these query params on the .ver check-in).
+          url: !lambda |-
+            char q[72];
+            snprintf(q, sizeof(q), ".ver?bat=%.2f&rssi=%d&fw=${fw_label}",
+                     id(batt).state, (int) WiFi.RSSI());
+            return id(g_backend) + "/media/current/" + get_mac_address() + q;
           collect_headers: ["x-ver", "x-power", "x-sleep", "x-wake", "x-wake-secs", "x-orient", "x-cmd"]
           on_response:
             then:

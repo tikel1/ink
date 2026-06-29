@@ -222,11 +222,16 @@ def take_pending_command(device_id: str) -> str:
 
 
 def update_telemetry(device_id: str, **fields: object) -> None:
-    # A check-in means the frame is awake — clear the sleeping flag.
+    # A check-in means the frame is awake — clear the sleeping flag. Only overwrite
+    # battery/rssi/firmware when the check-in actually carried them (COALESCE keeps
+    # the last known value), so a bare poll doesn't wipe them back to NULL.
     with get_connection() as conn:
         conn.execute(
-            """UPDATE devices SET last_seen = ?, battery = ?, wifi_rssi = ?,
-               fw_version = ?, sleeping = 0 WHERE id = ?""",
+            """UPDATE devices SET last_seen = ?, sleeping = 0,
+               battery = COALESCE(?, battery),
+               wifi_rssi = COALESCE(?, wifi_rssi),
+               fw_version = COALESCE(?, fw_version)
+               WHERE id = ?""",
             (
                 now_iso(),
                 fields.get("battery"),

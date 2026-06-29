@@ -48,10 +48,17 @@ async def current(device_id: str) -> Response:
 
 
 @router.get("/current/{device_id}.ver")
-async def current_version(device_id: str) -> Response:
+async def current_version(
+    device_id: str,
+    bat: float | None = None,
+    rssi: int | None = None,
+    fw: str | None = None,
+) -> Response:
     """Tiny version stamp the frame polls so it re-fetches only when the artwork
-    actually changed (avoids constant e-ink refreshes). Also counts as a check-in."""
-    repositories.update_telemetry(device_id)
+    actually changed (avoids constant e-ink refreshes). Also counts as a check-in;
+    the frame piggybacks its telemetry (battery V, Wi-Fi RSSI, firmware) as query
+    params so the app can show them."""
+    repositories.update_telemetry(device_id, battery=bat, wifi_rssi=rssi, fw_version=fw)
     device = repositories.get_device(device_id)
     if device is not None and device.status != "paired":
         # Unpaired (e.g. just unbound from the app) -> a version distinct from the
