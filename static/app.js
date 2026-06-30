@@ -437,86 +437,77 @@ function startFrameStatusPoll() {
 }
 function stopFrameStatusPoll() { if (frameStatusTimer) { clearInterval(frameStatusTimer); frameStatusTimer = null; } }
 
-// Refresh from home: with a frame connected, re-pull the latest artwork and tell
-// the frame to re-fetch + redraw. With no frame yet (empty state), re-check the
-// device list so a freshly paired frame shows up.
+// Pull-to-refresh re-syncs the APP's view only — it never commands the physical
+// frame (that's the dedicated Refresh button's job).
+//   • Home: re-pull the latest artwork (or re-check devices in the empty state).
+//   • Frame: reload the gallery from the backend.
 async function homeRefresh() {
   if (!currentId) { await showHome(); return; }
   refreshHomeArt();
-  await sendCommand("refresh", "Refreshing the frame…");
 }
-
-// Pull-to-refresh. Home is one locked viewport, so we own the gesture entirely
-// (touch-action:none covers the children too). The page UI never moves — only
-// the spinner descends; releasing past the threshold refreshes, a short pull
-// springs back.
-// Frame-screen pull action: re-pull the gallery + tell the frame to redraw.
 async function frameRefresh() {
   if (!currentId) return;
   await loadGallery(currentId);
-  await sendCommand("refresh", "Refreshing the frame…");
 }
 
-// Pull-to-refresh, shared by the home + frame screens via a single fixed spinner.
-// Direction is detected first so a horizontal gallery swipe is never hijacked,
-// and the pointer is captured once a vertical pull commits so it can't get "lost"
-// mid-drag (that was why it didn't stick). Only fires at scroll-top.
-const PULL_START = 6, PULL_THRESHOLD = 64, PULL_MAX = 130, PULL_REST = 38;
+// Pull-to-refresh, shared by the home + frame screens via one absolute spinner.
+// Touch-events implementation (the mobile-reliable best practice): engage only
+// at scroll-top on a downward-dominant drag (so a horizontal gallery swipe is
+// never hijacked), move the pill with resistance, preventDefault to own the
+// gesture, and on release past the threshold play a pop then spring back.
+const PULL_SLOP = 8, PULL_RESIST = 0.5, PULL_THRESHOLD = 56, PULL_MAX = 110, PULL_REST = 38;
 function attachPullToRefresh(screenName, onRefresh) {
   const screen = $("screen-" + screenName);
   const sp = $("pull-spinner");
-  let startY = null, startX = null, active = false, decided = false, dist = 0, busy = false, pid = null;
+  let startY = null, startX = 0, pulling = false, dist = 0, busy = false;
+  const atTop = () => (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
 
   const render = (d) => {
     const p = Math.min(1, d / PULL_THRESHOLD);
     sp.style.transition = "";
     sp.style.opacity = String(p);
-    sp.style.transform = `translateY(${d * 0.42}px) scale(${0.7 + p * 0.3}) rotate(${d * 2.6}deg)`;
+    sp.style.transform = `translateY(${d}px) scale(${0.7 + p * 0.3}) rotate(${d * 2.4}deg)`;
   };
   const springBack = () => {
     sp.style.transition = "opacity .25s var(--ease), transform .25s var(--ease)";
     sp.style.opacity = ""; sp.style.transform = "";
   };
-  const reset = () => { startY = startX = pid = null; active = decided = false; dist = 0; };
-  const atTop = () => (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
 
-  screen.addEventListener("pointerdown", (e) => {
-    if (busy || currentScreen !== screenName || !atTop()) return;
-    startY = e.clientY; startX = e.clientX; pid = e.pointerId; active = false; decided = false; dist = 0;
-  });
-  screen.addEventListener("pointermove", (e) => {
-    if (startY == null || busy) return;
-    const dy = e.clientY - startY, dx = e.clientX - startX;
-    if (!decided) {
-      if (Math.abs(dy) < PULL_START && Math.abs(dx) < PULL_START) return;
-      decided = true;
-      // Horizontal (e.g. gallery swipe) or upward → let the browser have it.
-      if (Math.abs(dx) > Math.abs(dy) || dy <= 0) { startY = null; return; }
-      try { screen.setPointerCapture(pid); } catch (_) {}
+  screen.addEventListener("touchstart", (e) => {
+    if (busy || currentScreen !== screenName || !atTop() || e.touches.length !== 1) { startY = null; return; }
+    startY = e.touches[0].clientY; startX = e.touches[0].clientX; pulling = false; dist = 0;
+  }, { passive: true });
+
+  screen.addEventListener("touchmove", (e) => {
+    if (startY == null || busy || e.touches.length !== 1) return;
+    const dy = e.touches[0].clientY - startY;
+    const dx = e.touches[0].clientX - startX;
+    if (!pulling) {
+      if (dy < PULL_SLOP) return;                  // not a downward pull yet
+      if (Math.abs(dx) > dy) { startY = null; return; }   // horizontal → leave it to the browser (gallery)
+      pulling = true;
     }
-    if (dy <= 0) { if (active) { active = false; dist = 0; springBack(); } return; }
-    active = true; dist = Math.min(dy, PULL_MAX);
+    dist = Math.min(dy * PULL_RESIST, PULL_MAX);    // follow the finger with resistance + cap
     render(dist);
-    if (e.cancelable) e.preventDefault();
+    if (e.cancelable) e.preventDefault();           // own the vertical gesture
   }, { passive: false });
 
-  const end = async () => {
-    if (startY == null) { reset(); return; }
-    const trigger = active && dist >= PULL_THRESHOLD;
-    try { if (pid != null) screen.releasePointerCapture(pid); } catch (_) {}
-    reset();
-    if (!trigger) { springBack(); return; }
-    // Committed: play a one-shot "pop" at the rest position, then spring back —
-    // independent of how long the refresh takes (its status shows via toast).
-    busy = true;
+  const end = () => {
+    if (startY == null) return;
+    const trigger = pulling && dist >= PULL_THRESHOLD;
+    startY = null; pulling = false;
+    if (!trigger) { dist = 0; springBack(); return; }
+    // Committed: pop at the rest position, then spring back — independent of how
+    // long the (background) refresh takes.
+    dist = 0; busy = true;
     sp.style.transition = "";
     sp.style.opacity = "1"; sp.style.transform = `translateY(${PULL_REST}px) scale(1)`;
     sp.classList.add("engaged");
-    onRefresh();                                   // fire-and-forget; toasts report status/errors
-    setTimeout(() => { sp.classList.remove("engaged"); springBack(); busy = false; }, 520);
+    onRefresh();
+    setTimeout(() => { sp.classList.remove("engaged"); springBack(); busy = false; }, 560);
   };
-  screen.addEventListener("pointerup", end);
-  screen.addEventListener("pointercancel", end);
+  screen.addEventListener("touchend", end);
+  screen.addEventListener("touchcancel", end);
 }
 
 function renderHomeFrame(d) {

@@ -645,7 +645,8 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
    controls + nav stay on screen. The daily description is clamped to 4 lines;
    "Read more" expands it and unlocks the screen so the rest is reachable. */
 .frame-screen { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
-.frame-screen .gallery { flex: 1 1 auto; min-height: 0; align-items: center; margin: 4px -20px 0; padding: 6px 0; }
+.frame-screen .gallery { flex: 1 1 auto; min-height: 0; align-items: center; margin: 4px -20px 0; padding: 6px 0;
+  touch-action: pan-x; }   /* horizontal swipe stays native; vertical is the pull-to-refresh */
 .frame-screen .slide { height: 100%; }
 .frame-screen .art-card { max-height: 100%; }
 .frame-screen .art-card:not(.is-portrait) img { max-height: 100%; max-width: 100%; width: auto; height: auto; }
