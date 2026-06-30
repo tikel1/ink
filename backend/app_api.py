@@ -41,7 +41,10 @@ class ConfigUpdate(BaseModel):
     holiday_global: bool | None = None
     orientation: str | None = Field(default=None, pattern=r"^(landscape|portrait)$")
     show_date: bool | None = None
-    date_format: str | None = Field(default=None, pattern=r"^(weekday|month_day|abbr_year|dmy|mdy)$")
+    # Token format string (ddd/dddd/MMM/MMMM/MM/D/Do/DD/YYYY/YY + separators) or a
+    # legacy enum key. Constrained charset/length; the renderer treats unknown
+    # letters as literals so a custom string can't break generation.
+    date_format: str | None = Field(default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9 ,/.'\-]+$")
     show_weather: bool | None = None
     use_weather: bool | None = None
     use_event: bool | None = None

@@ -925,6 +925,87 @@ function renderInterestChips() {
   }
 }
 
+// ── Date format ────────────────────────────────────────────────────────────
+// Token vocabulary + formatter MUST match artframe/constants.py format_date so the
+// preview here equals what's drawn on the frame. Presets are previewed live on
+// today's date; "Custom…" reveals a free-text field + a token reference.
+const DATE_PRESETS = [
+  "ddd MMM D",        // Tue Jun 30
+  "dddd, MMMM Do",    // Tuesday, June 30th
+  "dddd MMMM Do",     // Tuesday June 30th
+  "MMMM Do",          // June 30th
+  "MMM D",            // Jun 30
+  "Do MMMM YYYY",     // 30th June 2026
+  "DD/MM/YYYY",       // 30/06/2026
+  "MM/DD/YYYY",       // 06/30/2026
+];
+const DATE_TOKENS = [
+  ["dddd", "Weekday"], ["ddd", "Weekday, short"],
+  ["MMMM", "Month"], ["MMM", "Month, short"], ["MM", "Month, 2-digit"],
+  ["Do", "Day + ordinal"], ["D", "Day"], ["DD", "Day, 2-digit"],
+  ["YYYY", "Year"], ["YY", "Year, 2-digit"],
+];
+const DATE_TOKEN_RE = /dddd|ddd|MMMM|MMM|MM|YYYY|YY|DD|Do|D/g;
+const DATE_LEGACY = { weekday: "ddd, MMM DD", month_day: "MMMM DD", abbr_year: "MMM DD, YYYY", dmy: "DD/MM/YYYY", mdy: "MM/DD/YYYY" };
+function dateOrdinal(n) {
+  const s = (n % 100 >= 10 && n % 100 <= 20) ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th");
+  return `${n}${s}`;
+}
+function formatDate(d, fmt) {
+  fmt = DATE_LEGACY[fmt] || fmt || DATE_LEGACY.weekday;
+  const en = (opt) => d.toLocaleDateString("en-US", opt);   // English to match server strftime
+  const map = {
+    dddd: en({ weekday: "long" }), ddd: en({ weekday: "short" }),
+    MMMM: en({ month: "long" }), MMM: en({ month: "short" }), MM: String(d.getMonth() + 1).padStart(2, "0"),
+    Do: dateOrdinal(d.getDate()), D: String(d.getDate()), DD: String(d.getDate()).padStart(2, "0"),
+    YYYY: String(d.getFullYear()), YY: String(d.getFullYear() % 100).padStart(2, "0"),
+  };
+  return fmt.replace(DATE_TOKEN_RE, (t) => map[t]);
+}
+function buildDateOptions() {
+  const sel = $("date-format"); if (!sel) return;
+  const today = new Date();
+  sel.innerHTML = "";
+  for (const fmt of DATE_PRESETS) {
+    const o = document.createElement("option");
+    o.value = fmt; o.textContent = formatDate(today, fmt);
+    sel.appendChild(o);
+  }
+  const c = document.createElement("option");
+  c.value = "custom"; c.textContent = "Custom…";
+  sel.appendChild(c);
+  const dl = $("date-token-list");
+  if (dl && !dl.childElementCount) {
+    for (const [tok, desc] of DATE_TOKENS) {
+      const dt = document.createElement("dt"); dt.textContent = tok;
+      const dd = document.createElement("dd"); dd.textContent = `${desc} → ${formatDate(today, tok)}`;
+      dl.append(dt, dd);
+    }
+  }
+}
+const currentDateFormat = () =>
+  $("date-format").value === "custom" ? ($("date-custom").value.trim() || "ddd MMM D") : $("date-format").value;
+function setDateFormat(fmt) {
+  buildDateOptions();
+  if (DATE_PRESETS.includes(fmt)) {
+    $("date-format").value = fmt;
+  } else {                                  // legacy enum key or a custom string
+    $("date-format").value = "custom";
+    $("date-custom").value = DATE_LEGACY[fmt] || fmt || "";
+  }
+}
+function updateDatePreview() {
+  $("date-preview").textContent = "Today: " + formatDate(new Date(), currentDateFormat());
+}
+function refreshDateUI() {
+  const showDate = $("show_date").checked;
+  const custom = $("date-format").value === "custom";
+  $("date-format-row").hidden = !showDate;
+  $("date-preview").hidden = !showDate;
+  $("date-custom-row").hidden = !(showDate && custom);
+  $("date-tokens").hidden = !(showDate && custom);
+}
+
 function openArtwork() {
   if (!currentDevice) return;
   const d = currentDevice;
@@ -939,8 +1020,9 @@ function openArtwork() {
   $("use_event").checked = d.use_event !== false;
   $("interests-body").hidden = d.use_event === false;
   $("show_date").checked = d.show_date !== false;
-  $("date-format").value = d.date_format || "weekday";
-  $("date-format-row").hidden = d.show_date === false;
+  setDateFormat(d.date_format || "weekday");
+  updateDatePreview();
+  refreshDateUI();
   setRadio("unit", d.temp_unit || "c");
   setRadio("orient", d.orientation || "landscape");
   $("language").value = d.language || "en";
@@ -969,7 +1051,7 @@ function artworkBody() {
     temp_unit: getRadio("unit"), orientation: getRadio("orient"),
     show_date: $("show_date").checked,
     use_weather: $("use_weather").checked, use_event: $("use_event").checked,
-    date_format: $("date-format").value,
+    date_format: currentDateFormat(),
     interests: [...chips, ...other].join(", "),
     signature: $("signature").value.trim() || "Ink.", language: $("language").value,
     holiday_jewish: $("h-jewish").checked, holiday_israeli: $("h-israeli").checked, holiday_global: $("h-global").checked,
@@ -983,7 +1065,12 @@ function wireArtwork() {
   renderInterestChips();
   $("artwork-back").addEventListener("click", () => go("frame"));
   $("manual-coords").addEventListener("change", (e) => { $("coords-row").hidden = !e.target.checked; });
-  $("show_date").addEventListener("change", (e) => { $("date-format-row").hidden = !e.target.checked; });
+  $("show_date").addEventListener("change", refreshDateUI);
+  $("date-format").addEventListener("change", () => {
+    refreshDateUI(); updateDatePreview();
+    if ($("date-format").value === "custom") $("date-custom").focus();
+  });
+  $("date-custom").addEventListener("input", updateDatePreview);
   $("use_weather").addEventListener("change", (e) => { $("loc-weather-body").hidden = !e.target.checked; });
   $("use_event").addEventListener("change", (e) => { $("interests-body").hidden = !e.target.checked; });
   $("city-edit").addEventListener("click", () => { setLocEdit(true); $("city-name").focus(); $("city-name").select(); });

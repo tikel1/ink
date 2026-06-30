@@ -10,7 +10,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .constants import DATE_FORMATS, DEFAULT_DATE_FORMAT, LANGUAGES, ORIENTATIONS, TEMP_UNITS
+from .constants import DEFAULT_DATE_FORMAT, LANGUAGES, MAX_DATE_FORMAT_LEN, ORIENTATIONS, TEMP_UNITS
 
 
 @dataclass(frozen=True)
@@ -45,8 +45,8 @@ class DeviceConfig:
             raise ValueError(f"{self.id}: temp_unit must be one of {TEMP_UNITS}")
         if self.orientation not in ORIENTATIONS:
             raise ValueError(f"{self.id}: orientation must be one of {ORIENTATIONS}")
-        if self.date_format not in DATE_FORMATS:
-            raise ValueError(f"{self.id}: date_format must be one of {tuple(DATE_FORMATS)}")
+        if not self.date_format or len(self.date_format) > MAX_DATE_FORMAT_LEN:
+            raise ValueError(f"{self.id}: date_format must be 1–{MAX_DATE_FORMAT_LEN} chars")
         if not (-90 <= self.lat <= 90 and -180 <= self.lon <= 180):
             raise ValueError(f"{self.id}: lat/lon out of range")
         if not (0 <= self.wake_hour <= 23):

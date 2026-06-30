@@ -15,7 +15,7 @@ from datetime import date as date_cls
 from typing import NamedTuple
 
 from .. import prompts
-from ..constants import DATE_FORMATS
+from ..constants import format_date
 from ..devicecfg import DeviceConfig
 from ..settings import Settings
 from ..timeutil import now_in_tz
@@ -317,8 +317,7 @@ def _build_image_prompt(config: DeviceConfig, wx, today: date_cls, pick: EventPi
     template = config.custom_prompt_override or prompts.ARTWORK_PROMPT
     symbol = "°F" if config.temp_unit == "f" else "°C"
     temp_str = f"{wx.temperature(config.temp_unit)}{symbol}"
-    date_str = today.strftime(
-        DATE_FORMATS.get(config.date_format, DATE_FORMATS["weekday"]))
+    date_str = format_date(today, config.date_format)
     data_block = prompts.build_data_block(
         config.use_weather, config.show_date,
         wx.condition, temp_str, date_str,
