@@ -695,51 +695,41 @@ function onGalleryScroll() {
   });
 }
 
-// A "chain of thought" for the Generate button: walk through the pipeline's
-// phases (event → context → prompt → image → post-process). Microcopy is kept
-// short to fit the button. The job status is binary, so we pace the early steps
-// on a timer and hold on "Painting…" (the long image step) until it's done.
-const GEN_STEPS = [
-  "Researching…",   // historical event for the date
-  "Discovering…",   // weather + context
-  "Composing…",     // building the prompt / planning composition
-  "Painting…",      // image generation (the long phase — held here)
-];
-const GEN_FINAL = "Finishing…";   // post-process + upload, shown on done
-const GEN_STEP_MS = 3500;
-let genStepTimer = null;
+// The Generate button mirrors the backend's REAL pipeline phase, polled from
+// /generation (the job's `detail` carries the phase). Image generation dominates,
+// so "Painting…" naturally holds the longest; the early stages are genuinely
+// quick. Falls back to "Working…" if an older backend reports no phase.
+const GEN_LABELS = {
+  discover: "Discovering…",   // weather + holidays
+  research: "Researching…",   // the day's historical moment
+  compose: "Composing…",      // building the prompt
+  paint: "Painting…",         // image generation (the long phase)
+  finish: "Finishing…",       // dither + upload
+};
 function genLabel(text) {
   $("regen-btn").innerHTML = `<span class="spin-sm" aria-hidden="true"></span><span class="gen-step">${text}</span>`;
 }
-function startGenSteps() {
-  let i = 0;
-  genLabel(GEN_STEPS[0]);
-  clearInterval(genStepTimer);
-  genStepTimer = setInterval(() => {
-    if (i >= GEN_STEPS.length - 1) { clearInterval(genStepTimer); genStepTimer = null; return; }
-    genLabel(GEN_STEPS[++i]);
-  }, GEN_STEP_MS);
-}
-function stopGenSteps() { if (genStepTimer) { clearInterval(genStepTimer); genStepTimer = null; } }
-
 function setBusy(on) {
   const b = $("regen-btn");
   b.disabled = on;
   b.classList.toggle("busy", on);
   $("gallery").classList.toggle("busy", on);
-  if (on) startGenSteps();
-  else { stopGenSteps(); b.textContent = "Generate"; }
+  if (on) genLabel("Starting…");
+  else b.textContent = "Generate";
 }
 async function pollGeneration(id) {
-  for (let i = 0; i < 48; i++) {
-    await sleep(2500);
+  let last = "";
+  for (let i = 0; i < 130; i++) {
+    await sleep(1000);   // poll briskly so quick early phases are caught
     let s; try { s = await api(`/devices/${id}/generation`); } catch { continue; }
     if (s.state === "done") {
-      stopGenSteps(); genLabel(GEN_FINAL);          // brief "Finishing touches…" before the art swaps in
+      genLabel(GEN_LABELS.finish);
       if (id === currentId) await loadGallery(id);
       toast("New artwork ready"); return;
     }
     if (s.state === "error") { toast(s.detail || "Couldn't create the artwork"); return; }
+    const label = GEN_LABELS[s.detail] || "Working…";   // s.detail = the live phase
+    if (label !== last) { genLabel(label); last = label; }
   }
   toast("Still working — check back shortly");
 }
