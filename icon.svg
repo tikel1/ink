@@ -1,5 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect width="512" height="512" rx="112" fill="#e7dfce"/>
-  <path d="M150 360c-40-76 8-188 96-216 68-22 150 4 168 64 18 60-24 116-92 144-72 30-132 84-172 8z" fill="#1b1813"/>
-  <circle cx="356" cy="166" r="38" fill="#1b1813"/>
+  <!-- Organic ink blob: a soft, hand-cut biomorphic splotch like the shapes the
+       animated mark morphs through — rounded and gently irregular, no leaf tip. -->
+  <path fill="#1b1813" d="M256 104
+    C330 100 392 140 404 214
+    C414 280 402 344 348 384
+    C300 420 224 424 168 396
+    C104 364 92 286 108 214
+    C120 158 156 116 200 106
+    C220 101 238 105 256 104 Z"/>
 </svg>
