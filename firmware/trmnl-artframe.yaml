@@ -305,67 +305,77 @@ interval:
   # without a reflash (and within minutes, not the 15-min reboot timeout).
   - interval: 300s
     then:
-      - script.execute: resolve_server
+      - if:
+          condition:
+            wifi.connected:
+          then:
+            - script.execute: resolve_server
   - interval: 60s
     then:
-      - http_request.get:
-          # Piggyback telemetry on the poll so the app can show battery / Wi-Fi /
-          # firmware (the backend reads these query params on the .ver check-in).
-          url: !lambda |-
-            float rssi = id(wifi_rssi_sensor).state;
-            int rssi_i = isnan(rssi) ? 0 : (int) rssi;
-            float bv = id(batt).state;
-            if (isnan(bv)) bv = 0.0f;
-            char q[72];
-            snprintf(q, sizeof(q), ".ver?bat=%.2f&rssi=%d&fw=${fw_label}", bv, rssi_i);
-            return id(g_backend) + "/media/current/" + get_mac_address() + q;
-          collect_headers: ["x-ver", "x-power", "x-sleep", "x-wake", "x-wake-secs", "x-orient", "x-ota-md5", "x-cmd"]
-          on_response:
-            then:
-              - lambda: |-
-                  if (response->status_code != 200) return;
-                  // Power/sleep config (every poll).
-                  std::string p = response->get_response_header("x-power");
-                  if (!p.empty()) id(g_power) = p;
-                  std::string sm = response->get_response_header("x-sleep");
-                  if (!sm.empty()) id(g_sleep_min) = atoi(sm.c_str());
-                  // Prefer minute-precise seconds; fall back to the legacy hour.
-                  std::string ws = response->get_response_header("x-wake-secs");
-                  if (!ws.empty()) { id(g_wake_secs) = atoi(ws.c_str()); }
-                  else { std::string wh = response->get_response_header("x-wake");
-                         if (!wh.empty()) id(g_wake_secs) = atoi(wh.c_str()) * 3600; }
-                  std::string ori = response->get_response_header("x-orient");
-                  if (!ori.empty()) id(g_portrait) = (ori == "portrait");
-                  std::string m5 = response->get_response_header("x-ota-md5");
-                  if (!m5.empty()) id(g_ota_md5) = m5;
-                  // Decide whether to redraw — from a version change and/or an
-                  // app 'refresh' command — but redraw at most ONCE per poll so a
-                  // freshly generated image (new version + queued refresh) doesn't
-                  // flash the e-ink twice.
-                  bool do_refresh = false;
-                  std::string v = response->get_response_header("x-ver");
-                  if (!v.empty()) {
-                    if (id(last_ver).empty()) { id(last_ver) = v; }
-                    else if (v != id(last_ver)) { id(last_ver) = v; do_refresh = true; }
-                  }
-                  std::string cmd = response->get_response_header("x-cmd");
-                  if (cmd == "sleep") {
-                    ESP_LOGI("ink", "app command: sleep");
-                    id(go_to_sleep)->execute();
-                    return;                       // don't also redraw when sleeping
-                  }
-                  // OTA / reset run AFTER this HTTP call returns (sibling actions
-                  // below) so we never start a second request inside this callback.
-                  if (cmd == "ota")   { ESP_LOGI("ink", "app command: OTA");   id(g_do_ota)   = true; }
-                  if (cmd == "reset") { ESP_LOGI("ink", "app command: reset"); id(g_do_reset) = true; }
-                  if (cmd == "refresh") do_refresh = true;
-                  if (do_refresh) {
-                    ESP_LOGI("ink", "refreshing artwork");
-                    id(online_artwork)->update();
-                  }
-                  ESP_LOGI("ink", "poll: power=%s sleep_min=%d uptime=%us cmd=%s",
-                           id(g_power).c_str(), id(g_sleep_min),
-                           (unsigned)(millis() / 1000UL), cmd.c_str());
+      # Only poll once Wi-Fi is up — avoids the boot-time "Not connected to
+      # network" error when the interval fires before the first connection.
+      - if:
+          condition:
+            wifi.connected:
+          then:
+            - http_request.get:
+                # Piggyback telemetry on the poll so the app can show battery /
+                # Wi-Fi / firmware (backend reads these query params on .ver).
+                url: !lambda |-
+                  float rssi = id(wifi_rssi_sensor).state;
+                  int rssi_i = isnan(rssi) ? 0 : (int) rssi;
+                  float bv = id(batt).state;
+                  if (isnan(bv)) bv = 0.0f;
+                  char q[72];
+                  snprintf(q, sizeof(q), ".ver?bat=%.2f&rssi=%d&fw=${fw_label}", bv, rssi_i);
+                  return id(g_backend) + "/media/current/" + get_mac_address() + q;
+                collect_headers: ["x-ver", "x-power", "x-sleep", "x-wake", "x-wake-secs", "x-orient", "x-ota-md5", "x-cmd"]
+                on_response:
+                  then:
+                    - lambda: |-
+                        if (response->status_code != 200) return;
+                        // Power/sleep config (every poll).
+                        std::string p = response->get_response_header("x-power");
+                        if (!p.empty()) id(g_power) = p;
+                        std::string sm = response->get_response_header("x-sleep");
+                        if (!sm.empty()) id(g_sleep_min) = atoi(sm.c_str());
+                        // Prefer minute-precise seconds; fall back to the legacy hour.
+                        std::string ws = response->get_response_header("x-wake-secs");
+                        if (!ws.empty()) { id(g_wake_secs) = atoi(ws.c_str()); }
+                        else { std::string wh = response->get_response_header("x-wake");
+                               if (!wh.empty()) id(g_wake_secs) = atoi(wh.c_str()) * 3600; }
+                        std::string ori = response->get_response_header("x-orient");
+                        if (!ori.empty()) id(g_portrait) = (ori == "portrait");
+                        std::string m5 = response->get_response_header("x-ota-md5");
+                        if (!m5.empty()) id(g_ota_md5) = m5;
+                        // Decide whether to redraw — from a version change and/or an
+                        // app 'refresh' command — but redraw at most ONCE per poll so a
+                        // freshly generated image (new version + queued refresh) doesn't
+                        // flash the e-ink twice.
+                        bool do_refresh = false;
+                        std::string v = response->get_response_header("x-ver");
+                        if (!v.empty()) {
+                          if (id(last_ver).empty()) { id(last_ver) = v; }
+                          else if (v != id(last_ver)) { id(last_ver) = v; do_refresh = true; }
+                        }
+                        std::string cmd = response->get_response_header("x-cmd");
+                        if (cmd == "sleep") {
+                          ESP_LOGI("ink", "app command: sleep");
+                          id(go_to_sleep)->execute();
+                          return;                       // don't also redraw when sleeping
+                        }
+                        // OTA / reset run AFTER this HTTP call returns (sibling actions
+                        // below) so we never start a second request inside this callback.
+                        if (cmd == "ota")   { ESP_LOGI("ink", "app command: OTA");   id(g_do_ota)   = true; }
+                        if (cmd == "reset") { ESP_LOGI("ink", "app command: reset"); id(g_do_reset) = true; }
+                        if (cmd == "refresh") do_refresh = true;
+                        if (do_refresh) {
+                          ESP_LOGI("ink", "refreshing artwork");
+                          id(online_artwork)->update();
+                        }
+                        ESP_LOGI("ink", "poll: power=%s sleep_min=%d uptime=%us cmd=%s",
+                                 id(g_power).c_str(), id(g_sleep_min),
+                                 (unsigned)(millis() / 1000UL), cmd.c_str());
       # Factory reset (full wipe + re-onboard) requested from the app.
       - if:
           condition:
