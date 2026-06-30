@@ -135,10 +135,14 @@ function frameState(d) {
   if (seen < 26 * HOUR) return { label: "Sleep", cls: "s-sleep", sub: statusWhen(d.last_seen) };
   return { label: "Offline", cls: "s-off", sub: statusWhen(d.last_seen) };
 }
+// Wi-Fi signal as 4 bars + a word (no dBm). Returns HTML — set via innerHTML.
 function wifiLabel(r) {
   if (r == null || r === 0) return "—";   // real RSSI is always negative; 0 = no reading yet
-  const q = r >= -60 ? "Strong" : r >= -70 ? "Good" : r >= -80 ? "Weak" : "Poor";
-  return `${q} (${r} dBm)`;
+  const level = r >= -60 ? 4 : r >= -70 ? 3 : r >= -80 ? 2 : 1;
+  const word = ["", "Poor", "Weak", "Good", "Strong"][level];
+  let bars = "";
+  for (let i = 1; i <= 4; i++) bars += `<i class="${i <= level ? "on" : ""}"></i>`;
+  return `<span class="wifi-bars" aria-hidden="true">${bars}</span>${word}`;
 }
 const shortId = (id) => (id || "").slice(-4).toUpperCase();
 const defaultName = (id) => `Ink Frame · ${shortId(id)}`;
@@ -1163,7 +1167,7 @@ function openSettings() {
   $("auto-tz").checked = d.auto_timezone !== false;
   $("tz-row").hidden = d.auto_timezone !== false; $("tz").value = d.tz || "";
   $("spec-conn").textContent = d.last_seen ? relTime(d.last_seen) : "never";
-  $("spec-wifi").textContent = wifiLabel(d.wifi_rssi);
+  $("spec-wifi").innerHTML = wifiLabel(d.wifi_rssi);
   // On USB there's no battery to read (the BAT-pad ADC reads ~0V), so show the
   // power source instead of a misleading "0%". On battery, show the charge level.
   const onUsb = (d.power_source || "usb") !== "battery";
