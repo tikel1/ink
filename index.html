@@ -254,14 +254,16 @@
             <label class="toggle title-toggle" title="Show the date"><input type="checkbox" id="show_date" /><i></i></label>
           </div>
           <label id="date-format-row">Date format
-            <select id="date-format">
-              <option value="weekday">Sun, Jun 28</option>
-              <option value="month_day">June 28</option>
-              <option value="abbr_year">Jun 28, 2026</option>
-              <option value="dmy">28/06/2026</option>
-              <option value="mdy">06/28/2026</option>
-            </select>
+            <select id="date-format"></select>
           </label>
+          <label id="date-custom-row" hidden>Custom format
+            <input id="date-custom" type="text" maxlength="40" placeholder="ddd MMM Do" autocapitalize="none" autocomplete="off" spellcheck="false" />
+          </label>
+          <p id="date-preview" class="date-preview"></p>
+          <details id="date-tokens" class="date-tokens" hidden>
+            <summary>Format codes</summary>
+            <dl id="date-token-list"></dl>
+          </details>
         </div>
 
         <div class="card">
