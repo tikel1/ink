@@ -109,39 +109,68 @@ async def _derive_visual(settings: Settings, caption: str) -> str:
         return ""
 
 
-async def _search_event(settings: Settings, date_label: str, interest: str) -> EventPick | None:
-    """One web search returns 3-5 date-verified candidates; a cheap no-search
-    curator then picks the most iconic. Returns an EventPick or None."""
+# All interest categories go into ONE grounded search call (the model runs several
+# internal searches and returns 2-3 events per topic), so the curator sees the full
+# breadth of the day at the cost of a single search. Capped only as a safety net
+# against a pathologically long interests list (keeps the prompt bounded).
+_MAX_SEARCH_INTERESTS = 12
+
+
+def _pick_interests(interests: list[str], today: date_cls) -> list[str]:
+    """The categories to search today — all of them, unless the list is absurdly
+    long, in which case rotate a _MAX_SEARCH_INTERESTS-sized window by day so every
+    category still cycles through over several days."""
+    if len(interests) <= _MAX_SEARCH_INTERESTS:
+        return interests
+    start = today.toordinal() % len(interests)
+    ordered = interests[start:] + interests[:start]
+    return ordered[:_MAX_SEARCH_INTERESTS]
+
+
+async def _search_candidates(
+    settings: Settings, date_label: str, interests: list[str]
+) -> list[dict]:
+    """One web search across ALL categories → date-verified candidates, each tagged
+    with the category it belongs to in '_interest'. [] on failure."""
+    interests_block = "\n".join(f"- {i}" for i in interests)
     try:
         raw = await generation_client.generate_text_with_search(
-            settings, prompts.SEARCH_EVENT_PROMPT.format(date=date_label, interest=interest))
-    except Exception:  # noqa: BLE001 — search is best-effort; fall back to the model
-        logger.warning("web search failed for %s", interest, exc_info=True)
-        return None
-
+            settings, prompts.SEARCH_EVENT_PROMPT.format(date=date_label, interests=interests_block))
+    except Exception:  # noqa: BLE001 — search is best-effort
+        logger.warning("web search failed", exc_info=True)
+        return []
     candidates = _extract_json(raw, array=True) or []
-    on_date = [c for c in candidates
-               if isinstance(c, dict) and c.get("on_date") and (c.get("event") or "").strip()]
-    if not on_date:
+    return [
+        {**c, "_interest": (c.get("category") or "").strip()}
+        for c in candidates
+        if isinstance(c, dict) and c.get("on_date") and (c.get("event") or "").strip()
+    ]
+
+
+async def _curate_pool(
+    settings: Settings, date_label: str, pool: list[dict]
+) -> EventPick | None:
+    """Pick the single most meaningful event from a cross-category candidate pool.
+    Returns the chosen EventPick (keeping its iconic_visual), or None if empty."""
+    if not pool:
         return None
-    if len(on_date) == 1:
-        c = on_date[0]
+    if len(pool) == 1:
+        c = pool[0]
         return EventPick(c["event"].strip(), (c.get("iconic_visual") or "").strip())
 
-    # Curate the most iconic one (cheap, no search). The curator returns an INDEX
-    # so we keep the original candidate's iconic_visual intact.
     listing = "\n".join(
-        f'{i+1}. {c["event"].strip()}  [visual: {(c.get("iconic_visual") or "").strip()}]'
-        for i, c in enumerate(on_date))
-    chosen = on_date[0]
+        f'{i+1}. [{c.get("_interest", "")}] {c["event"].strip()}'
+        f'  (visual: {(c.get("iconic_visual") or "").strip()})'
+        for i, c in enumerate(pool))
+    chosen = pool[0]
     try:
         reply = await generation_client.generate_text(
-            settings, prompts.CURATE_EVENT_PROMPT.format(date=date_label, candidates=listing))
+            settings, prompts.POOL_CURATE_EVENT_PROMPT.format(date=date_label, candidates=listing))
         m = re.search(r"\d+", reply)
         if m:
             idx = int(m.group(0))
-            if 1 <= idx <= len(on_date):
-                chosen = on_date[idx - 1]
+            if 1 <= idx <= len(pool):
+                chosen = pool[idx - 1]
     except Exception:  # noqa: BLE001 — curation is best-effort; keep first candidate
         logger.warning("event curation failed; using first candidate", exc_info=True)
     return EventPick(chosen["event"].strip(), (chosen.get("iconic_visual") or "").strip())
@@ -152,23 +181,28 @@ async def _select_event(
 ) -> EventPick:
     """Pick a date-verified, interest-matched event for today.
 
-    1) Web search the day's interest (grounds the date in reality + returns the
-       iconic visual to draw). 2) If search yields nothing, force the topic via
-       the model per interest. 3) Then the general selector, then a generic
-       event. If all fail, return an empty pick (no event drawn) rather than a
-       fabricated one.
+    1) Web search several interest categories (grounds dates in reality + returns
+       iconic visuals), pool the candidates, and curate the single most meaningful
+       one. 2) If search yields nothing, force the topic via the model per
+       interest. 3) Then the general selector, then a generic event. If all fail,
+       return an empty pick (no event drawn) rather than a fabricated one.
     """
     date_label = today.strftime("%B %d")
     interests = [i.strip() for i in config.interests if i and i.strip()]
 
-    # 1) Web-search the day's focus interest (rotated by day). One search per run.
+    # 1) Web-search a few interest categories concurrently, pool every verified
+    #    candidate, then pick the single most meaningful across all of them. This
+    #    gives the curator breadth (no single-category tunnel vision) plus a real
+    #    significance bar, so a routine release can't win over a landmark moment.
     if interests:
-        start = today.toordinal() % len(interests)
-        ordered = interests[start:] + interests[:start]
-        for interest in ordered:
-            pick = await _search_event(settings, date_label, interest)
+        chosen = _pick_interests(interests, today)
+        pool = await _search_candidates(settings, date_label, chosen)
+        if pool:
+            logger.info("web search pooled %d candidates across %s",
+                        len(pool), ", ".join(chosen))
+            pick = await _curate_pool(settings, date_label, pool)
             if pick:
-                logger.info("web-search picked %s event: %s", interest, pick.caption)
+                logger.info("curated event: %s", pick.caption)
                 return pick
 
     # 2) Model-only topic-forced fallback (no search), rotated by day.

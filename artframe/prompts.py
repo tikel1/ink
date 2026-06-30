@@ -73,19 +73,26 @@ Reply with a single word: REAL or FAKE."""
 
 # Web-search selection: ONE search returns several date-verified candidates; a
 # cheap second (no-search) step curates the most iconic one. Returns a JSON array.
-SEARCH_EVENT_PROMPT = """Use web search to find 3-5 real, notable, positive events in
-the category "{interest}" that genuinely happened on {date} — this exact month and
-day — in past years. Verify each date with the search before listing it.
+SEARCH_EVENT_PROMPT = """Use web search to find real, notable, positive events that
+genuinely happened on {date} — this exact month and day — in past years, across these
+topics:
+{interests}
+
+For EACH topic above, find 2-3 of the most significant events you can verify on
+{date}. Verify every date with search before listing it.
 
 Rules:
 - Each event MUST have occurred on {date} (this month and day). Confirm via search.
-- Each must clearly belong to "{interest}".
-- Favour memorable moments — championships, world records, legendary performances,
-  famous debuts, landmark albums/concerts. Avoid war, violence, tragedy, and
-  copyrighted characters.
+- Tag each event with the topic it belongs to (exactly one of the topics listed).
+- Favour genuinely significant, memorable moments — championships, world records,
+  legendary performances, historic firsts, famous debuts, era-defining
+  albums/films/concerts. AVOID routine, minor, or fan-only events (an ordinary
+  album release, a regular tour concert, a minor premiere). Avoid war, violence,
+  tragedy, and copyrighted characters.
 
-Reply with ONLY a compact JSON array (no prose) of 3-5 objects:
-[{{"event": "<15-25 word description, including the year>",
+Reply with ONLY a compact JSON array (no prose) of objects (aim for 2-3 per topic):
+[{{"category": "<exactly one of the topics listed above>",
+   "event": "<15-25 word description, including the year>",
    "verified_date": "<Month DD, YYYY>",
    "on_date": <true if it really happened on {date}, else false>,
    "iconic_visual": "<6-14 words: the single most iconic, instantly recognizable
@@ -94,21 +101,31 @@ Reply with ONLY a compact JSON array (no prose) of 3-5 objects:
    hairstyle, a landmark/monument, an instrument, a signature object or pose) —
    something unmistakable in silhouette, NOT generic like 'team celebration'>"}}, ...]
 
-If web search finds no real "{interest}" event on {date}, reply: []"""
+If web search verifies no real event on {date} for any topic, reply: []"""
 
-# Curate (no search): pick the single most interesting/iconic candidate, and
-# drop any that look dubious or off-date.
-CURATE_EVENT_PROMPT = """These candidate events were each found via web search and
-claimed to have happened on {date}. Pick the SINGLE best one for a daily artwork:
-the most iconic and celebrated (a championship, record, legendary performance, or
-famous debut) — not a routine or minor event. If you know one is clearly NOT on
-{date} or seems fabricated, don't pick it.
+# Pooled curation across SEVERAL categories: candidates were gathered from a few
+# different topics; pick the single most meaningful one, enforcing a real
+# significance bar so a routine release never wins over a landmark moment.
+POOL_CURATE_EVENT_PROMPT = """Below are real events that each happened on {date},
+gathered across several topics. Pick the SINGLE most remarkable one to celebrate as
+today's artwork.
+
+Judge by genuine, lasting significance — a moment a wide audience would recognize
+and find meaningful, not just something that merely occurred:
+- STRONG (prefer these): a world record, an Olympic / World Cup / championship moment,
+  a historic first, an era- or genre-defining album or film, a legendary performance,
+  a landmark premiere, a defining scientific discovery or cultural milestone.
+- WEAK (avoid unless nothing else): a routine album release, an ordinary concert
+  date, a minor or fan-only premiere, an incremental or obscure event.
+
+Choose the event with the widest, most lasting resonance AND a strong, instantly
+recognizable visual. If several are strong, pick the most visually iconic.
 
 Candidates:
 {candidates}
 
-Reply with ONLY the number of the best candidate (e.g. 3). If none are suitable,
-reply 0."""
+Reply with ONLY the number of the best candidate (e.g. 4). Always pick the strongest
+one available — never reply 0."""
 
 # Fallback when the chosen event has no iconic_visual (some providers omit it).
 VISUAL_PROMPT = """Name the single most iconic, INSTANTLY recognizable image of this
