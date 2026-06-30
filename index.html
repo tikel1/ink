@@ -328,21 +328,13 @@
 
       <div class="card">
         <h3>Power</h3>
-        <p class="power-now"><span id="power-now-dot" class="dot"></span><span id="power-now">—</span></p>
-
-        <fieldset class="radios" id="plugged-radios">
-          <legend>When plugged in</legend>
-          <label class="radio"><input type="radio" name="plugged" value="always_on" /><span>Always on</span></label>
-          <label class="radio"><input type="radio" name="plugged" value="sleep" /><span>Sleep after a while</span></label>
+        <fieldset class="radios" id="sleep-radios">
+          <legend>When idle</legend>
+          <label class="radio"><input type="radio" name="sleepmode" value="always_on" /><span>Always on</span></label>
+          <label class="radio"><input type="radio" name="sleepmode" value="sleep" /><span>Sleep after a while</span></label>
         </fieldset>
-        <label id="plugged-sleep-row" hidden>Sleep after (minutes)<input id="plugged-sleep" type="number" min="1" max="240" /></label>
-
-        <fieldset class="radios" id="battery-field">
-          <legend>On battery</legend>
-          <label>Sleep after (minutes)<input id="battery-sleep" type="number" min="1" max="240" /></label>
-        </fieldset>
-
-        <p class="hint">Ink senses whether it's plugged in or running on battery and uses the matching setting — like a laptop. On battery it wakes at the update time, shows the new work, then sleeps to save power.</p>
+        <label id="sleep-after-row" hidden>Sleep after (minutes)<input id="sleep-after" type="number" min="1" max="240" /></label>
+        <p class="hint">Always on keeps the picture up and refreshes through the day — best when plugged in. Sleep wakes at the update time, shows the new work, then sleeps to save power — best on battery.</p>
       </div>
 
       <div class="card">
@@ -354,7 +346,6 @@
       <dl class="spec">
         <div><dt>Connection</dt><dd id="spec-conn">—</dd></div>
         <div><dt>Wi‑Fi signal</dt><dd id="spec-wifi">—</dd></div>
-        <div><dt>Battery</dt><dd id="spec-batt">—</dd></div>
         <div><dt>Firmware</dt><dd id="spec-fw">—</dd></div>
         <div><dt>Frame ID</dt><dd id="spec-id" class="mono">—</dd></div>
       </dl>

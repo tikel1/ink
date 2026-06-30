@@ -710,14 +710,6 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .radios.orient .radio span { flex-direction: column; padding: 12px 22px; }
 .ori { width: 30px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.6; }
 
-/* Auto-detected power state, shown read-only above the per-state policies. */
-.power-now { display: flex; align-items: center; gap: 8px; margin: 4px 0 2px;
-             font-size: 13px; font-weight: 600; color: var(--ink-soft); }
-.power-now .dot { width: 9px; height: 9px; }
-/* The "on battery" minutes field is a fieldset+legend like .radios, but its one
-   control is a full-width labelled input rather than radio chips. */
-#battery-field label { flex-basis: 100%; margin-top: 0; }
-
 /* Wi-Fi signal strength as four ascending bars (filled = current level). */
 .wifi-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 13px;
              margin-right: 7px; vertical-align: -2px; }
