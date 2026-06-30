@@ -89,12 +89,20 @@ Rules:
   albums/films/concerts. AVOID routine, minor, or fan-only events (an ordinary
   album release, a regular tour concert, a minor premiere). Avoid war, violence,
   tragedy, and copyrighted characters.
+- ALSO search what is happening in the world RIGHT NOW (this week). When a
+  historical event on {date} echoes something current — an ongoing tournament or
+  season, a country / team / artist / work in the news today, or a milestone
+  anniversary this year — capture that connection in "now_tie". A timely echo makes
+  the artwork feel alive, so surface those candidates.
 
 Reply with ONLY a compact JSON array (no prose) of objects (aim for 2-3 per topic):
 [{{"category": "<exactly one of the topics listed above>",
    "event": "<15-25 word description, including the year>",
    "verified_date": "<Month DD, YYYY>",
    "on_date": <true if it really happened on {date}, else false>,
+   "now_tie": "<<=12 words: how this connects to something happening in the world
+   right now (e.g. 'Paraguay faced Germany this week', 'Wimbledon is on now'), or
+   \"\" if there is no current connection>",
    "iconic_visual": "<6-14 words: ONE concrete object or emblem whose SHAPE alone
    identifies this event as a bold black paper-cut silhouette — a distinctive
    trophy, uniform, instrument, vehicle, ball, landmark/monument, or signature
@@ -123,7 +131,14 @@ and find meaningful, not just something that merely occurred:
   date, a minor or fan-only premiere, an incremental or obscure event.
 
 Choose the event with the widest, most lasting resonance AND a strong, instantly
-recognizable visual. If several are strong, pick the most visually iconic.
+recognizable visual.
+
+TIE-BREAKER — timeliness: among events that are comparably significant, strongly
+prefer one that connects to what is happening in the world RIGHT NOW (shown as
+"now:" in the listing) — e.g. a team that just played, a tournament under way, a
+fresh anniversary. A historical event that echoes today's news feels alive and
+makes the artwork resonate. Do NOT let a timely echo override a clearly bigger
+event, but use it to break ties and to favour the lively pick.
 
 Candidates:
 {candidates}
