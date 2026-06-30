@@ -1,7 +1,7 @@
 """Control-app API: accounts, API-key management, device pairing + preferences."""
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from . import artwork_repo, auth, crypto, firmware_repo, jobs, keys, repositories, storage
@@ -206,6 +206,25 @@ async def require_own_key(account_id: str, required: bool = True,
         raise HTTPException(status_code=404, detail="account not found")
     repositories.set_key_required(account_id, required)
     return {"account_id": account_id, "key_required": required}
+
+
+@router.post("/admin/firmware")
+async def publish_firmware(version: str, request: Request,
+                           x_admin_token: str | None = Header(default=None)):
+    """Publish an OTA firmware build to this backend's storage. Admin-token
+    gated (disabled when ADMIN_TOKEN is unset). Body = the raw .bin; the md5 is
+    computed server-side. Lets us push releases to a remote (e.g. Fly) over
+    HTTPS without filesystem access."""
+    settings = get_settings()
+    admin = getattr(settings, "admin_token", "")
+    if not admin or x_admin_token != admin:
+        raise HTTPException(status_code=403, detail="admin only")
+    if not version or len(version) > 32:
+        raise HTTPException(status_code=400, detail="bad version")
+    data = await request.body()
+    if len(data) < 1024:
+        raise HTTPException(status_code=400, detail="firmware too small / empty")
+    return firmware_repo.write_firmware(version, data)
 
 
 # --------------------------------------------------------------------------- #

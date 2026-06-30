@@ -12,6 +12,7 @@ the frame pulls the binary itself (it can't be pushed to from a browser, and a
 cloud backend can't reach the frame's LAN)."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Optional
@@ -36,6 +37,19 @@ def bin_path() -> Path:
 
 def md5_path() -> Path:
     return _dir() / f"{BIN_NAME}.md5"
+
+
+def write_firmware(version: str, data: bytes) -> dict:
+    """Persist a firmware binary + checksum + manifest (shared by the local
+    publish script and the admin upload endpoint). MD5 is computed server-side
+    from the bytes so the manifest always matches what's served."""
+    _dir().mkdir(parents=True, exist_ok=True)
+    bin_path().write_bytes(data)
+    md5 = hashlib.md5(data).hexdigest()
+    md5_path().write_text(md5, encoding="utf-8")
+    manifest = {"version": version, "bin": BIN_NAME, "md5": md5, "size": len(data)}
+    manifest_path().write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return manifest
 
 
 def read_manifest() -> Optional[dict]:
