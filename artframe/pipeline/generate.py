@@ -27,9 +27,12 @@ logger = logging.getLogger(__name__)
 class EventPick(NamedTuple):
     """An event chosen for the day: `caption` is the human text (caption +
     narration); `visual` is the iconic image the artwork should depict (may be
-    empty, in which case the caption itself is the drawing subject)."""
+    empty, in which case the caption itself is the drawing subject); `now_tie` is
+    an optional note on how the event connects to something happening today — it
+    does NOT affect selection, only enriches the narration when present."""
     caption: str
     visual: str = ""
+    now_tie: str = ""
 
 
 _EMPTY_PICK = EventPick("", "")
@@ -43,6 +46,9 @@ class ArtworkResult:
     event_text_en: str | None
     event_text_he: str | None
     weather_summary: str
+    image_prompt: str = ""        # the full prompt sent to the image model (for debug/admin)
+    event_caption: str = ""       # the chosen event
+    event_visual: str = ""        # the iconic visual depicted ('' = abstract)
 
 
 async def generate_artwork(settings: Settings, config: DeviceConfig, on_phase=None) -> ArtworkResult:
@@ -89,7 +95,7 @@ async def generate_artwork(settings: Settings, config: DeviceConfig, on_phase=No
     phase("paint")
     raw_png, (narration_en, narration_he) = await asyncio.gather(
         generation_client.generate_image(settings, image_prompt, config.orientation),
-        _narrate(settings, config, pick.caption),
+        _narrate(settings, config, pick.caption, pick.now_tie),
     )
     phase("finish")
     dithered = imaging.to_eink_image(raw_png, fmt="PNG", orientation=config.orientation)
@@ -101,6 +107,9 @@ async def generate_artwork(settings: Settings, config: DeviceConfig, on_phase=No
         event_text_en=narration_en,
         event_text_he=narration_he,
         weather_summary=wx.as_text(config.temp_unit) if config.use_weather else "",
+        image_prompt=image_prompt,
+        event_caption=pick.caption,
+        event_visual=pick.visual,
     )
 
 
@@ -124,7 +133,13 @@ async def _derive_visual(settings: Settings, caption: str) -> str:
     try:
         v = await generation_client.generate_text(
             settings, prompts.VISUAL_PROMPT.format(event=caption))
-        return v.strip().strip('"').splitlines()[0][:120]
+        v = v.strip().strip('"').splitlines()[0][:120] if v.strip() else ""
+        # The model opts out with NONE when the event has no recognizable icon —
+        # keep the visual empty so the artwork stays abstract instead of forcing a
+        # weird literal shape (the caption text still names the event).
+        if v.strip().upper().startswith("NONE"):
+            return ""
+        return v
     except Exception:  # noqa: BLE001
         return ""
 
@@ -174,10 +189,20 @@ async def _curate_pool(
     Returns the chosen EventPick (keeping its iconic_visual), or None if empty."""
     if not pool:
         return None
-    if len(pool) == 1:
-        c = pool[0]
-        return EventPick(c["event"].strip(), (c.get("iconic_visual") or "").strip())
 
+    def _pick(c: dict) -> EventPick:
+        return EventPick(
+            c["event"].strip(),
+            (c.get("iconic_visual") or "").strip(),
+            (c.get("now_tie") or "").strip(),
+        )
+
+    if len(pool) == 1:
+        return _pick(pool[0])
+
+    # Deliberately omit now_tie from the listing: selection must be objective
+    # (significance only). The chosen event's tie is carried through to enrich the
+    # narration, but it must never bias which event wins.
     listing = "\n".join(
         f'{i+1}. [{c.get("_interest", "")}] {c["event"].strip()}'
         f'  (visual: {(c.get("iconic_visual") or "").strip()})'
@@ -193,7 +218,7 @@ async def _curate_pool(
                 chosen = pool[idx - 1]
     except Exception:  # noqa: BLE001 — curation is best-effort; keep first candidate
         logger.warning("event curation failed; using first candidate", exc_info=True)
-    return EventPick(chosen["event"].strip(), (chosen.get("iconic_visual") or "").strip())
+    return _pick(chosen)
 
 
 async def _select_event(
@@ -313,18 +338,35 @@ def _build_image_prompt(config: DeviceConfig, wx, today: date_cls, pick: EventPi
     return template
 
 
+def _connection_clauses(now_tie: str) -> tuple[str, str]:
+    """Build the EN/HE narration clauses that weave a present-day tie into the
+    description. Empty when the event has no current connection (most events), so
+    the narration stays a plain explanation."""
+    tie = (now_tie or "").strip()
+    if not tie:
+        return "", ""
+    en = (f"This event connects to the present: {tie}. Weave that contemporary link "
+          "into the sentence so it bridges past and present (e.g. \"Before becoming "
+          "the all-time World Cup top scorer, Messi scored his 700th goal…\"). ")
+    he = (f"האירוע מתקשר להווה: {tie}. שזור את הקשר העכשווי הזה במשפט כך שיחבר בין "
+          "העבר להווה. ")
+    return en, he
+
+
 async def _narrate(
-    settings: Settings, config: DeviceConfig, event: str
+    settings: Settings, config: DeviceConfig, event: str, now_tie: str = ""
 ) -> tuple[str | None, str | None]:
-    """Best-effort narration text; failures degrade to None."""
+    """Best-effort narration text; failures degrade to None. When the event has a
+    present-day tie, it's woven into the description (it never affects selection)."""
     if not event or not event.strip():
         return None, None
+    conn_en, conn_he = _connection_clauses(now_tie)
     try:
         tasks = [generation_client.generate_text(
-            settings, prompts.NARRATION_EN_PROMPT.format(event=event))]
+            settings, prompts.NARRATION_EN_PROMPT.format(event=event, connection=conn_en))]
         if config.language == "he":
             tasks.append(generation_client.generate_text(
-                settings, prompts.NARRATION_HE_PROMPT.format(event=event)))
+                settings, prompts.NARRATION_HE_PROMPT.format(event=event, connection=conn_he)))
         results = await asyncio.gather(*tasks)
         return results[0], (results[1] if len(results) > 1 else None)
     except Exception:  # noqa: BLE001

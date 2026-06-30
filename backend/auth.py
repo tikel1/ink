@@ -41,6 +41,8 @@ async def require_account(
     account = repositories.get_account_by_token_hash(hash_token(token))
     if account is None:
         raise HTTPException(status_code=401, detail="invalid token")
+    if account.suspended:
+        raise HTTPException(status_code=403, detail="This account has been suspended.")
     return account
 
 
