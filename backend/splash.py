@@ -135,12 +135,13 @@ def pairing_splash(code: str, pair_url: str) -> bytes:
 
 
 def connect_splash(ap_name: str) -> bytes:
-    """Paired, waiting for the first artwork."""
+    """Paired but no artwork yet — prompt the user to generate the first one."""
     img, draw = _portrait()
     _masthead(draw)
-    _center_text(draw, 300, "You're paired!", 32, weight=600)
-    _center_text(draw, 360, "Your first work of art", 24, weight=450)
-    _center_text(draw, 392, "is on its way.", 24, weight=450)
+    _center_text(draw, 300, "Pairing successful", 32, weight=600)
+    _center_text(draw, 372, "Open the Ink app and tap", 24, weight=450)
+    _center_text(draw, 404, "Generate to create your", 24, weight=450)
+    _center_text(draw, 436, "first artwork.", 24, weight=450)
     return _finish(img)
 
 
