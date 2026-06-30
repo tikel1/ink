@@ -1131,22 +1131,11 @@ function wireSettings() {
       toast("Couldn't disconnect — frame is still connected");
     } finally { btn.disabled = false; }
   });
-  $("check-fw-btn").addEventListener("click", async () => {
-    const btn = $("check-fw-btn"); btn.disabled = true;
-    const hint = $("fw-status-hint"); hint.textContent = "Checking…";
-    try {
-      const d = await api(`/devices/${currentId}`);
-      currentDevice = d; syncDeviceCache(d);
-      $("spec-fw").textContent = d.fw_version || "—";
-      if (d.update_available) {
-        updateDismissed = false;             // user explicitly asked → allow the toast again
-        hint.textContent = `Update available: ${d.fw_version || "?"} → ${d.latest_fw || "?"}`;
-        showUpdateToast(d);
-      } else {
-        hint.textContent = `Up to date (${d.fw_version || "—"})`;
-      }
-    } catch (e) { hint.textContent = "Couldn't check — " + e.message; }
-    finally { btn.disabled = false; }
+  // Same behavior as the app-settings "Check for updates" button: animates,
+  // stays on screen, toasts per source (frame firmware / app), else "Up to date".
+  $("check-fw-btn").addEventListener("click", (e) => {
+    const hint = $("fw-status-hint"); if (hint) hint.hidden = true;
+    checkForUpdates(e.currentTarget);
   });
   $("factory-btn").addEventListener("click", async () => {
     if (frameState(currentDevice).cls !== "s-on") {
