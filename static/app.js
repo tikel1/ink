@@ -302,8 +302,8 @@ function showUpdateToast(d) {
   otaTargetId = d.id;
   const many = (devices || []).length > 1;
   $("fw-toast-title").textContent = many
-    ? `Update ready for ${displayName(d)}`
-    : "A frame update is ready";
+    ? `Firmware update · ${displayName(d)}`
+    : "Firmware update available";
   const reason = otaBlockReason(d);
   const sub = reason === "offline" ? "Wake the frame to update"
             : reason === "battery" ? `Plug in to update (battery ${batteryPct(d.battery)}%)`
@@ -353,10 +353,11 @@ function startFrameStatusPoll() {
 }
 function stopFrameStatusPoll() { if (frameStatusTimer) { clearInterval(frameStatusTimer); frameStatusTimer = null; } }
 
-// Refresh from home: re-pull the latest artwork into the frame on screen and
-// tell the physical frame to re-fetch + redraw.
+// Refresh from home: with a frame connected, re-pull the latest artwork and tell
+// the frame to re-fetch + redraw. With no frame yet (empty state), re-check the
+// device list so a freshly paired frame shows up.
 async function homeRefresh() {
-  if (!currentId) return;
+  if (!currentId) { await showHome(); return; }
   refreshHomeArt();
   await sendCommand("refresh", "Refreshing the frame…");
 }
@@ -381,7 +382,7 @@ function wirePullToRefresh() {
   const springBack = () => { ease(); sp.style.opacity = ""; sp.style.transform = ""; };
 
   screen.addEventListener("pointerdown", (e) => {
-    if (busy || currentScreen !== "home" || $("home-frame").hidden) return;
+    if (busy || currentScreen !== "home") return;   // works in the empty state too
     startY = e.clientY; active = false; dist = 0;
   });
   screen.addEventListener("pointermove", (e) => {
