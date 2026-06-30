@@ -624,12 +624,12 @@ function onGalleryScroll() {
 // short to fit the button. The job status is binary, so we pace the early steps
 // on a timer and hold on "Painting…" (the long image step) until it's done.
 const GEN_STEPS = [
-  "Finding the moment…",     // historical event for the date
-  "Gathering details…",      // weather + context
-  "Composing the scene…",    // building the prompt / planning composition
-  "Painting…",               // image generation (the long phase — held here)
+  "Researching…",   // historical event for the date
+  "Gathering…",     // weather + context
+  "Composing…",     // building the prompt / planning composition
+  "Painting…",      // image generation (the long phase — held here)
 ];
-const GEN_FINAL = "Finishing touches…";   // post-process + upload, shown on done
+const GEN_FINAL = "Finishing…";   // post-process + upload, shown on done
 const GEN_STEP_MS = 3500;
 let genStepTimer = null;
 function genLabel(text) {
