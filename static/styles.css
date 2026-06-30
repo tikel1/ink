@@ -22,6 +22,8 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
+/* Suppress the browser's native pull-to-refresh everywhere — we provide our own. */
+html, body { overscroll-behavior-y: none; }
 /* A `hidden` element must always stay hidden — author rules like
    `.home-frame { display:flex }` would otherwise beat the UA [hidden] default
    and leak the inactive view under the active one. */
@@ -490,8 +492,10 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
    stays put; only the spinner descends + a warm glow blooms from the top edge. */
 .home { position: relative; }
 .home, .home * { touch-action: none; }
-.pull-spinner { position: absolute; top: 16px; left: 50%; margin-left: -18px; z-index: 6;
-  width: 36px; height: 36px; border-radius: 50%; color: var(--ink-soft);
+/* Shared pull-to-refresh spinner — fixed overlay so it shows on any screen and
+   is never clipped by a locked/overflow-hidden #app. */
+.pull-spinner { position: fixed; top: calc(env(safe-area-inset-top) + 10px); left: 50%; margin-left: -18px;
+  z-index: 60; width: 36px; height: 36px; border-radius: 50%; color: var(--ink-soft);
   background: var(--paper-2); border: 1.5px solid var(--line); box-shadow: var(--shadow);
   display: grid; place-items: center; opacity: 0; transform: translateY(-16px) scale(.7);
   pointer-events: none; }

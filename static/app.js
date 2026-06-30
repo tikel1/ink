@@ -147,9 +147,9 @@ const displayName = (d) => (d && d.name) ? d.name : defaultName(d && d.id);
 function flash(id, text, isErr) { const el = $(id); if (!el) return; el.textContent = text; el.hidden = false; el.className = isErr ? "error" : "ok"; }
 function showError(id, e) { flash(id, e.message, true); }
 let toastTimer = null;
-function toast(text) {
+function toast(text, ms = 2600) {
   const el = $("toast"); el.textContent = text; el.classList.add("show");
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), ms);
 }
 
 // Confirm a save on the button itself: "✓ Saved" with a subtle animation,
@@ -317,6 +317,11 @@ function showUpdateToast(d) {
 }
 function hideUpdateToast() { $("fw-toast").hidden = true; }
 
+// Tracks an in-flight OTA so it can be resolved either by the poll loop OR when
+// the app regains focus (the phone usually backgrounds the app while the user
+// watches the frame, which pauses JS timers — so focus is the reliable signal).
+let otaWatch = null;   // { deviceId, fromVer } | null
+
 // Start the OTA for a frame: re-validate gating, confirm, queue the 'ota' command.
 async function startFrameOta(deviceId) {
   const d = (devices || []).find((x) => x.id === deviceId) || currentDevice;
@@ -326,35 +331,48 @@ async function startFrameOta(deviceId) {
   if (reason) return;
   const target = d.latest_fw || "the latest version";
   if (!confirm(`Update ${displayName(d)} to ${target}?\n\nThe frame downloads the new firmware and restarts — about a minute. Keep it powered.`)) return;
-  const fromVer = d.fw_version;
   otaInFlight = true;
+  otaWatch = { deviceId, fromVer: d.fw_version };
   $("fw-toast-update").disabled = true; $("fw-toast-update").textContent = "Updating…";
   try {
     await api(`/devices/${deviceId}/command`, { method: "POST", body: { cmd: "ota" } });
     toast("Updating… the frame will download and restart.");
-  } catch (e) { otaInFlight = false; renderFrameStatus(currentDevice); return toast(`Couldn't start update: ${e.message}`); }
-  pollOtaResult(deviceId, fromVer);
+  } catch (e) { otaInFlight = false; otaWatch = null; renderFrameStatus(currentDevice); return toast(`Couldn't start update: ${e.message}`); }
+  pollOtaResult(deviceId);
 }
 
-// After an OTA is queued, poll the device for the outcome and surface it as a
-// toast: version advanced -> success; the frame reported a failure code ->
-// failure; nothing after the window -> didn't complete.
-async function pollOtaResult(deviceId, fromVer) {
-  const DEADLINE = Date.now() + 150000;   // ~2.5 min: download + flash + reboot + re-checkin
-  const finish = (msg) => {
-    otaInFlight = false;
-    toast(msg);
-    api("/devices").then((r) => { devices = r.devices || r; checkFirmwareUpdates(); }).catch(() => {});
-  };
+// Conclude an OTA: clear state, dismiss the update toast, show the outcome.
+function finishOta(msg, ms) {
+  otaInFlight = false; otaWatch = null;
+  hideUpdateToast();                       // the update is over -> drop the toast
+  toast(msg, ms);
+  api("/devices").then((r) => { devices = r.devices || r; checkFirmwareUpdates(); }).catch(() => {});
+}
+
+// Given a fresh device record, resolve the in-flight OTA if it's done. Used by
+// both the poll loop and the focus handler. Returns true once resolved.
+function resolveOtaFrom(d) {
+  if (!otaWatch || !d || d.id !== otaWatch.deviceId) return false;
+  if (d.ota_error && d.ota_error !== "0") {
+    finishOta(`Update failed (error ${d.ota_error}) — the frame kept its current version.`, 5000);
+    return true;
+  }
+  if (d.fw_version && d.fw_version !== otaWatch.fromVer && !d.update_available) {
+    finishOta(`✓ Frame updated to ${d.fw_version}`, 6000);
+    return true;
+  }
+  return false;
+}
+
+// Poll the device for the OTA outcome (a backstop to the focus handler).
+async function pollOtaResult(deviceId) {
+  const DEADLINE = Date.now() + 180000;   // ~3 min: download + flash + reboot + re-checkin
   const tick = async () => {
-    let d;
-    try { d = await api(`/devices/${deviceId}`); } catch { d = null; }
-    if (d) {
-      if (d.ota_error && d.ota_error !== "0") return finish(`Update failed (error ${d.ota_error}) — the frame kept its current version.`);
-      if (d.fw_version && d.fw_version !== fromVer && !d.update_available) return finish(`✓ Frame updated to ${d.fw_version}.`);
-    }
+    if (!otaWatch || otaWatch.deviceId !== deviceId) return;   // already resolved elsewhere
+    let d; try { d = await api(`/devices/${deviceId}`); } catch { d = null; }
+    if (resolveOtaFrom(d)) return;
     if (Date.now() < DEADLINE) { setTimeout(tick, 6000); return; }
-    finish("Update didn't complete — the frame may be offline. Try again.");
+    finishOta("Update didn't complete — try “Check for updates” in Frame settings.", 5000);
   };
   setTimeout(tick, 8000);   // give the frame a beat to pick up the command
 }
@@ -386,11 +404,22 @@ async function homeRefresh() {
 // (touch-action:none covers the children too). The page UI never moves — only
 // the spinner descends; releasing past the threshold refreshes, a short pull
 // springs back.
-const PULL_START = 5, PULL_THRESHOLD = 64, PULL_MAX = 130, PULL_REST = 38;
-function wirePullToRefresh() {
-  const screen = $("screen-home");
+// Frame-screen pull action: re-pull the gallery + tell the frame to redraw.
+async function frameRefresh() {
+  if (!currentId) return;
+  await loadGallery(currentId);
+  await sendCommand("refresh", "Refreshing the frame…");
+}
+
+// Pull-to-refresh, shared by the home + frame screens via a single fixed spinner.
+// Direction is detected first so a horizontal gallery swipe is never hijacked,
+// and the pointer is captured once a vertical pull commits so it can't get "lost"
+// mid-drag (that was why it didn't stick). Only fires at scroll-top.
+const PULL_START = 6, PULL_THRESHOLD = 64, PULL_MAX = 130, PULL_REST = 38;
+function attachPullToRefresh(screenName, onRefresh) {
+  const screen = $("screen-" + screenName);
   const sp = $("pull-spinner");
-  let startY = null, active = false, dist = 0, busy = false;
+  let startY = null, startX = null, active = false, decided = false, dist = 0, busy = false, pid = null;
 
   const render = (d) => {
     const p = Math.min(1, d / PULL_THRESHOLD);
@@ -398,32 +427,44 @@ function wirePullToRefresh() {
     sp.style.opacity = String(p);
     sp.style.transform = `translateY(${d * 0.42}px) scale(${0.7 + p * 0.3}) rotate(${d * 2.6}deg)`;
   };
-  const ease = () => { sp.style.transition = "opacity .25s var(--ease), transform .25s var(--ease)"; };
-  const springBack = () => { ease(); sp.style.opacity = ""; sp.style.transform = ""; };
+  const springBack = () => {
+    sp.style.transition = "opacity .25s var(--ease), transform .25s var(--ease)";
+    sp.style.opacity = ""; sp.style.transform = "";
+  };
+  const reset = () => { startY = startX = pid = null; active = decided = false; dist = 0; };
+  const atTop = () => (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
 
   screen.addEventListener("pointerdown", (e) => {
-    if (busy || currentScreen !== "home") return;   // works in the empty state too
-    startY = e.clientY; active = false; dist = 0;
+    if (busy || currentScreen !== screenName || !atTop()) return;
+    startY = e.clientY; startX = e.clientX; pid = e.pointerId; active = false; decided = false; dist = 0;
   });
   screen.addEventListener("pointermove", (e) => {
     if (startY == null || busy) return;
-    const dy = e.clientY - startY;
-    if (dy < PULL_START) { if (active) { active = false; dist = 0; springBack(); } return; }
+    const dy = e.clientY - startY, dx = e.clientX - startX;
+    if (!decided) {
+      if (Math.abs(dy) < PULL_START && Math.abs(dx) < PULL_START) return;
+      decided = true;
+      // Horizontal (e.g. gallery swipe) or upward → let the browser have it.
+      if (Math.abs(dx) > Math.abs(dy) || dy <= 0) { startY = null; return; }
+      try { screen.setPointerCapture(pid); } catch (_) {}
+    }
+    if (dy <= 0) { if (active) { active = false; dist = 0; springBack(); } return; }
     active = true; dist = Math.min(dy, PULL_MAX);
     render(dist);
     if (e.cancelable) e.preventDefault();
   }, { passive: false });
 
   const end = async () => {
-    if (startY == null) return;
+    if (startY == null) { reset(); return; }
     const trigger = active && dist >= PULL_THRESHOLD;
-    startY = null; active = false; dist = 0;
+    try { if (pid != null) screen.releasePointerCapture(pid); } catch (_) {}
+    reset();
     if (!trigger) { springBack(); return; }
     busy = true;
-    ease();
     sp.classList.add("spin");
+    sp.style.transition = "opacity .2s var(--ease), transform .2s var(--ease)";
     sp.style.opacity = "1"; sp.style.transform = `translateY(${PULL_REST}px) scale(1)`;
-    try { await homeRefresh(); }
+    try { await onRefresh(); }
     finally {
       sp.classList.remove("spin");
       springBack();
@@ -703,7 +744,8 @@ function wireFrame() {
   $("home-art-btn").addEventListener("click", () => openFrame(currentId));
   $("home-more").addEventListener("click", () => openFrame(currentId));
   $("ev-more").addEventListener("click", () => setFrameExpanded(!$("screen-frame").classList.contains("expanded")));
-  wirePullToRefresh();
+  attachPullToRefresh("home", homeRefresh);
+  attachPullToRefresh("frame", frameRefresh);
   $("gallery").addEventListener("scroll", onGalleryScroll, { passive: true });
   $("refresh-btn").addEventListener("click", async () => {
     const btn = $("refresh-btn"); btn.classList.add("busy");
@@ -1241,6 +1283,21 @@ async function syncByCode(code) {
 
 // Auto-follow the published backend URL so the app survives a server move.
 // Skipped if the user has pinned a server in Advanced.
+// On focus/visibility: refresh home art, then re-pull devices to resolve an
+// in-flight OTA and re-evaluate the update toast (dismiss if no longer needed).
+async function onAppFocus() {
+  refreshHomeArt();
+  try {
+    const r = await api("/devices");
+    devices = r.devices || r;
+    if (otaWatch) {
+      const d = devices.find((x) => x.id === otaWatch.deviceId);
+      if (d && resolveOtaFrom(d)) return;   // finishOta already refreshes the toast
+    }
+    checkFirmwareUpdates();
+  } catch { /* offline — leave current state */ }
+}
+
 async function resolveServer() {
   if (localStorage.getItem(SERVER_MANUAL_KEY)) return;
   try {
@@ -1254,9 +1311,11 @@ async function resolveServer() {
 async function init() {
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
   wireWelcome(); wireConnect(); wireFrame(); wireArtwork(); wireSettings(); wireAccount(); wireInstall(); wireScanner(); wireLightbox(); wireUpdateToast();
-  // When the app/tab regains focus, make sure the home shows the latest artwork.
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshHomeArt(); });
-  window.addEventListener("focus", refreshHomeArt);
+  // When the app/tab regains focus, refresh the home art AND re-check firmware:
+  // this resolves an OTA that finished while the app was backgrounded (timers
+  // pause in the background) — showing "✓ updated" and dismissing the toast.
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") onAppFocus(); });
+  window.addEventListener("focus", onAppFocus);
   const params = new URLSearchParams(location.search);
   const server = params.get("server"); if (server) setServer(server);
   await resolveServer();   // published server.txt wins unless the user pinned one
