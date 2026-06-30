@@ -259,14 +259,21 @@
           <div id="date-custom-wrap" hidden>
             <div class="field-label-row">
               <span class="field-label">Custom format</span>
-              <button type="button" id="date-help-btn" class="help-btn" aria-label="Show format codes" aria-expanded="false">?</button>
+              <button type="button" id="date-help-btn" class="help-btn" aria-label="Show format codes">?</button>
             </div>
             <input id="date-custom" type="text" maxlength="40" placeholder="ddd MMM Do" autocapitalize="none" autocomplete="off" spellcheck="false" />
-            <div id="date-help-pop" class="help-pop" role="dialog" aria-label="Format codes" hidden>
-              <dl id="date-token-list"></dl>
-            </div>
+            <p id="date-preview" class="date-preview"></p>
           </div>
-          <p id="date-preview" class="date-preview"></p>
+        </div>
+
+        <div id="date-help-modal" class="modal-overlay" hidden>
+          <div class="modal-card" role="dialog" aria-modal="true" aria-label="Date format codes">
+            <div class="modal-head">
+              <h4>Format codes</h4>
+              <button type="button" id="date-help-close" class="modal-close" aria-label="Close">&times;</button>
+            </div>
+            <dl id="date-token-list"></dl>
+          </div>
         </div>
 
         <div class="card">
