@@ -203,6 +203,7 @@ async function showHome(preferId) {
   try { ({ devices } = await api("/devices")); }
   catch (e) { if (e.status === 401) { localStorage.removeItem(TOKEN_KEY); return go("welcome"); } devices = []; }
 
+  $("screen-home").classList.toggle("is-empty", !devices.length);
   if (!devices.length) { $("home-empty").hidden = false; $("home-frame").hidden = true; maybeShowInstallBanner(); return; }
   $("home-empty").hidden = true; $("home-frame").hidden = false;
 
