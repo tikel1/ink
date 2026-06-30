@@ -494,6 +494,12 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
    stays put; only the spinner descends + a warm glow blooms from the top edge. */
 .home { position: relative; }
 .home, .home * { touch-action: none; }
+/* Frame screen, collapsed (the pull-to-refresh state): own every touch gesture
+   like home, so the vertical pull engages reliably on Android Chrome instead of
+   fighting the browser's default gesture handling. The gallery keeps native
+   horizontal swipe; when expanded for "Read more", normal scrolling resumes. */
+.frame-screen:not(.expanded), .frame-screen:not(.expanded) * { touch-action: none; }
+.frame-screen .gallery, .frame-screen .gallery * { touch-action: pan-x; }
 /* Shared pull-to-refresh spinner. Absolute within #app (which is position:
    relative) — more reliable on mobile than `fixed`, which jitters under the
    dynamic address bar / status bar (e.g. Pixel Chrome). */
