@@ -743,7 +743,6 @@ function openArtwork() {
   $("manual-coords").checked = false; $("coords-row").hidden = true;
   hideSuggest();
   setLocEdit(!d.city_name);  // unset → start in edit mode; otherwise show static text
-  $("show_weather").checked = d.show_weather !== false;
   $("use_weather").checked = d.use_weather !== false;
   $("loc-weather-body").hidden = d.use_weather === false;
   $("use_event").checked = d.use_event !== false;
@@ -777,7 +776,7 @@ function artworkBody() {
     city_name: $("city-name").value.trim(),
     lat: parseFloat($("lat").value), lon: parseFloat($("lon").value),
     temp_unit: getRadio("unit"), orientation: getRadio("orient"),
-    show_weather: $("show_weather").checked, show_date: $("show_date").checked,
+    show_date: $("show_date").checked,
     use_weather: $("use_weather").checked, use_event: $("use_event").checked,
     date_format: $("date-format").value,
     interests: [...chips, ...other].join(", "),

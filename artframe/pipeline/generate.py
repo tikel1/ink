@@ -279,7 +279,7 @@ def _build_image_prompt(config: DeviceConfig, wx, today: date_cls, pick: EventPi
     date_str = today.strftime(
         DATE_FORMATS.get(config.date_format, DATE_FORMATS["weekday"]))
     data_block = prompts.build_data_block(
-        config.use_weather and config.show_weather, config.show_date,
+        config.use_weather, config.show_date,
         wx.condition, temp_str, date_str,
         event=pick.caption, visual=pick.visual,
     )
