@@ -99,12 +99,19 @@ async def list_devices(account: Account = auth.AccountDep):
 
 
 @router.post("/devices/pair")
-async def pair(body: PairRequest, account: Account = auth.AccountDep):
+async def pair(body: PairRequest, background: BackgroundTasks,
+               account: Account = auth.AccountDep):
     device = repositories.get_device_by_pairing_code(body.pairing_code)
     if device is None:
         raise HTTPException(status_code=404, detail="invalid pairing code")
     repositories.bind_device(device.id, account.id)
-    return _device_payload(_owned(device.id, account))
+    device = _owned(device.id, account)
+    # Kick off the first artwork immediately so it arrives within ~1–2 min rather
+    # than waiting for the daily scheduler. generate_for_device queues a frame
+    # refresh when it finishes, so the frame fetches it on its next poll.
+    jobs.set_state(device.id, jobs.RUNNING, "Creating your first artwork…")
+    background.add_task(_run_generation, device)
+    return _device_payload(device)
 
 
 class ReorderRequest(BaseModel):
