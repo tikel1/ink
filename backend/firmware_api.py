@@ -20,7 +20,13 @@ async def firmware_bin() -> Response:
     path = firmware_repo.bin_path()
     if not path.exists():
         raise HTTPException(status_code=404, detail="no firmware published")
-    return FileResponse(path, media_type=_OCTET, filename=firmware_repo.BIN_NAME)
+    # Serve as a single in-memory body with an explicit Content-Length and no
+    # range support — the embedded HTTP client mis-reads FileResponse's ranged/
+    # streamed transfer (it computed a wrong md5 over a full-but-corrupt read).
+    data = path.read_bytes()
+    return Response(content=data, media_type=_OCTET,
+                    headers={"Content-Length": str(len(data)),
+                             "Cache-Control": "no-store"})
 
 
 @router.get("/ink-frame.bin.md5")

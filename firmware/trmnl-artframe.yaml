@@ -69,7 +69,7 @@ external_components:
   - source:
       type: local
       path: components
-    components: [captive_portal]
+    components: [captive_portal, http_request]
 
 wifi:
   power_save_mode: light
