@@ -484,6 +484,8 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .home-top .inkmark-anim { margin-left: 4px; }
 /* Home: a larger ink blob sitting close to the "Ink" wordmark. */
 .home .inkmark-anim { width: 60px; height: 60px; margin-left: -8px; }
+.home-actions { margin-left: auto; display: flex; align-items: center; gap: 0; }
+.home-actions .gear-btn { margin-left: 0; }
 .gear-btn { margin-left: auto; background: none; border: none; cursor: pointer; padding: 8px;
             border-radius: 50%; color: var(--ink-soft); transition: background .2s, color .2s; }
 .gear-btn:hover { background: rgba(27,24,19,.07); color: var(--ink); }
@@ -522,7 +524,26 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 /* Sit the artwork toward the top (just below the header) rather than vertically
    centered — otherwise a short landscape frame leaves a big gap up top. */
 .home-frame { flex: 1; min-height: 0; display: flex; flex-direction: column;
-              justify-content: flex-start; align-items: center; gap: 8px; }
+              justify-content: flex-start; align-items: stretch; gap: 8px; }
+/* Horizontal carousel of frames — one card per device, native scroll-snap (same
+   pattern as the Frame-screen gallery). Vertical pull-to-refresh coexists (it
+   yields to horizontal swipes). */
+.home-carousel { flex: 1; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden;
+                 scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+                 scrollbar-width: none; scroll-behavior: smooth; }
+.home-carousel::-webkit-scrollbar { display: none; }
+.home-carousel.reordering { scroll-snap-type: none; scroll-behavior: auto; touch-action: none; }
+.home-card { flex: 0 0 100%; min-width: 0; scroll-snap-align: center;
+             display: flex; flex-direction: column; justify-content: flex-start;
+             transition: transform .18s var(--ease), opacity .18s var(--ease); }
+.home-card.dragging { transform: scale(1.04); opacity: .92; z-index: 2;
+                      filter: drop-shadow(0 14px 28px rgba(27,24,19,.28)); }
+.home-card.shift-left { transform: translateX(-8%); }
+.home-card.shift-right { transform: translateX(8%); }
+/* Swipe affordance shown only with 2+ frames. */
+.swipe-hint { font-family: "Inter"; font-size: 12px; font-weight: 600; color: var(--muted);
+              letter-spacing: .04em; text-align: center; margin: 0 0 2px; }
+.swipe-hint[hidden] { display: none; }
 
 /* Fine-art print frame — slim walnut molding, wide white mat, soft wall shadow
    (inspired by gallery print mockups). */
@@ -562,7 +583,7 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .gallery-frame:active { transform: scale(.99); }
 
 /* Landscape: image capped by width + height so the whole home fits one screen. */
-.home-frame:not(.is-portrait) .gframe-mat img {
+.home-card:not(.is-portrait) .gframe-mat img {
   display: block; opacity: 0; transition: opacity .5s var(--ease); border-radius: 1px;
   /* Cap by viewport width MINUS the mat+molding chrome (~64px) + #app padding,
      so the whole landscape frame fits and isn't clipped sideways. */
@@ -570,11 +591,11 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 }
 /* Portrait: served PNG is the panel buffer (landscape px); show it upright by
    swapping dims via container-query units + rotating 90° clockwise. */
-.home-frame.is-portrait .gframe-mat { container-type: size; aspect-ratio: 480 / 800; height: 52dvh; }
+.home-card.is-portrait .gframe-mat { container-type: size; aspect-ratio: 480 / 800; height: 52dvh; }
 /* Portrait: sit the frame higher (smaller top margin) so the caption below has
    more breathing room. */
-.home-frame.is-portrait .gallery-frame { margin-top: clamp(4px, 1.5vh, 14px); }
-.home-frame.is-portrait .gframe-mat img {
+.home-card.is-portrait .gallery-frame { margin-top: clamp(4px, 1.5vh, 14px); }
+.home-card.is-portrait .gframe-mat img {
   position: absolute; top: 50%; left: 50%; opacity: 0; transition: opacity .5s var(--ease);
   width: 100cqh; height: 100cqw; max-width: none;
   transform: translate(-50%, -50%) rotate(90deg); transform-origin: center;
@@ -582,8 +603,8 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 /* The orientation rules above set opacity:0 and outrank the generic
    `.gframe-mat img.loaded` rule, so the loaded image never faded in. Re-assert
    opacity:1 at higher specificity for both orientations. */
-.home-frame:not(.is-portrait) .gframe-mat img.loaded,
-.home-frame.is-portrait .gframe-mat img.loaded { opacity: 1; }
+.home-card:not(.is-portrait) .gframe-mat img.loaded,
+.home-card.is-portrait .gframe-mat img.loaded { opacity: 1; }
 
 .home-meta { text-align: center; padding: 0 10px; }
 /* Museum placard: title + hairline + artistic caption. */
@@ -595,7 +616,7 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
                line-height: 1.45; margin: 8px auto 12px; max-width: 38ch;
                display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 /* Landscape leaves more vertical room, so allow a 4th caption line. */
-.home-frame:not(.is-portrait) .art-caption { -webkit-line-clamp: 4; }
+.home-card:not(.is-portrait) .art-caption { -webkit-line-clamp: 4; }
 .open-chip { display: inline-flex; align-items: center; justify-content: center; width: auto;
              padding: 9px 30px; background: var(--ink); color: var(--paper); border: none;
              border-radius: 999px; font-family: "Fraunces"; font-weight: 600; font-size: 15px;
@@ -688,6 +709,14 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .radio input:checked + span { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .radios.orient .radio span { flex-direction: column; padding: 12px 22px; }
 .ori { width: 30px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+
+/* Auto-detected power state, shown read-only above the per-state policies. */
+.power-now { display: flex; align-items: center; gap: 8px; margin: 4px 0 2px;
+             font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+.power-now .dot { width: 9px; height: 9px; }
+/* The "on battery" minutes field is a fieldset+legend like .radios, but its one
+   control is a full-width labelled input rather than radio chips. */
+#battery-field label { flex-basis: 100%; margin-top: 0; }
 
 /* ── Location field ──────────────────────────────────────────────────── */
 .field-label { display: block; font-size: 13px; font-weight: 600;

@@ -71,9 +71,14 @@
       <header class="home-top">
         <span class="brand-word">Ink</span>
         <span class="inkmark inkmark-anim" aria-hidden="true"><svg viewBox="0 0 160 160"><use href="#inkblob" /></svg></span>
-        <button class="gear-btn" id="app-settings-btn" aria-label="App settings">
-          <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8.4 4a6.5 6.5 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a6.4 6.4 0 00-2-1.2l-.4-2.6H9.5L9 5.8a6.4 6.4 0 00-2 1.2l-2.4-1-2 3.4 2 1.6A6.5 6.5 0 003.6 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2l.4 2.6h5l.4-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
-        </button>
+        <span class="home-actions">
+          <button class="gear-btn" id="add-frame-btn" aria-label="Add a frame" title="Add a frame">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <button class="gear-btn" id="app-settings-btn" aria-label="App settings">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8.4 4a6.5 6.5 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a6.4 6.4 0 00-2-1.2l-.4-2.6H9.5L9 5.8a6.4 6.4 0 00-2 1.2l-2.4-1-2 3.4 2 1.6A6.5 6.5 0 003.6 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2l.4 2.6h5l.4-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          </button>
+        </span>
       </header>
 
       <!-- Empty: no frame connected -->
@@ -87,26 +92,34 @@
         <button id="empty-connect-btn" class="btn-primary">Connect a frame</button>
       </div>
 
-      <!-- Connected: the primary frame as a hung work of art -->
+      <!-- Connected: a swipeable carousel of frames, each a hung work of art -->
       <div id="home-frame" class="home-frame" hidden>
-        <button class="gallery-frame" id="home-art-btn" aria-label="Open frame">
-          <span class="gframe-wood">
-            <span class="gframe-mat">
-              <span class="skeleton" id="home-skeleton"></span>
-              <img id="home-art-img" alt="current artwork" />
-            </span>
-          </span>
-        </button>
-        <figcaption class="home-meta">
-          <h2 class="art-title">
-            <span id="home-frame-name">My frame</span>
-            <svg class="title-moon" id="home-sleep-moon" viewBox="0 0 24 24" width="16" height="16" aria-label="Asleep" hidden><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" fill="currentColor"/></svg>
-          </h2>
-          <p class="art-caption" id="home-explain">—</p>
-          <button class="open-chip" id="home-more">Open</button>
-        </figcaption>
-        <div class="frame-switch" id="frame-switch" hidden></div>
+        <div class="home-carousel" id="home-carousel"></div>
+        <div class="dots" id="home-dots" hidden></div>
+        <p class="swipe-hint" id="home-swipe-hint" hidden>‹ swipe between frames · hold to reorder ›</p>
       </div>
+      <!-- One card per frame, cloned into #home-carousel (classes, not ids, so
+           multiple cards can coexist). -->
+      <template id="home-card-tpl">
+        <div class="home-card">
+          <button class="gallery-frame home-art-btn" type="button" aria-label="Open frame">
+            <span class="gframe-wood">
+              <span class="gframe-mat">
+                <span class="skeleton home-skeleton"></span>
+                <img class="home-art-img" alt="current artwork" />
+              </span>
+            </span>
+          </button>
+          <figcaption class="home-meta">
+            <h2 class="art-title">
+              <span class="home-frame-name">My frame</span>
+              <svg class="title-moon home-sleep-moon" viewBox="0 0 24 24" width="16" height="16" aria-label="Asleep" hidden><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" fill="currentColor"/></svg>
+            </h2>
+            <p class="art-caption home-explain">—</p>
+            <button class="open-chip home-more" type="button">Open</button>
+          </figcaption>
+        </div>
+      </template>
     </section>
 
     <!-- ───────────────────────── Connect a frame ────────────────────────── -->
@@ -315,13 +328,21 @@
 
       <div class="card">
         <h3>Power</h3>
-        <fieldset class="radios" id="power-radios">
-          <legend>How is this frame powered?</legend>
-          <label class="radio"><input type="radio" name="power" value="usb" /><span>Plugged in (always on)</span></label>
-          <label class="radio"><input type="radio" name="power" value="battery" /><span>Battery (sleeps)</span></label>
+        <p class="power-now"><span id="power-now-dot" class="dot"></span><span id="power-now">—</span></p>
+
+        <fieldset class="radios" id="plugged-radios">
+          <legend>When plugged in</legend>
+          <label class="radio"><input type="radio" name="plugged" value="always_on" /><span>Always on</span></label>
+          <label class="radio"><input type="radio" name="plugged" value="sleep" /><span>Sleep after a while</span></label>
         </fieldset>
-        <label id="sleep-row" hidden>Stay awake after update (minutes)<input id="sleep-after" type="number" min="1" max="240" /></label>
-        <p class="hint">On battery the frame wakes at the update time, shows the new work, then sleeps to save power. Plugged in, it stays on.</p>
+        <label id="plugged-sleep-row" hidden>Sleep after (minutes)<input id="plugged-sleep" type="number" min="1" max="240" /></label>
+
+        <fieldset class="radios" id="battery-field">
+          <legend>On battery</legend>
+          <label>Sleep after (minutes)<input id="battery-sleep" type="number" min="1" max="240" /></label>
+        </fieldset>
+
+        <p class="hint">Ink senses whether it's plugged in or running on battery and uses the matching setting — like a laptop. On battery it wakes at the update time, shows the new work, then sleeps to save power.</p>
       </div>
 
       <div class="card">

@@ -201,18 +201,165 @@ function wireWelcome() {
 async function showHome(preferId) {
   go("home");
   try { ({ devices } = await api("/devices")); }
-  catch (e) { if (e.status === 401) { localStorage.removeItem(TOKEN_KEY); return go("welcome"); } devices = []; }
+  catch (e) { if (e.status === 401 || e.status === 403) { localStorage.removeItem(TOKEN_KEY); return go("welcome"); } devices = []; }
 
   $("screen-home").classList.toggle("is-empty", !devices.length);
   if (!devices.length) { $("home-empty").hidden = false; $("home-frame").hidden = true; maybeShowInstallBanner(); return; }
   $("home-empty").hidden = true; $("home-frame").hidden = false;
 
-  const dev = devices.find((d) => d.id === preferId) || devices[0];
-  renderHomeFrame(dev);
-  renderFrameSwitch(dev.id);
+  buildHomeCards(preferId);
   startHomeAutoRefresh();
   maybeShowInstallBanner();
   checkFirmwareUpdates();   // re-evaluated on every app launch / home entry
+}
+
+// Build one card per frame into the carousel; focus the preferred (or first) one.
+function buildHomeCards(preferId) {
+  const track = $("home-carousel");
+  track.innerHTML = "";
+  const tpl = $("home-card-tpl");
+  for (const d of devices) {
+    const card = tpl.content.firstElementChild.cloneNode(true);
+    fillHomeCard(card, d);
+    card.querySelector(".home-art-btn").addEventListener("click", () => openFrame(card.dataset.id));
+    card.querySelector(".home-more").addEventListener("click", () => openFrame(card.dataset.id));
+    track.appendChild(card);
+  }
+  attachReorder(track);   // long-press drag-to-reorder (no-op for a single frame)
+
+  const multi = devices.length >= 2;
+  $("home-dots").hidden = !multi;
+  $("home-swipe-hint").hidden = !multi;
+
+  let idx = devices.findIndex((d) => d.id === preferId);
+  if (idx < 0) idx = 0;
+  const dev = devices[idx];
+  currentId = dev.id; currentDevice = dev;
+  renderHomeDots(idx);
+  // Jump (no animation) to the focused card once layout is ready.
+  requestAnimationFrame(() => {
+    const card = track.children[idx];
+    if (card) { const prev = track.style.scrollBehavior; track.style.scrollBehavior = "auto"; track.scrollLeft = card.offsetLeft; track.style.scrollBehavior = prev; }
+  });
+}
+
+function fillHomeCard(card, d) {
+  card.dataset.id = d.id;
+  card.classList.toggle("is-portrait", d.orientation === "portrait");
+  card.querySelector(".home-frame-name").textContent = displayName(d);
+  const asleep = frameState(d).cls === "s-sleep";
+  card.querySelector(".home-sleep-moon").hidden = !asleep;
+  const cap = card.querySelector(".home-explain");
+  cap.textContent = "Loading today's work…";
+  loadArtwork(card.querySelector(".home-art-img"), card.querySelector(".home-skeleton"), d.id, () => {
+    cap.textContent = "No artwork yet — open the frame and tap Generate.";
+  });
+  loadExplain(d.id, card);
+}
+
+function renderHomeDots(active) {
+  const el = $("home-dots");
+  if (!el || devices.length < 2) { if (el) el.innerHTML = ""; return; }
+  el.innerHTML = Array.from({ length: devices.length }, (_, i) =>
+    `<span class="dot-i${i === active ? " on" : ""}"></span>`).join("");
+}
+
+function activeHomeIndex() {
+  const g = $("home-carousel");
+  if (!g || !g.clientWidth) return 0;
+  return Math.max(0, Math.min(devices.length - 1, Math.round(g.scrollLeft / g.clientWidth)));
+}
+function activeHomeCard() {
+  const g = $("home-carousel");
+  return g ? g.children[activeHomeIndex()] : null;
+}
+
+let homeScrollRAF = null;
+function onHomeScroll() {
+  cancelAnimationFrame(homeScrollRAF);
+  homeScrollRAF = requestAnimationFrame(() => {
+    const i = activeHomeIndex();
+    const d = devices[i];
+    if (d && d.id !== currentId) { currentId = d.id; currentDevice = d; }
+    renderHomeDots(i);
+  });
+}
+
+// Drag-to-reorder on the home carousel. A normal horizontal swipe navigates
+// (native scroll-snap); HOLDING a card ~400ms enters reorder mode, then dragging
+// left/right swaps it past neighbors. Wired once on the persistent track element;
+// reads the live `devices` array + current cards each gesture.
+const REORDER_HOLD_MS = 400;
+const REORDER_SLOP = 10;       // movement before the hold fires => it's a swipe
+function attachReorder(track) {
+  if (track._reorderWired) return;
+  track._reorderWired = true;
+  let timer = null, dragging = false, card = null, idx = 0, startX = 0, startY = 0;
+  const cardW = () => track.clientWidth || 1;
+  const cancelHold = () => { if (timer) { clearTimeout(timer); timer = null; } };
+
+  const swap = (a, b) => {
+    const t = devices[a]; devices[a] = devices[b]; devices[b] = t;
+    const nodes = track.children;
+    if (a < b) track.insertBefore(nodes[a], nodes[b].nextSibling);
+    else track.insertBefore(nodes[a], nodes[b]);
+  };
+
+  const enter = () => {
+    if (devices.length < 2 || !card) return;
+    dragging = true;
+    track.classList.add("reordering");
+    card.classList.add("dragging");
+    try { navigator.vibrate && navigator.vibrate(12); } catch { /* ignore */ }
+  };
+
+  track.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1 || devices.length < 2) { card = null; return; }
+    card = e.target.closest(".home-card");
+    if (!card) return;
+    idx = Array.prototype.indexOf.call(track.children, card);
+    startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+    dragging = false; cancelHold();
+    timer = setTimeout(enter, REORDER_HOLD_MS);
+  }, { passive: true });
+
+  track.addEventListener("touchmove", (e) => {
+    if (!card) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if (!dragging) {
+      if (Math.abs(dx) > REORDER_SLOP || Math.abs(dy) > REORDER_SLOP) { cancelHold(); card = null; }
+      return;   // let native scroll handle the swipe
+    }
+    e.preventDefault();   // own the gesture while reordering
+    const w = cardW();
+    card.style.transform = `translateX(${dx}px) scale(1.04)`;
+    if (dx > w * 0.55 && idx < track.children.length - 1) {
+      swap(idx, idx + 1); idx += 1; startX += w; card.style.transform = `translateX(${dx - w}px) scale(1.04)`; renderHomeDots(idx);
+    } else if (dx < -w * 0.55 && idx > 0) {
+      swap(idx, idx - 1); idx -= 1; startX -= w; card.style.transform = `translateX(${dx + w}px) scale(1.04)`; renderHomeDots(idx);
+    }
+  }, { passive: false });
+
+  const end = (e) => {
+    cancelHold();
+    if (!dragging || !card) { card = null; return; }
+    if (e && e.cancelable) e.preventDefault();   // suppress the click-through (don't open the frame)
+    const dropped = card, dropIdx = idx;
+    dropped.style.transition = "transform .18s var(--ease)";
+    dropped.style.transform = "";
+    dropped.classList.remove("dragging");
+    track.classList.remove("reordering");
+    requestAnimationFrame(() => { track.scrollLeft = dropIdx * cardW(); });
+    setTimeout(() => { dropped.style.transition = ""; }, 220);
+    renderHomeDots(dropIdx);
+    currentId = devices[dropIdx].id; currentDevice = devices[dropIdx];
+    dragging = false; card = null;
+    api("/devices/reorder", { method: "POST", body: { order: devices.map((d) => d.id) } })
+      .catch(() => toast("Couldn't save the new order"));
+  };
+  track.addEventListener("touchend", end);
+  track.addEventListener("touchcancel", end);
 }
 
 // Keep the home image current without a manual button: re-pull silently (preload
@@ -220,21 +367,23 @@ async function showHome(preferId) {
 // / tab-visibility. Guarantees the home always shows the real, latest artwork.
 async function refreshHomeArt() {
   if (!currentId || currentScreen !== "home") return;
+  const card = activeHomeCard();
+  if (!card) return;
   const url = artworkUrl(currentId);
   const probe = new Image();
-  probe.onload = () => { const el = $("home-art-img"); if (el) { el.src = url; el.classList.add("loaded"); } };
+  probe.onload = () => { const el = card.querySelector(".home-art-img"); if (el) { el.src = url; el.classList.add("loaded"); } };
   probe.src = url;
-  loadExplain(currentId);
-  // Also refresh the frame's STATUS so the Asleep moon + hint update on their
-  // own (no manual reload) — picks up the backend 'sleeping' flag, and falls
-  // back to the last-seen timeout if the sleep ping didn't land.
+  loadExplain(currentId, card);
+  // Also refresh the frame's STATUS so the Asleep moon updates on its own (no
+  // manual reload) — picks up the backend 'sleeping' flag, falling back to the
+  // last-seen timeout if the sleep ping didn't land.
   try {
     const r = await api("/devices");
     const d = r && r.devices && r.devices.find((x) => x.id === currentId);
     if (d) {
       currentDevice = d;
       const asleep = frameState(d).cls === "s-sleep";
-      const m = $("home-sleep-moon");
+      const m = card.querySelector(".home-sleep-moon");
       if (m) m.hidden = !asleep;
     }
   } catch { /* keep the last-known status */ }
@@ -510,44 +659,17 @@ function attachPullToRefresh(screenName, onRefresh) {
   screen.addEventListener("touchcancel", end);
 }
 
-function renderHomeFrame(d) {
-  currentId = d.id; currentDevice = d;
-  $("home-frame").classList.toggle("is-portrait", d.orientation === "portrait");
-  $("home-frame-name").textContent = displayName(d);
-  // Sleep indicator: a small moon beside the frame name when it's asleep.
-  const asleep = frameState(d).cls === "s-sleep";
-  $("home-sleep-moon").hidden = !asleep;
-  $("home-explain").textContent = "Loading today's work…";
-  loadArtwork($("home-art-img"), $("home-skeleton"), d.id, () => {
-    $("home-explain").textContent = "No artwork yet — open the frame and tap Generate.";
-  });
-  loadExplain(d.id);
-}
-
-async function loadExplain(id) {
+// Fill a card's caption from the latest artwork, and match the card's orientation
+// to the ACTUAL artwork on screen (not the device's current setting, which may have
+// changed after this image was made).
+async function loadExplain(id, card) {
+  const cap = card.querySelector(".home-explain");
   try {
     const { items } = await api(`/devices/${id}/archive?limit=1`);
     const m = items && items[0];
-    $("home-explain").textContent = (m && m.event_text_en) ? m.event_text_en : "Today's work hasn't been created yet.";
-    // The frame's orientation should match the ACTUAL artwork on screen, not the
-    // device's current setting (which may have changed after this image was made).
-    if (m && m.orientation) {
-      $("home-frame").classList.toggle("is-portrait", m.orientation === "portrait");
-    }
-  } catch { $("home-explain").textContent = "—"; }
-}
-
-function renderFrameSwitch(activeId) {
-  const el = $("frame-switch");
-  if (devices.length < 2) { el.hidden = true; el.innerHTML = ""; return; }
-  el.hidden = false; el.innerHTML = "";
-  for (const d of devices) {
-    const b = document.createElement("button");
-    b.textContent = displayName(d);
-    if (d.id === activeId) b.className = "active";
-    b.addEventListener("click", () => { renderHomeFrame(d); renderFrameSwitch(d.id); });
-    el.appendChild(b);
-  }
+    cap.textContent = (m && m.event_text_en) ? m.event_text_en : "Today's work hasn't been created yet.";
+    if (m && m.orientation) card.classList.toggle("is-portrait", m.orientation === "portrait");
+  } catch { cap.textContent = "—"; }
 }
 
 // --------------------------------------------------------------------------
@@ -555,6 +677,7 @@ function renderFrameSwitch(activeId) {
 // --------------------------------------------------------------------------
 function wireConnect() {
   $("empty-connect-btn").addEventListener("click", () => go("connect"));
+  $("add-frame-btn").addEventListener("click", () => go("connect"));   // "+" beside the gear
   $("connect-back").addEventListener("click", () => { stopScan(); showHome(); });
   $("pair-form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -766,8 +889,9 @@ function wireFrame() {
   $("frame-back").addEventListener("click", () => showHome(currentId));
   $("goto-artwork").addEventListener("click", openArtwork);
   $("goto-settings").addEventListener("click", openSettings);
-  $("home-art-btn").addEventListener("click", () => openFrame(currentId));
-  $("home-more").addEventListener("click", () => openFrame(currentId));
+  // Home cards are built dynamically; per-card Open buttons are wired in
+  // buildHomeCards. Here we only wire the carousel scroll → active dot/frame.
+  $("home-carousel").addEventListener("scroll", onHomeScroll, { passive: true });
   $("ev-more").addEventListener("click", () => setFrameExpanded(!$("screen-frame").classList.contains("expanded")));
   attachPullToRefresh("home", homeRefresh);
   attachPullToRefresh("frame", frameRefresh);
@@ -1030,9 +1154,12 @@ function openSettings() {
   $("day-chips").hidden = (d.schedule || "daily") === "daily";
   const pad2 = (n) => String(n).padStart(2, "0");
   $("wake").value = `${pad2(d.wake_hour || 0)}:${pad2(d.wake_minute || 0)}`;
-  setRadio("power", d.power_source || "usb");
-  $("sleep-after").value = d.sleep_after_minutes || 10;
-  $("sleep-row").hidden = (d.power_source || "usb") !== "battery";
+  // Power: the frame auto-detects its state; the user only sets behaviour per state.
+  const plugMin = d.plugged_sleep_minutes || 0;          // 0 = always on
+  setRadio("plugged", plugMin > 0 ? "sleep" : "always_on");
+  $("plugged-sleep").value = plugMin > 0 ? plugMin : 30;
+  $("plugged-sleep-row").hidden = !(plugMin > 0);
+  $("battery-sleep").value = d.battery_sleep_minutes || 10;
   $("auto-tz").checked = d.auto_timezone !== false;
   $("tz-row").hidden = d.auto_timezone !== false; $("tz").value = d.tz || "";
   $("spec-conn").textContent = d.last_seen ? relTime(d.last_seen) : "never";
@@ -1041,6 +1168,10 @@ function openSettings() {
   // power source instead of a misleading "0%". On battery, show the charge level.
   const onUsb = (d.power_source || "usb") !== "battery";
   const bat = batteryPct(d.battery);
+  $("power-now-dot").className = `dot ${onUsb ? "s-on" : "s-sleep"}`;
+  $("power-now").textContent = onUsb
+    ? "Right now: plugged in"
+    : (bat != null ? `Right now: on battery · ${bat}%` : "Right now: on battery");
   $("spec-batt").textContent = onUsb ? "Plugged in" : (bat != null ? `${bat}%` : "—");
   $("spec-fw").textContent = d.fw_version || "—"; $("spec-id").textContent = d.id;
   setSettingsDirty(false);   // freshly loaded → nothing to save yet
@@ -1065,8 +1196,8 @@ function wireSettings() {
   // Conditional rows follow their controls.
   document.querySelectorAll('input[name="sched"]').forEach((r) =>
     r.addEventListener("change", () => { $("day-chips").hidden = getRadio("sched") === "daily"; }));
-  document.querySelectorAll('input[name="power"]').forEach((r) =>
-    r.addEventListener("change", () => { $("sleep-row").hidden = getRadio("power") !== "battery"; }));
+  document.querySelectorAll('input[name="plugged"]').forEach((r) =>
+    r.addEventListener("change", () => { $("plugged-sleep-row").hidden = getRadio("plugged") !== "sleep"; }));
   $("auto-tz").addEventListener("change", (e) => { $("tz-row").hidden = e.target.checked; });
 
   // One global save: send only what actually changed.
@@ -1083,10 +1214,13 @@ function wireSettings() {
     const [wh, wm] = ($("wake").value || "").split(":").map((n) => parseInt(n, 10));
     const m = isNaN(wm) ? 0 : wm;
     if (!isNaN(wh) && (wh !== d.wake_hour || m !== d.wake_minute)) { body.wake_hour = wh; body.wake_minute = m; }
-    const power = getRadio("power");
-    if (power !== d.power_source) body.power_source = power;
-    const s = parseInt($("sleep-after").value, 10);
-    if (!isNaN(s) && s !== d.sleep_after_minutes) body.sleep_after_minutes = s;
+    // Plugged-in policy: "always on" stores 0; "sleep after" stores the minutes.
+    const plugSleep = getRadio("plugged") === "sleep"
+      ? Math.max(1, parseInt($("plugged-sleep").value, 10) || 30)
+      : 0;
+    if (plugSleep !== (d.plugged_sleep_minutes || 0)) body.plugged_sleep_minutes = plugSleep;
+    const battSleep = parseInt($("battery-sleep").value, 10);
+    if (!isNaN(battSleep) && battSleep !== d.battery_sleep_minutes) body.battery_sleep_minutes = battSleep;
     const auto = $("auto-tz").checked;
     if (auto !== (d.auto_timezone !== false)) body.auto_timezone = auto;
     const tz = $("tz").value.trim();
