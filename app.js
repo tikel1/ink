@@ -506,16 +506,14 @@ function attachPullToRefresh(screenName, onRefresh) {
     try { if (pid != null) screen.releasePointerCapture(pid); } catch (_) {}
     reset();
     if (!trigger) { springBack(); return; }
+    // Committed: play a one-shot "pop" at the rest position, then spring back —
+    // independent of how long the refresh takes (its status shows via toast).
     busy = true;
-    sp.classList.add("spin");
-    sp.style.transition = "opacity .2s var(--ease), transform .2s var(--ease)";
+    sp.style.transition = "";
     sp.style.opacity = "1"; sp.style.transform = `translateY(${PULL_REST}px) scale(1)`;
-    try { await onRefresh(); }
-    finally {
-      sp.classList.remove("spin");
-      springBack();
-      setTimeout(() => { busy = false; }, 200);
-    }
+    sp.classList.add("engaged");
+    onRefresh();                                   // fire-and-forget; toasts report status/errors
+    setTimeout(() => { sp.classList.remove("engaged"); springBack(); busy = false; }, 520);
   };
   screen.addEventListener("pointerup", end);
   screen.addEventListener("pointercancel", end);
