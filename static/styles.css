@@ -159,9 +159,13 @@ button { font-family: inherit; }
   padding: max(12px, env(safe-area-inset-top)) 14px 12px;
   background: #14110d; color: #fff;
   box-shadow: var(--shadow-lg);
-  animation: fw-drop .32s var(--ease) both;
+  /* Fade in only — a translateY slide-in could get stuck in its start state
+     (translateY(-100%)) and leave the toast above the viewport with the X
+     unreachable. Opacity can't push it off-screen, so the toast (and its close
+     button) is always in place. */
+  animation: fw-fade .25s var(--ease) both;
 }
-@keyframes fw-drop { from { transform: translateY(-100%); } to { transform: none; } }
+@keyframes fw-fade { from { opacity: 0; } to { opacity: 1; } }
 /* If both the firmware + app toasts show at once, stack the app one below it. */
 #fw-toast:not([hidden]) ~ #app-toast { top: 64px; }
 .fw-toast-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
