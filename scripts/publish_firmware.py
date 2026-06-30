@@ -37,14 +37,23 @@ def _arg(argv: list[str], flag: str) -> str | None:
     return argv[argv.index(flag) + 1] if flag in argv and argv.index(flag) + 1 < len(argv) else None
 
 
-def _push(base_url: str, token: str, version: str, data: bytes) -> None:
+def _push(base_url: str, token: str, version: str, bin_path: Path, data: bytes) -> None:
     url = base_url.rstrip("/") + f"/api/app/admin/firmware?version={version}"
-    req = urllib.request.Request(
-        url, data=data, method="POST",
-        headers={"Content-Type": "application/octet-stream", "X-Admin-Token": token},
-    )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        body = resp.read().decode("utf-8", "replace")
+    headers = {"Content-Type": "application/octet-stream", "X-Admin-Token": token}
+    try:
+        req = urllib.request.Request(url, data=data, method="POST", headers=headers)
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            body = resp.read().decode("utf-8", "replace")
+    except Exception as exc:  # noqa: BLE001 — fall back to curl (e.g. a stale Python CA bundle)
+        import shutil as _sh
+        import subprocess
+        if not _sh.which("curl"):
+            raise
+        print(f"  (urllib failed: {exc}; retrying with curl)")
+        body = subprocess.check_output([
+            "curl", "-fsS", "-m", "120", "-X", "POST", "--data-binary", f"@{bin_path}",
+            "-H", f"X-Admin-Token: {token}", "-H", "Content-Type: application/octet-stream", url,
+        ]).decode("utf-8", "replace")
     print(f"  pushed -> {base_url}: {body}")
 
 
@@ -81,7 +90,7 @@ def main(argv: list[str]) -> int:
             print("error: --push requires --token <admin_token>", file=sys.stderr)
             return 1
         try:
-            _push(push_url, token, version, data)
+            _push(push_url, token, version, DEST_DIR / BIN_NAME, data)
         except Exception as exc:  # noqa: BLE001
             print(f"error: push failed: {exc}", file=sys.stderr)
             return 1
