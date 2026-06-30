@@ -625,7 +625,7 @@ function onGalleryScroll() {
 // on a timer and hold on "Painting…" (the long image step) until it's done.
 const GEN_STEPS = [
   "Researching…",   // historical event for the date
-  "Gathering…",     // weather + context
+  "Discovering…",   // weather + context
   "Composing…",     // building the prompt / planning composition
   "Painting…",      // image generation (the long phase — held here)
 ];
