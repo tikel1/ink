@@ -1,12 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <!-- Gooey merge: nearby blobs fuse with smooth necks (ink pulling), farther
+         ones stay as separate droplets — the same effect the animated mark uses. -->
+    <filter id="goo" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="b"/>
+      <feColorMatrix in="b" mode="matrix"
+        values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -9"/>
+    </filter>
+  </defs>
   <rect width="512" height="512" rx="112" fill="#e7dfce"/>
-  <!-- Organic ink blob: a soft, hand-cut biomorphic splotch like the shapes the
-       animated mark morphs through — rounded and gently irregular, no leaf tip. -->
-  <path fill="#1b1813" d="M256 104
-    C330 100 392 140 404 214
-    C414 280 402 344 348 384
-    C300 420 224 424 168 396
-    C104 364 92 286 108 214
-    C120 158 156 116 200 106
-    C220 101 238 105 256 104 Z"/>
+  <g fill="#1b1813" filter="url(#goo)">
+    <!-- central mass, spread + lobed -->
+    <circle cx="248" cy="252" r="74"/>
+    <circle cx="300" cy="208" r="46"/>
+    <circle cx="206" cy="304" r="42"/>
+    <!-- droplets pulling outward in different directions -->
+    <circle cx="352" cy="150" r="30"/>
+    <circle cx="404" cy="116" r="18"/>   <!-- flung upper-right -->
+    <circle cx="152" cy="356" r="28"/>
+    <circle cx="112" cy="402" r="17"/>   <!-- flung lower-left -->
+    <circle cx="372" cy="348" r="22"/>   <!-- lower-right droplet -->
+    <circle cx="158" cy="156" r="18"/>   <!-- upper-left fleck -->
+  </g>
 </svg>
