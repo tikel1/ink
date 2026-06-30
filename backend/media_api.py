@@ -96,8 +96,18 @@ async def current_version(
 @router.get("/sleep/{device_id}")
 async def report_sleep(device_id: str) -> Response:
     """The frame hits this just before deep sleep so the app reflects 'Asleep'
-    immediately. Cleared on the next check-in (.ver/.png)."""
+    immediately. Cleared on the next check-in (.ver / wake report)."""
     repositories.mark_sleeping(device_id)
+    return Response(content="ok", media_type="text/plain")
+
+
+@router.get("/awake/{device_id}")
+async def report_awake(device_id: str) -> Response:
+    """The frame hits this the moment it wakes (boot, before the first .ver poll)
+    so the app flips to 'Online' instantly instead of waiting for the next
+    heartbeat. Stamps last_seen + clears the sleeping flag; unlike .ver it does
+    NOT consume a queued command (the poll handles those)."""
+    repositories.update_telemetry(device_id)
     return Response(content="ok", media_type="text/plain")
 
 
