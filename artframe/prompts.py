@@ -95,11 +95,14 @@ Reply with ONLY a compact JSON array (no prose) of objects (aim for 2-3 per topi
    "event": "<15-25 word description, including the year>",
    "verified_date": "<Month DD, YYYY>",
    "on_date": <true if it really happened on {date}, else false>,
-   "iconic_visual": "<6-14 words: the single most iconic, instantly recognizable
-   image of that moment, including a SPECIFIC distinctive detail that identifies it
-   (the exact trophy, a famous outfit/uniform, a jersey number, a signature
-   hairstyle, a landmark/monument, an instrument, a signature object or pose) —
-   something unmistakable in silhouette, NOT generic like 'team celebration'>"}}, ...]
+   "iconic_visual": "<6-14 words: ONE concrete object or emblem whose SHAPE alone
+   identifies this event as a bold black paper-cut silhouette — a distinctive
+   trophy, uniform, instrument, vehicle, ball, landmark/monument, or signature
+   object (e.g. the FIFA World Cup globe, an electric guitar, a chalkboard with
+   E=mc2, a lunar module). If the event centers on a person, use their signature
+   OBJECT or creation, NEVER their face, hair, body, or likeness — a silhouette
+   cannot make a face look like a specific person; it just reads as a blob. Avoid
+   faces, hairstyles, 'a player', 'a crowd', or 'team celebration'.>"}}, ...]
 
 If web search verifies no real event on {date} for any topic, reply: []"""
 
@@ -129,15 +132,21 @@ one available — never reply 0."""
 
 # Fallback when the chosen event has no iconic_visual (some providers omit it).
 VISUAL_PROMPT = """Name the single most iconic, INSTANTLY recognizable image of this
-event, as one concrete subject for a hand-cut paper silhouette (6-14 words).
+event as ONE concrete object or emblem for a bold hand-cut paper silhouette (6-14
+words).
 
-It must include the SPECIFIC distinctive detail that identifies THIS event — e.g.
-the exact trophy (the FIFA World Cup globe, the Wimbledon plate), a famous
-outfit/uniform, a jersey number, a signature hairstyle, a landmark building or
-monument, an instrument, a signature pose or object. Pick something whose SHAPE
-is unmistakable in silhouette.
+Choose something whose SHAPE alone identifies the event in solid black — a
+distinctive trophy, uniform, instrument, vehicle, ball, landmark/monument, or
+signature object (e.g. the FIFA World Cup globe, the Wimbledon plate, an electric
+guitar, a chalkboard with "E=mc2", a lunar module).
 
-Avoid generic phrases like "team celebration", "a player", or "a crowd".
+If the event centers on a PERSON, pick their signature OBJECT, creation, or emblem —
+NEVER their face, hair, body, or likeness. A cut-paper silhouette cannot make a face
+resemble a specific person; a face or "wild hair" just reads as a generic blob.
+
+Avoid faces, portraits, hairstyles, "a player", "a crowd", "a team celebration", or
+any vague gesture. Prefer one clean, unmistakable object.
+
 Reply with ONLY the phrase (no quotes, no extra words).
 
 Event: {event}"""
@@ -331,7 +340,10 @@ def build_data_block(
             "  - Suggest the idea **indirectly**, not depict it.\n"
             "  - Feel like a **primitive cut-out gesture**\n"
             "  - Avoid literal storytelling\n"
-            "  - Keep the element recognizable and implicit to the subject"
+            "  - Keep the element recognizable and implicit to the subject\n"
+            "  - Depict an **object or emblem only** — NEVER a person's face, head, "
+            "hair, or body (a silhouette can't resemble a specific person; render "
+            "their signature object instead)"
         )
 
     if not sections:
