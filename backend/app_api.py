@@ -49,10 +49,9 @@ class ConfigUpdate(BaseModel):
     auto_timezone: bool | None = None
     schedule: str | None = Field(default=None, pattern=r"^(daily|weekly|custom)$")
     schedule_days: str | None = Field(default=None, max_length=60)
-    # Power state is auto-detected (not user-set). The user configures behaviour
-    # per state: plugged in (0 = always on, >0 = sleep after N min) and on battery.
-    plugged_sleep_minutes: int | None = Field(default=None, ge=0, le=240)
-    battery_sleep_minutes: int | None = Field(default=None, ge=1, le=240)
+    # Single sleep policy: 0 = always on, >0 = sleep after N minutes of uptime.
+    # (The frame can't sense its own power, so there's no plugged/battery split.)
+    sleep_after_minutes: int | None = Field(default=None, ge=0, le=240)
     custom_prompt_override: str | None = None
     enabled: bool | None = None
 
@@ -281,10 +280,7 @@ def _device_payload(device: Device) -> dict:
         "auto_timezone": device.auto_timezone,
         "schedule": device.schedule,
         "schedule_days": device.schedule_days,
-        "power_source": device.power_source,            # auto-detected: usb | battery
-        "sleep_after_minutes": device.sleep_after_minutes,  # legacy (kept for back-compat)
-        "plugged_sleep_minutes": device.plugged_sleep_minutes,
-        "battery_sleep_minutes": device.battery_sleep_minutes,
+        "sleep_after_minutes": device.sleep_after_minutes,  # 0 = always on
         "sleeping": device.sleeping,
         "custom_prompt_override": device.custom_prompt_override,
         "enabled": device.enabled,

@@ -15,22 +15,6 @@ _PAIRING_MIN = 100_000
 _PAIRING_MAX = 999_999
 _DEFAULT_SIGNATURE = "Ink."
 
-# Power auto-detection from the battery-pad voltage the frame reports each poll.
-# The XIAO's BAT pad reads ~0 V when running on USB with no cell, and a real cell
-# reads ~3.0–4.1 V while discharging; a charging/full cell sits at/above this. So
-# anything outside the discharging band is treated as "plugged in". This is what
-# lets the app stop asking the user whether the frame is plugged or on battery.
-_BATTERY_MIN_V = 3.0    # below this: no cell sensed -> on USB
-_BATTERY_MAX_V = 4.15   # at/above this: charging/plugged -> on USB
-
-
-def detect_power_source(battery_v: Optional[float]) -> Optional[str]:
-    """'battery' | 'usb' from a reported pad voltage, or None when unknown (so the
-    last known state is kept rather than guessed)."""
-    if battery_v is None:
-        return None
-    return "battery" if _BATTERY_MIN_V <= battery_v < _BATTERY_MAX_V else "usb"
-
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -252,7 +236,7 @@ def update_device_config(device_id: str, **fields: object) -> None:
         "signature", "holiday_jewish", "holiday_israeli", "holiday_global",
         "orientation", "show_date", "date_format", "show_weather", "use_weather", "use_event",
         "city_name", "auto_timezone", "schedule", "schedule_days",
-        "plugged_sleep_minutes", "battery_sleep_minutes",
+        "sleep_after_minutes",
         "custom_prompt_override", "enabled",
     }
     updates = {k: v for k, v in fields.items() if k in allowed}
@@ -313,24 +297,18 @@ def update_telemetry(device_id: str, **fields: object) -> None:
     # A check-in means the frame is awake — clear the sleeping flag. Only overwrite
     # battery/rssi/firmware when the check-in actually carried them (COALESCE keeps
     # the last known value), so a bare poll doesn't wipe them back to NULL.
-    # The frame's power state is auto-detected from the reported pad voltage (the
-    # user no longer declares it); keep the last known state when voltage is absent.
-    battery = fields.get("battery")
-    detected = detect_power_source(battery if isinstance(battery, (int, float)) else None)
     with get_connection() as conn:
         conn.execute(
             """UPDATE devices SET last_seen = ?, sleeping = 0,
                battery = COALESCE(?, battery),
                wifi_rssi = COALESCE(?, wifi_rssi),
-               fw_version = COALESCE(?, fw_version),
-               power_source = COALESCE(?, power_source)
+               fw_version = COALESCE(?, fw_version)
                WHERE id = ?""",
             (
                 now_iso(),
-                battery,
+                fields.get("battery"),
                 fields.get("wifi_rssi"),
                 fields.get("fw_version"),
-                detected,
                 device_id,
             ),
         )

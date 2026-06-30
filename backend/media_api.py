@@ -72,11 +72,12 @@ async def current_version(
     # Arduino HTTP client reads collected headers reliably (the body does not).
     headers = {"X-Ver": ver}
     if device is not None:
-        # Power is auto-detected from telemetry; resolve the user's per-state policy
-        # into the single timeout the firmware honors (0 = stay awake / never sleep).
-        on_battery = device.power_source == "battery"
-        sleep_min = device.battery_sleep_minutes if on_battery else device.plugged_sleep_minutes
-        headers["X-Power"] = device.power_source            # usb | battery (detected)
+        # Single user choice: sleep_after_minutes (0 = always on, >0 = sleep after N).
+        # Map it to the headers both firmwares understand: current firmware only
+        # sleeps when X-Power == "battery", so send "battery" whenever sleep is on
+        # and "usb" for always-on. (New firmware honors X-Sleep > 0 directly.)
+        sleep_min = device.sleep_after_minutes
+        headers["X-Power"] = "battery" if sleep_min > 0 else "usb"
         headers["X-Sleep"] = str(sleep_min)                # minutes awake before sleep (0 = never)
         headers["X-Wake"] = str(device.wake_hour)             # legacy: bare hour (old firmware)
         # Minute-precise wake as seconds-since-midnight (new firmware prefers this).

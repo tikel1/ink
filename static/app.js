@@ -112,7 +112,6 @@ function relTime(iso) {
   if (d < DAY) return `${Math.round(d / HOUR)}h ago`;
   return `${Math.round(d / DAY)}d ago`;
 }
-function batteryPct(v) { return v == null ? null : Math.round(Math.max(0, Math.min(1, (v - 3.3) / 0.9)) * 100); }
 // Status shown as "<State> · <when>": State = Online / Sleep / Offline, when =
 // "now" (just checked in) or "Xm/Xh/Xd ago".
 //
@@ -432,14 +431,12 @@ let updateDismissed = false;     // session-only: a Close hides the toast until 
 let otaTargetId = null;          // the frame the toast's Update button targets
 const OTA_MIN_BATTERY = 50;      // %; below this we require USB power (flash safety)
 
-// OTA can only succeed when the frame is awake/polling AND safely powered: on USB,
-// or on a battery with enough charge to survive the write. Mirrors the firmware
-// backstop so the app never offers an update that would be refused or risky.
+// OTA can only succeed when the frame is awake/polling. The frame can't sense its
+// own power, so the firmware's own low-voltage backstop guards the write; the app
+// only needs to confirm the frame is reachable.
 function otaBlockReason(d) {
   if (!d || !d.update_available) return "no-update";
   if (frameState(d).cls !== "s-on") return "offline";
-  const bat = batteryPct(d.battery);
-  if (d.power_source !== "usb" && bat != null && bat < OTA_MIN_BATTERY) return "battery";
   return null;   // good to go
 }
 
@@ -460,7 +457,6 @@ function showUpdateToast(d) {
     : "Firmware update available";
   const reason = otaBlockReason(d);
   const sub = reason === "offline" ? "Wake the frame to update"
-            : reason === "battery" ? `Plug in to update (battery ${batteryPct(d.battery)}%)`
             : `Version ${d.fw_version || "?"} → ${d.latest_fw || "?"}`;
   $("fw-toast-sub").textContent = sub;
   const btn = $("fw-toast-update");
@@ -1158,25 +1154,17 @@ function openSettings() {
   $("day-chips").hidden = (d.schedule || "daily") === "daily";
   const pad2 = (n) => String(n).padStart(2, "0");
   $("wake").value = `${pad2(d.wake_hour || 0)}:${pad2(d.wake_minute || 0)}`;
-  // Power: the frame auto-detects its state; the user only sets behaviour per state.
-  const plugMin = d.plugged_sleep_minutes || 0;          // 0 = always on
-  setRadio("plugged", plugMin > 0 ? "sleep" : "always_on");
-  $("plugged-sleep").value = plugMin > 0 ? plugMin : 30;
-  $("plugged-sleep-row").hidden = !(plugMin > 0);
-  $("battery-sleep").value = d.battery_sleep_minutes || 10;
+  // Power: a single choice — stay always on, or sleep after N minutes of uptime.
+  // (0 = always on.) The frame can't sense its own power, so there's no plugged/
+  // battery distinction or battery %.
+  const sleepMin = d.sleep_after_minutes || 0;           // 0 = always on
+  setRadio("sleepmode", sleepMin > 0 ? "sleep" : "always_on");
+  $("sleep-after").value = sleepMin > 0 ? sleepMin : 30;
+  $("sleep-after-row").hidden = !(sleepMin > 0);
   $("auto-tz").checked = d.auto_timezone !== false;
   $("tz-row").hidden = d.auto_timezone !== false; $("tz").value = d.tz || "";
   $("spec-conn").textContent = d.last_seen ? relTime(d.last_seen) : "never";
   $("spec-wifi").innerHTML = wifiLabel(d.wifi_rssi);
-  // On USB there's no battery to read (the BAT-pad ADC reads ~0V), so show the
-  // power source instead of a misleading "0%". On battery, show the charge level.
-  const onUsb = (d.power_source || "usb") !== "battery";
-  const bat = batteryPct(d.battery);
-  $("power-now-dot").className = `dot ${onUsb ? "s-on" : "s-sleep"}`;
-  $("power-now").textContent = onUsb
-    ? "Right now: plugged in"
-    : (bat != null ? `Right now: on battery · ${bat}%` : "Right now: on battery");
-  $("spec-batt").textContent = onUsb ? "Plugged in" : (bat != null ? `${bat}%` : "—");
   $("spec-fw").textContent = d.fw_version || "—"; $("spec-id").textContent = d.id;
   setSettingsDirty(false);   // freshly loaded → nothing to save yet
   go("settings");
@@ -1200,8 +1188,8 @@ function wireSettings() {
   // Conditional rows follow their controls.
   document.querySelectorAll('input[name="sched"]').forEach((r) =>
     r.addEventListener("change", () => { $("day-chips").hidden = getRadio("sched") === "daily"; }));
-  document.querySelectorAll('input[name="plugged"]').forEach((r) =>
-    r.addEventListener("change", () => { $("plugged-sleep-row").hidden = getRadio("plugged") !== "sleep"; }));
+  document.querySelectorAll('input[name="sleepmode"]').forEach((r) =>
+    r.addEventListener("change", () => { $("sleep-after-row").hidden = getRadio("sleepmode") !== "sleep"; }));
   $("auto-tz").addEventListener("change", (e) => { $("tz-row").hidden = e.target.checked; });
 
   // One global save: send only what actually changed.
@@ -1218,13 +1206,11 @@ function wireSettings() {
     const [wh, wm] = ($("wake").value || "").split(":").map((n) => parseInt(n, 10));
     const m = isNaN(wm) ? 0 : wm;
     if (!isNaN(wh) && (wh !== d.wake_hour || m !== d.wake_minute)) { body.wake_hour = wh; body.wake_minute = m; }
-    // Plugged-in policy: "always on" stores 0; "sleep after" stores the minutes.
-    const plugSleep = getRadio("plugged") === "sleep"
-      ? Math.max(1, parseInt($("plugged-sleep").value, 10) || 30)
+    // Sleep policy: "always on" stores 0; "sleep after" stores the minutes.
+    const sleepMin = getRadio("sleepmode") === "sleep"
+      ? Math.max(1, parseInt($("sleep-after").value, 10) || 30)
       : 0;
-    if (plugSleep !== (d.plugged_sleep_minutes || 0)) body.plugged_sleep_minutes = plugSleep;
-    const battSleep = parseInt($("battery-sleep").value, 10);
-    if (!isNaN(battSleep) && battSleep !== d.battery_sleep_minutes) body.battery_sleep_minutes = battSleep;
+    if (sleepMin !== (d.sleep_after_minutes || 0)) body.sleep_after_minutes = sleepMin;
     const auto = $("auto-tz").checked;
     if (auto !== (d.auto_timezone !== false)) body.auto_timezone = auto;
     const tz = $("tz").value.trim();
