@@ -1002,8 +1002,18 @@ function refreshDateUI() {
   const custom = $("date-format").value === "custom";
   $("date-format-row").hidden = !showDate;
   $("date-preview").hidden = !showDate;
-  $("date-custom-row").hidden = !(showDate && custom);
-  $("date-tokens").hidden = !(showDate && custom);
+  $("date-custom-wrap").hidden = !(showDate && custom);
+  if (!(showDate && custom)) closeDateHelp();
+}
+function closeDateHelp() {
+  const pop = $("date-help-pop"), btn = $("date-help-btn");
+  if (pop) pop.hidden = true;
+  if (btn) btn.setAttribute("aria-expanded", "false");
+}
+function toggleDateHelp() {
+  const pop = $("date-help-pop"), open = pop.hidden;
+  pop.hidden = !open;
+  $("date-help-btn").setAttribute("aria-expanded", open ? "true" : "false");
 }
 
 function openArtwork() {
@@ -1071,6 +1081,11 @@ function wireArtwork() {
     if ($("date-format").value === "custom") $("date-custom").focus();
   });
   $("date-custom").addEventListener("input", updateDatePreview);
+  // "?" popover of format codes: toggle on the button, dismiss on outside click / Esc.
+  $("date-help-btn").addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); toggleDateHelp(); });
+  $("date-help-pop").addEventListener("click", (e) => e.stopPropagation());
+  document.addEventListener("click", closeDateHelp);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDateHelp(); });
   $("use_weather").addEventListener("change", (e) => { $("loc-weather-body").hidden = !e.target.checked; });
   $("use_event").addEventListener("change", (e) => { $("interests-body").hidden = !e.target.checked; });
   $("city-edit").addEventListener("click", () => { setLocEdit(true); $("city-name").focus(); $("city-name").select(); });

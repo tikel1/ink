@@ -256,14 +256,17 @@
           <label id="date-format-row">Date format
             <select id="date-format"></select>
           </label>
-          <label id="date-custom-row" hidden>Custom format
+          <div id="date-custom-wrap" hidden>
+            <div class="field-label-row">
+              <span class="field-label">Custom format</span>
+              <button type="button" id="date-help-btn" class="help-btn" aria-label="Show format codes" aria-expanded="false">?</button>
+            </div>
             <input id="date-custom" type="text" maxlength="40" placeholder="ddd MMM Do" autocapitalize="none" autocomplete="off" spellcheck="false" />
-          </label>
+            <div id="date-help-pop" class="help-pop" role="dialog" aria-label="Format codes" hidden>
+              <dl id="date-token-list"></dl>
+            </div>
+          </div>
           <p id="date-preview" class="date-preview"></p>
-          <details id="date-tokens" class="date-tokens" hidden>
-            <summary>Format codes</summary>
-            <dl id="date-token-list"></dl>
-          </details>
         </div>
 
         <div class="card">
