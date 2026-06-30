@@ -317,6 +317,52 @@ function showUpdateToast(d) {
 }
 function hideUpdateToast() { $("fw-toast").hidden = true; }
 
+// Has a newer app (PWA) build been published? Ask the service worker to re-check
+// its script; a new worker showing up (updatefound / waiting / installing) means
+// fresh assets are ready and the user should Refresh to load them.
+async function checkAppUpdate() {
+  if (!("serviceWorker" in navigator)) return false;
+  const reg = await navigator.serviceWorker.getRegistration();
+  if (!reg) return false;
+  let found = false;
+  const onFound = () => { found = true; };
+  reg.addEventListener("updatefound", onFound);
+  try { await reg.update(); } catch (_) {}
+  await new Promise((r) => setTimeout(r, 1500));   // let an install begin
+  reg.removeEventListener("updatefound", onFound);
+  return found || !!reg.waiting || !!reg.installing;
+}
+
+// "Check for updates": checks BOTH the frame firmware and the app, shows the
+// relevant toast(s), and reports "Up to date" on the button when there's nothing.
+// Never navigates away — the user reloads only via the app toast's Refresh.
+async function checkForUpdates(btn) {
+  if (btn.dataset.busy) return;
+  btn.dataset.busy = "1";
+  const orig = btn.dataset.label || btn.textContent;
+  btn.dataset.label = orig;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin-sm" aria-hidden="true"></span>Checking…';
+  let frameUpdate = false, appUpdate = false;
+  try {
+    updateDismissed = false;                              // an explicit check re-surfaces the toast
+    try { const r = await api("/devices"); devices = r.devices || r; } catch (_) {}
+    frameUpdate = !!checkFirmwareUpdates();               // shows the firmware toast if any frame is behind
+    appUpdate = await checkAppUpdate();
+    if (appUpdate) $("app-toast").hidden = false;         // similar toast, CTA "Refresh"
+  } finally {
+    btn.disabled = false;
+    delete btn.dataset.busy;
+    if (frameUpdate || appUpdate) {
+      btn.textContent = orig;                             // a toast is showing the action
+    } else {
+      btn.innerHTML = '<span class="saved-ico" aria-hidden="true">' + SAVED_CHECK + '</span>Up to date';
+      btn.classList.add("btn-saved");
+      setTimeout(() => { btn.classList.remove("btn-saved"); btn.textContent = orig; }, 2600);
+    }
+  }
+}
+
 // Tracks an in-flight OTA so it can be resolved either by the poll loop OR when
 // the app regains focus (the phone usually backgrounds the app while the user
 // watches the frame, which pauses JS timers — so focus is the reliable signal).
@@ -1159,11 +1205,9 @@ function wireAccount() {
     try { await api("/account/key", { method: "PUT", body: { openai_api_key: v } }); $("api-key").value = ""; setKeyMode("own"); toast("Saved your key"); }
     catch (e) { showError("key-err", e); }
   });
-  $("update-btn").addEventListener("click", async () => {
-    toast("Checking for updates…");
-    try { if ("serviceWorker" in navigator) { const reg = await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); } toast("Up to date — reloading…"); setTimeout(() => location.reload(), 700); }
-    catch { toast("Couldn't check for updates"); }
-  });
+  $("update-btn").addEventListener("click", (e) => checkForUpdates(e.currentTarget));
+  $("app-toast-refresh").addEventListener("click", () => location.reload());
+  $("app-toast-close").addEventListener("click", () => { $("app-toast").hidden = true; });
   $("logout-btn").addEventListener("click", () => {
     if (!confirm("Log out of this account on this device?\n\nKeep your account token saved if you want to return.")) return;
     localStorage.removeItem(TOKEN_KEY); go("welcome");

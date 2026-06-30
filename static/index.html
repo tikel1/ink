@@ -430,6 +430,16 @@
     <button id="fw-toast-close" type="button" class="fw-toast-x" aria-label="Close">✕</button>
   </div>
 
+  <!-- App (PWA) update — mirrors the firmware toast; Refresh reloads the new build. -->
+  <div id="app-toast" class="fw-toast" hidden role="status">
+    <div class="fw-toast-text">
+      <strong>App update available</strong>
+      <span class="fw-toast-sub">A new version of Ink is ready.</span>
+    </div>
+    <button id="app-toast-refresh" type="button" class="fw-toast-btn">Refresh</button>
+    <button id="app-toast-close" type="button" class="fw-toast-x" aria-label="Close">✕</button>
+  </div>
+
   <!-- Zoom lightbox: tap an artwork in the gallery to view it large -->
   <div id="lightbox" class="lightbox" hidden>
     <button id="lb-close" class="lb-close" aria-label="Close">✕</button>
