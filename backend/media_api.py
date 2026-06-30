@@ -72,8 +72,12 @@ async def current_version(
     # Arduino HTTP client reads collected headers reliably (the body does not).
     headers = {"X-Ver": ver}
     if device is not None:
-        headers["X-Power"] = device.power_source            # usb | battery
-        headers["X-Sleep"] = str(device.sleep_after_minutes)  # minutes awake before sleep
+        # Power is auto-detected from telemetry; resolve the user's per-state policy
+        # into the single timeout the firmware honors (0 = stay awake / never sleep).
+        on_battery = device.power_source == "battery"
+        sleep_min = device.battery_sleep_minutes if on_battery else device.plugged_sleep_minutes
+        headers["X-Power"] = device.power_source            # usb | battery (detected)
+        headers["X-Sleep"] = str(sleep_min)                # minutes awake before sleep (0 = never)
         headers["X-Wake"] = str(device.wake_hour)             # legacy: bare hour (old firmware)
         # Minute-precise wake as seconds-since-midnight (new firmware prefers this).
         headers["X-Wake-Secs"] = str(device.wake_hour * 3600 + device.wake_minute * 60)

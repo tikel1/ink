@@ -7,10 +7,9 @@
 # Behavior:
 #   • No WiFi saved  -> shows "Join WiFi: Ink Frame" + hosts an onboarding hotspot.
 #   • WiFi, unpaired -> shows a QR + 6-digit code; scan/enter it in the Ink app.
-#   • Paired:
-#       - On USB power -> stays ON, refreshes the art periodically.
-#       - On battery   -> sleeps; press KEY1 to wake + refresh, then sleeps again
-#                         after `idle_minutes` of no interaction.
+#   • Paired: the frame auto-detects whether it's plugged in or on battery and the
+#     backend sends the matching sleep timeout (X-Sleep). 0 = stay ON and refresh
+#     periodically; >0 = sleep after that many minutes, then KEY1/KEY3 wakes it.
 #   Buttons: KEY1 = tap to sleep / wake, KEY2 = refresh, KEY3 = wake.
 #   Factory reset (full wipe + re-onboard): hold KEY1 + KEY3 together for 15s.
 #   Firmware updates are pulled over the air on an 'ota' command from the app.
@@ -145,9 +144,12 @@ globals:
   - id: g_power
     type: std::string
     initial_value: '"usb"'
+  # Minutes of uptime before sleeping; 0 = never (stay awake). The backend resolves
+  # the user's per-power-state policy (plugged vs battery) into this single value.
+  # Default 0 so a frame stays awake until the backend tells it otherwise.
   - id: g_sleep_min
     type: int
-    initial_value: "10"
+    initial_value: "0"
   # Daily wake time as SECONDS since local midnight (minute precision). The
   # backend sends seconds; a legacy bare hour (<=23) is upscaled to seconds.
   - id: g_wake_secs
@@ -390,12 +392,14 @@ interval:
           then:
             - lambda: "id(g_do_ota) = false;"
             - script.execute: do_ota
-      # On battery: after the awake window, sleep until the next update hour.
-      # Sleep rules: plugged in (usb) -> always awake; on battery -> sleep after
-      # g_sleep_min minutes of uptime (applies whether paired or still pairing).
+      # Sleep after the awake window, until the next update time. The backend sends
+      # the timeout (X-Sleep -> g_sleep_min) already resolved from the auto-detected
+      # power state and the user's per-state policy: 0 = never sleep (e.g. plugged +
+      # "always on"); >0 = sleep after that many minutes of uptime (plugged "sleep
+      # after N", or on battery). Applies whether paired or still pairing.
       - if:
           condition:
-            lambda: 'return id(g_power) == "battery" &&
+            lambda: 'return id(g_sleep_min) > 0 &&
                             millis() > (uint32_t) id(g_sleep_min) * 60000UL;'
           then:
             - script.execute: go_to_sleep

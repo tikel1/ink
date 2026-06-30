@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     enc_openai_key  TEXT,                    -- Fernet ciphertext, null = use platform
     use_own_key     INTEGER NOT NULL DEFAULT 0,
     key_required    INTEGER NOT NULL DEFAULT 0,  -- force own key (flip remotely)
+    suspended       INTEGER NOT NULL DEFAULT 0,  -- admin can block an account
     created_at      TEXT NOT NULL
 );
 
@@ -46,10 +47,13 @@ CREATE TABLE IF NOT EXISTS devices (
     auto_timezone INTEGER NOT NULL DEFAULT 1,        -- tz follows the location automatically
     schedule      TEXT NOT NULL DEFAULT 'daily',     -- daily | weekly | custom
     schedule_days TEXT NOT NULL DEFAULT '',          -- comma days for custom, e.g. mon,thu
-    power_source  TEXT NOT NULL DEFAULT 'usb',        -- usb (always on) | battery (sleeps)
-    sleep_after_minutes INTEGER NOT NULL DEFAULT 10,  -- battery: stay awake this long, then sleep
+    power_source  TEXT NOT NULL DEFAULT 'usb',        -- DETECTED state: usb (plugged) | battery
+    sleep_after_minutes INTEGER NOT NULL DEFAULT 10,  -- legacy single timeout (superseded below)
+    plugged_sleep_minutes INTEGER NOT NULL DEFAULT 0,   -- plugged in: 0 = always on, >0 = sleep after N min
+    battery_sleep_minutes INTEGER NOT NULL DEFAULT 10,  -- on battery: sleep after N min
     custom_prompt_override TEXT,
     enabled      INTEGER NOT NULL DEFAULT 1,
+    display_order INTEGER NOT NULL DEFAULT 0,   -- user-arranged order on the home carousel
     last_seen    TEXT,
     battery      REAL,
     wifi_rssi    INTEGER,
@@ -66,6 +70,9 @@ CREATE TABLE IF NOT EXISTS daily_artwork (
     event_text_he  TEXT,
     weather_summary TEXT,
     orientation    TEXT,
+    image_prompt   TEXT,                       -- the full prompt sent to the image model
+    event_caption  TEXT,                       -- the chosen event (caption)
+    event_visual   TEXT,                       -- the iconic visual depicted ('' = abstract)
     status         TEXT NOT NULL DEFAULT 'pending',
     created_at     TEXT NOT NULL,
     PRIMARY KEY (device_id, date)
@@ -85,6 +92,8 @@ _MIGRATIONS = {
     "schedule_days": "TEXT NOT NULL DEFAULT ''",
     "power_source": "TEXT NOT NULL DEFAULT 'usb'",
     "sleep_after_minutes": "INTEGER NOT NULL DEFAULT 10",
+    "plugged_sleep_minutes": "INTEGER NOT NULL DEFAULT 0",   # plugged: 0 = always on, >0 = sleep after N min
+    "battery_sleep_minutes": "INTEGER NOT NULL DEFAULT 10",  # on battery: sleep after N min
     "sleeping": "INTEGER NOT NULL DEFAULT 0",   # frame reported deep sleep
     "pending_command": "TEXT NOT NULL DEFAULT ''",  # one-shot cmd the frame picks up on its next poll
     "date_format": "TEXT NOT NULL DEFAULT 'weekday'",  # embedded-date style
@@ -93,20 +102,36 @@ _MIGRATIONS = {
     "use_event": "INTEGER NOT NULL DEFAULT 1",    # a moment in history informs the prompt
     "last_auto_gen": "TEXT NOT NULL DEFAULT ''",  # date (YYYY-MM-DD) the scheduler last auto-generated
     "ota_error": "TEXT NOT NULL DEFAULT ''",   # last OTA failure code the frame reported ('' = none)
+    "display_order": "INTEGER NOT NULL DEFAULT 0",  # home-carousel order
 }
+
+# Columns added to the accounts table after the first release.
+_ACCOUNT_MIGRATIONS = {
+    "suspended": "INTEGER NOT NULL DEFAULT 0",
+}
+
+# Columns added to the daily_artwork table after the first release.
+_ARTWORK_MIGRATIONS = {
+    "orientation": "TEXT",
+    "image_prompt": "TEXT",
+    "event_caption": "TEXT",
+    "event_visual": "TEXT",
+}
+
+
+def _migrate(conn, table: str, migrations: dict) -> None:
+    existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+    for column, ddl in migrations.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
 
 def init_db() -> None:
     with get_connection() as conn:
         conn.executescript(SCHEMA)
-        existing = {row["name"] for row in conn.execute("PRAGMA table_info(devices)")}
-        for column, ddl in _MIGRATIONS.items():
-            if column not in existing:
-                conn.execute(f"ALTER TABLE devices ADD COLUMN {column} {ddl}")
-        # daily_artwork: orientation per generated image (mixed over time).
-        aw_cols = {row["name"] for row in conn.execute("PRAGMA table_info(daily_artwork)")}
-        if "orientation" not in aw_cols:
-            conn.execute("ALTER TABLE daily_artwork ADD COLUMN orientation TEXT")
+        _migrate(conn, "devices", _MIGRATIONS)
+        _migrate(conn, "accounts", _ACCOUNT_MIGRATIONS)
+        _migrate(conn, "daily_artwork", _ARTWORK_MIGRATIONS)
 
 
 @contextmanager

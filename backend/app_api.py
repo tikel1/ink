@@ -49,8 +49,10 @@ class ConfigUpdate(BaseModel):
     auto_timezone: bool | None = None
     schedule: str | None = Field(default=None, pattern=r"^(daily|weekly|custom)$")
     schedule_days: str | None = Field(default=None, max_length=60)
-    power_source: str | None = Field(default=None, pattern=r"^(usb|battery)$")
-    sleep_after_minutes: int | None = Field(default=None, ge=1, le=240)
+    # Power state is auto-detected (not user-set). The user configures behaviour
+    # per state: plugged in (0 = always on, >0 = sleep after N min) and on battery.
+    plugged_sleep_minutes: int | None = Field(default=None, ge=0, le=240)
+    battery_sleep_minutes: int | None = Field(default=None, ge=1, le=240)
     custom_prompt_override: str | None = None
     enabled: bool | None = None
 
@@ -101,6 +103,20 @@ async def pair(body: PairRequest, account: Account = auth.AccountDep):
         raise HTTPException(status_code=404, detail="invalid pairing code")
     repositories.bind_device(device.id, account.id)
     return _device_payload(_owned(device.id, account))
+
+
+class ReorderRequest(BaseModel):
+    order: list[str] = Field(min_length=1, max_length=100)
+
+
+@router.post("/devices/reorder")
+async def reorder(body: ReorderRequest, account: Account = auth.AccountDep):
+    """Persist the home-carousel order. Every id must belong to the account."""
+    owned = {d.id for d in repositories.list_account_devices(account.id)}
+    if not set(body.order).issubset(owned):
+        raise HTTPException(status_code=404, detail="unknown device in order")
+    repositories.set_device_order(account.id, body.order)
+    return {"status": "ok"}
 
 
 @router.get("/devices/{device_id}")
@@ -265,8 +281,10 @@ def _device_payload(device: Device) -> dict:
         "auto_timezone": device.auto_timezone,
         "schedule": device.schedule,
         "schedule_days": device.schedule_days,
-        "power_source": device.power_source,
-        "sleep_after_minutes": device.sleep_after_minutes,
+        "power_source": device.power_source,            # auto-detected: usb | battery
+        "sleep_after_minutes": device.sleep_after_minutes,  # legacy (kept for back-compat)
+        "plugged_sleep_minutes": device.plugged_sleep_minutes,
+        "battery_sleep_minutes": device.battery_sleep_minutes,
         "sleeping": device.sleeping,
         "custom_prompt_override": device.custom_prompt_override,
         "enabled": device.enabled,
