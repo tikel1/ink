@@ -183,8 +183,10 @@
       <form id="artwork-form">
 
         <div class="card">
-          <h3>Location &amp; weather</h3>
-          <label class="toggle"><span>Use my location &amp; weather</span><input type="checkbox" id="use_weather" /><i></i></label>
+          <div class="card-head">
+            <h3>Location &amp; weather</h3>
+            <label class="toggle title-toggle" title="Use location &amp; weather"><input type="checkbox" id="use_weather" /><i></i></label>
+          </div>
           <div id="loc-weather-body">
           <span class="field-label">Location</span>
           <div class="loc-view" id="loc-view">
@@ -226,7 +228,13 @@
             <label class="radio"><input type="radio" name="unit" value="f" /><span>°F</span></label>
           </fieldset>
           </div><!-- /loc-weather-body -->
-          <label class="toggle"><span>Show the date</span><input type="checkbox" id="show_date" /><i></i></label>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3>Date</h3>
+            <label class="toggle title-toggle" title="Show the date"><input type="checkbox" id="show_date" /><i></i></label>
+          </div>
           <label id="date-format-row">Date format
             <select id="date-format">
               <option value="weekday">Sun, Jun 28</option>
@@ -239,8 +247,10 @@
         </div>
 
         <div class="card">
-          <h3>Interests</h3>
-          <label class="toggle"><span>Draw from a moment in history</span><input type="checkbox" id="use_event" /><i></i></label>
+          <div class="card-head">
+            <h3>Interests</h3>
+            <label class="toggle title-toggle" title="Draw from a moment in history"><input type="checkbox" id="use_event" /><i></i></label>
+          </div>
           <div id="interests-body">
             <p class="hint">Topics the daily moment is chosen from.</p>
             <fieldset class="chips" id="interest-chips"></fieldset>
