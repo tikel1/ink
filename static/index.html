@@ -73,7 +73,10 @@
 
       <!-- Empty: no frame connected -->
       <div id="home-empty" class="empty-state" hidden>
-        <div class="inkmark inkmark-md float" aria-hidden="true"><svg viewBox="0 0 160 160"><use href="#inkblob" /></svg></div>
+        <div class="empty-brand">
+          <span class="inkmark float" aria-hidden="true"><svg viewBox="0 0 160 160"><use href="#inkblob" /></svg></span>
+          <span class="empty-wordmark">Ink</span>
+        </div>
         <h2>Add your first frame</h2>
         <p class="muted">Connect your Ink frame and see a new work of art each morning.</p>
         <button id="empty-connect-btn" class="btn-primary">Connect a frame</button>
@@ -403,7 +406,7 @@
        on every app launch; "Close" dismisses it for this session only. -->
   <div id="fw-toast" class="fw-toast" hidden role="status">
     <div class="fw-toast-text">
-      <strong id="fw-toast-title">A frame update is ready</strong>
+      <strong id="fw-toast-title">Firmware update available</strong>
       <span id="fw-toast-sub" class="fw-toast-sub"></span>
     </div>
     <button id="fw-toast-update" type="button" class="fw-toast-btn">Update</button>

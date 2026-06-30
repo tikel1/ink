@@ -149,18 +149,30 @@ button { font-family: inherit; }
 .btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
 .btn-danger:hover { background: rgba(155,59,47,.07); }
 
-/* Frame firmware-update banner (shown on the Frame screen when an OTA exists). */
-.fw-update {
+/* Firmware-update toast — pinned to the top, black with white text. */
+.fw-toast {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+  margin: 0 auto; max-width: var(--maxw);
   display: flex; align-items: center; gap: 12px;
-  margin: 12px 16px 0; padding: 12px 14px;
-  background: var(--paper-2); border: 1.5px solid var(--ink);
-  border-radius: var(--radius-sm); box-shadow: var(--shadow);
+  padding: max(12px, env(safe-area-inset-top)) 14px 12px;
+  background: #14110d; color: #fff;
+  box-shadow: var(--shadow-lg);
+  animation: fw-drop .32s var(--ease) both;
 }
-.fw-update-text { display: flex; flex-direction: column; line-height: 1.25; flex: 1; min-width: 0; }
-.fw-update-text strong { font-weight: 700; }
-.fw-update-ver { font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
-.fw-update .btn-primary { width: auto; flex: none; padding: 10px 18px; }
-.fw-update .btn-primary:disabled { opacity: .5; cursor: default; box-shadow: var(--shadow); }
+@keyframes fw-drop { from { transform: translateY(-100%); } to { transform: none; } }
+.fw-toast-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.fw-toast-text strong { font-weight: 700; font-size: 15px; }
+.fw-toast-sub { font-size: 12.5px; opacity: .82; font-variant-numeric: tabular-nums; }
+.fw-toast-btn {
+  flex: none; background: #fff; color: #14110d; border: none; border-radius: 999px;
+  font: inherit; font-weight: 600; font-size: 14px; padding: 8px 18px; cursor: pointer;
+  transition: transform .12s var(--ease), opacity .2s;
+}
+.fw-toast-btn:not(:disabled):active { transform: scale(.95); }
+.fw-toast-btn:disabled { opacity: .45; cursor: default; }
+.fw-toast-x { flex: none; background: none; border: none; color: #fff; font-size: 15px;
+  cursor: pointer; padding: 6px; opacity: .75; line-height: 1; }
+.fw-toast-x:hover { opacity: 1; }
 #factory-btn { margin-top: 18px; }
 .btn-primary:disabled { opacity: .55; cursor: default; transform: none; }
 .btn-ghost:disabled { opacity: .4; cursor: default; background: transparent; }
@@ -215,8 +227,17 @@ input:focus, select:focus { outline: none; border-color: var(--ink);
 
 /* ── Home: empty state + frame grid ──────────────────────────────────── */
 .home-eyebrow { margin-bottom: 14px; }
-.empty-state { text-align: center; padding: 30px 10px 10px; }
-.empty-state .inkmark { margin: 0 auto 18px; }
+.empty-state { flex: 1; display: flex; flex-direction: column; align-items: center;
+               justify-content: center; text-align: center; padding: 10px; }
+/* Brand lockup: the animated ink blob next to a big "Ink" wordmark. */
+.empty-brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 24px; }
+.empty-brand .inkmark { width: 92px; height: 92px; margin: 0; }
+.empty-wordmark { font-family: "Fraunces"; font-weight: 800; line-height: 1; letter-spacing: -.02em;
+                  color: var(--ink); font-size: clamp(56px, 18vw, 84px); }
+/* The empty state carries the branding, so drop the header wordmark + blob
+   (the gear stays for account access). */
+#screen-home.is-empty .home-top .brand-word,
+#screen-home.is-empty .home-top .inkmark-anim { display: none; }
 .empty-state h2 { font-size: 28px; margin: 0 0 6px; }
 .empty-state p { margin: 0 auto 22px; max-width: 26ch; }
 .empty-state .btn-primary { max-width: 280px; margin: 0 auto; }
