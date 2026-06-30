@@ -102,7 +102,8 @@ Reply with ONLY a compact JSON array (no prose) of objects (aim for 2-3 per topi
    E=mc2, a lunar module). If the event centers on a person, use their signature
    OBJECT or creation, NEVER their face, hair, body, or likeness — a silhouette
    cannot make a face look like a specific person; it just reads as a blob. Avoid
-   faces, hairstyles, 'a player', 'a crowd', or 'team celebration'.>"}}, ...]
+   faces, hairstyles, 'a player', 'a crowd', or 'team celebration'. Use \"\" (empty)
+   if the event has no single instantly-recognizable object — never invent one.>"}}, ...]
 
 If web search verifies no real event on {date} for any topic, reply: []"""
 
@@ -147,7 +148,12 @@ resemble a specific person; a face or "wild hair" just reads as a generic blob.
 Avoid faces, portraits, hairstyles, "a player", "a crowd", "a team celebration", or
 any vague gesture. Prefer one clean, unmistakable object.
 
-Reply with ONLY the phrase (no quotes, no extra words).
+If this event has NO single object that is instantly recognizable on its own — many
+historic firsts, signings, abstract ideas, or announcements don't — reply exactly:
+NONE. A clean abstract artwork is better than a forced, unrecognizable shape; do not
+invent a symbol just to have one.
+
+Reply with ONLY the phrase, or NONE (no quotes, no extra words).
 
 Event: {event}"""
 
@@ -328,13 +334,12 @@ def build_data_block(
                 "mass**, not sitting inside it.")
         sections.append(intro + "\n".join(items) + tail)
 
-    if event:
-        subject = visual.strip() if visual and visual.strip() else event
-        context = f'- It represents: "{event}"\n' if subject != event else ""
+    if event and visual and visual.strip():
+        # The event has a genuinely iconic, recognizable object — depict THAT.
         sections.append(
             "### 2. Event Symbol (Extremely Abstract):\n\n"
-            f'- Iconic image to depict: "{subject}"\n'
-            f"{context}"
+            f'- Iconic image to depict: "{visual.strip()}"\n'
+            f'- It represents: "{event}"\n'
             "- Translate into **one single, ambiguous black silhouette** (max two elements)\n"
             "- Must:\n"
             "  - Suggest the idea **indirectly**, not depict it.\n"
@@ -344,6 +349,19 @@ def build_data_block(
             "  - Depict an **object or emblem only** — NEVER a person's face, head, "
             "hair, or body (a silhouette can't resemble a specific person; render "
             "their signature object instead)"
+        )
+    elif event:
+        # No instantly-recognizable icon for this event — do NOT force a symbol
+        # (that just produces a weird, unrecognizable shape). Stay abstract and let
+        # the magazine-style caption text carry the meaning.
+        sections.append(
+            "### 2. Event (No Literal Symbol):\n\n"
+            f'- Today\'s event is: "{event}"\n'
+            "- This event has **no single instantly-recognizable image**, so do NOT "
+            "invent or depict a specific object, scene, person, or symbol for it.\n"
+            "- Keep the composition **purely abstract** — bold Matisse cut-paper "
+            "shapes for their own rhythm and balance. The caption text alone conveys "
+            "the event; the shapes must not try to illustrate it."
         )
 
     if not sections:
