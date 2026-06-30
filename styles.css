@@ -380,6 +380,11 @@ input:focus, select:focus { outline: none; border-color: var(--ink);
                    transition: transform .22s var(--ease); }
 .toggle input:checked + i { background: var(--ink); }
 .toggle input:checked + i::after { transform: translateX(18px); }
+/* A master toggle sitting in a card's title row; collapses the card when off. */
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.card-head h3 { margin: 0; }
+.title-toggle { margin: 0; width: auto; flex: none; }
+#loc-weather-body, #interests-body { margin-top: 4px; }
 
 /* ── Sticky save ─────────────────────────────────────────────────────── */
 .sticky-save { position: sticky; bottom: 0; padding: 14px 0 calc(14px + env(safe-area-inset-bottom));
