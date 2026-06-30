@@ -619,18 +619,50 @@ function onGalleryScroll() {
   });
 }
 
+// A "chain of thought" for the Generate button: walk through the pipeline's
+// phases (event → context → prompt → image → post-process). Microcopy is kept
+// short to fit the button. The job status is binary, so we pace the early steps
+// on a timer and hold on "Painting…" (the long image step) until it's done.
+const GEN_STEPS = [
+  "Finding the moment…",     // historical event for the date
+  "Gathering details…",      // weather + context
+  "Composing the scene…",    // building the prompt / planning composition
+  "Painting…",               // image generation (the long phase — held here)
+];
+const GEN_FINAL = "Finishing touches…";   // post-process + upload, shown on done
+const GEN_STEP_MS = 3500;
+let genStepTimer = null;
+function genLabel(text) {
+  $("regen-btn").innerHTML = `<span class="spin-sm" aria-hidden="true"></span><span class="gen-step">${text}</span>`;
+}
+function startGenSteps() {
+  let i = 0;
+  genLabel(GEN_STEPS[0]);
+  clearInterval(genStepTimer);
+  genStepTimer = setInterval(() => {
+    if (i >= GEN_STEPS.length - 1) { clearInterval(genStepTimer); genStepTimer = null; return; }
+    genLabel(GEN_STEPS[++i]);
+  }, GEN_STEP_MS);
+}
+function stopGenSteps() { if (genStepTimer) { clearInterval(genStepTimer); genStepTimer = null; } }
+
 function setBusy(on) {
   const b = $("regen-btn");
   b.disabled = on;
-  b.innerHTML = on ? '<span class="spin-sm" aria-hidden="true"></span>Generating…' : "Generate";
   b.classList.toggle("busy", on);
   $("gallery").classList.toggle("busy", on);
+  if (on) startGenSteps();
+  else { stopGenSteps(); b.textContent = "Generate"; }
 }
 async function pollGeneration(id) {
   for (let i = 0; i < 48; i++) {
     await sleep(2500);
     let s; try { s = await api(`/devices/${id}/generation`); } catch { continue; }
-    if (s.state === "done") { if (id === currentId) await loadGallery(id); toast("New artwork ready"); return; }
+    if (s.state === "done") {
+      stopGenSteps(); genLabel(GEN_FINAL);          // brief "Finishing touches…" before the art swaps in
+      if (id === currentId) await loadGallery(id);
+      toast("New artwork ready"); return;
+    }
     if (s.state === "error") { toast(s.detail || "Couldn't create the artwork"); return; }
   }
   toast("Still working — check back shortly");

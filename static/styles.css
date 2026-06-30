@@ -74,7 +74,7 @@ body.home-locked { overflow: hidden; height: 100dvh; overscroll-behavior-y: none
                  align-items: center; justify-content: center; text-align: center; }
 @media (prefers-reduced-motion: reduce) {
   .screen, .float, .bl, body::after,
-  .brand-word, .word, .btn-primary.busy, .spin-sm { animation: none !important; }
+  .brand-word, .word, .btn-primary.busy, .spin-sm, .gen-step { animation: none !important; }
 }
 
 /* ── Typography ───────────────────────────────────────────────────────── */
@@ -181,7 +181,11 @@ button { font-family: inherit; }
   background-image: linear-gradient(100deg, var(--ink) 35%, #4a3d2c 50%, var(--ink) 65%);
   background-size: 220% 100%;
   animation: ink-sheen 1.3s linear infinite;
+  white-space: nowrap;
 }
+/* Each generation step gently fades in as the label changes. */
+.gen-step { display: inline-block; animation: gen-fade .34s var(--ease) both; }
+@keyframes gen-fade { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
 button.inline { width: auto; white-space: nowrap; padding: 0 16px; }
 
 /* Transient "✓ Saved" confirmation shown on the save button itself. */
