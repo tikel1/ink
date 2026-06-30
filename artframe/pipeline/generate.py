@@ -61,9 +61,13 @@ async def generate_artwork(settings: Settings, config: DeviceConfig) -> ArtworkR
         ),
     )
 
-    pick = await _select_event(settings, config, today, holiday_ctx)
-    if pick.caption and not pick.visual:
-        pick = pick._replace(visual=await _derive_visual(settings, pick.caption))
+    # The daily event is optional: when the device turns it off, the artwork is a
+    # pure abstract composition with no historical subject or caption.
+    pick = _EMPTY_PICK
+    if config.use_event:
+        pick = await _select_event(settings, config, today, holiday_ctx)
+        if pick.caption and not pick.visual:
+            pick = pick._replace(visual=await _derive_visual(settings, pick.caption))
     image_prompt = _build_image_prompt(config, wx, today, pick)
 
     # The image render dominates latency; run narration alongside it so the
@@ -80,7 +84,7 @@ async def generate_artwork(settings: Settings, config: DeviceConfig) -> ArtworkR
         image_png=dithered,
         event_text_en=narration_en,
         event_text_he=narration_he,
-        weather_summary=wx.as_text(config.temp_unit),
+        weather_summary=wx.as_text(config.temp_unit) if config.use_weather else "",
     )
 
 
@@ -275,7 +279,8 @@ def _build_image_prompt(config: DeviceConfig, wx, today: date_cls, pick: EventPi
     date_str = today.strftime(
         DATE_FORMATS.get(config.date_format, DATE_FORMATS["weekday"]))
     data_block = prompts.build_data_block(
-        config.show_weather, config.show_date, wx.condition, temp_str, date_str,
+        config.use_weather and config.show_weather, config.show_date,
+        wx.condition, temp_str, date_str,
         event=pick.caption, visual=pick.visual,
     )
     resolution = ("480x800 (vertical)" if config.orientation == "portrait"

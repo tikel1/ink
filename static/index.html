@@ -184,6 +184,8 @@
 
         <div class="card">
           <h3>Location &amp; weather</h3>
+          <label class="toggle"><span>Use my location &amp; weather</span><input type="checkbox" id="use_weather" /><i></i></label>
+          <div id="loc-weather-body">
           <span class="field-label">Location</span>
           <div class="loc-view" id="loc-view">
             <span id="city-display" class="loc-text"></span>
@@ -223,6 +225,7 @@
             <label class="radio"><input type="radio" name="unit" value="c" /><span>°C</span></label>
             <label class="radio"><input type="radio" name="unit" value="f" /><span>°F</span></label>
           </fieldset>
+          </div><!-- /loc-weather-body -->
           <label class="toggle"><span>Show the date</span><input type="checkbox" id="show_date" /><i></i></label>
           <label id="date-format-row">Date format
             <select id="date-format">
@@ -237,13 +240,16 @@
 
         <div class="card">
           <h3>Interests</h3>
-          <p class="hint">What the daily work draws inspiration from.</p>
-          <fieldset class="chips" id="interest-chips"></fieldset>
-          <label>Anything else<input id="interest-other" placeholder="e.g. jazz, sailing, poetry" /></label>
-          <h4 class="sub">Holidays</h4>
-          <label class="toggle"><span>Jewish</span><input type="checkbox" id="h-jewish" /><i></i></label>
-          <label class="toggle"><span>Israeli</span><input type="checkbox" id="h-israeli" /><i></i></label>
-          <label class="toggle"><span>Global</span><input type="checkbox" id="h-global" /><i></i></label>
+          <label class="toggle"><span>Draw from a moment in history</span><input type="checkbox" id="use_event" /><i></i></label>
+          <div id="interests-body">
+            <p class="hint">Topics the daily moment is chosen from.</p>
+            <fieldset class="chips" id="interest-chips"></fieldset>
+            <label>Anything else<input id="interest-other" placeholder="e.g. jazz, sailing, poetry" /></label>
+            <h4 class="sub">Holidays</h4>
+            <label class="toggle"><span>Jewish</span><input type="checkbox" id="h-jewish" /><i></i></label>
+            <label class="toggle"><span>Israeli</span><input type="checkbox" id="h-israeli" /><i></i></label>
+            <label class="toggle"><span>Global</span><input type="checkbox" id="h-global" /><i></i></label>
+          </div>
         </div>
 
         <div class="card">

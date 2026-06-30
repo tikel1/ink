@@ -138,7 +138,7 @@ def unbind_device(device_id: str) -> None:
                  language = 'en', temp_unit = 'c', interests = '',
                  signature = ?,
                  holiday_jewish = 1, holiday_israeli = 1, holiday_global = 1,
-                 orientation = 'landscape', show_date = 1, show_weather = 1,
+                 orientation = 'landscape', show_date = 1, show_weather = 1, use_weather = 1, use_event = 1,
                  city_name = '', auto_timezone = 1, schedule = 'daily', schedule_days = '',
                  power_source = 'usb', sleep_after_minutes = 10,
                  custom_prompt_override = NULL, enabled = 1
@@ -174,7 +174,7 @@ def update_device_config(device_id: str, **fields: object) -> None:
         "name",
         "tz", "lat", "lon", "wake_hour", "wake_minute", "language", "temp_unit", "interests",
         "signature", "holiday_jewish", "holiday_israeli", "holiday_global",
-        "orientation", "show_date", "date_format", "show_weather",
+        "orientation", "show_date", "date_format", "show_weather", "use_weather", "use_event",
         "city_name", "auto_timezone", "schedule", "schedule_days",
         "power_source", "sleep_after_minutes",
         "custom_prompt_override", "enabled",

@@ -55,6 +55,8 @@ class Device:
     show_date: bool
     date_format: str
     show_weather: bool
+    use_weather: bool
+    use_event: bool
     city_name: str
     auto_timezone: bool
     schedule: str
@@ -97,6 +99,8 @@ class Device:
             show_date=bool(row["show_date"]),
             date_format=row["date_format"],
             show_weather=bool(row["show_weather"]),
+            use_weather=bool(row["use_weather"]),
+            use_event=bool(row["use_event"]),
             city_name=row["city_name"],
             auto_timezone=bool(row["auto_timezone"]),
             schedule=row["schedule"],
@@ -136,6 +140,8 @@ class Device:
             show_date=self.show_date,
             date_format=self.date_format,
             show_weather=self.show_weather,
+            use_weather=self.use_weather,
+            use_event=self.use_event,
             custom_prompt_override=self.custom_prompt_override,
             enabled=self.enabled,
         )

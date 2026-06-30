@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS devices (
     orientation     TEXT NOT NULL DEFAULT 'landscape',
     show_date       INTEGER NOT NULL DEFAULT 1,
     show_weather    INTEGER NOT NULL DEFAULT 1,
+    use_weather     INTEGER NOT NULL DEFAULT 1,   -- location+weather informs the prompt
+    use_event       INTEGER NOT NULL DEFAULT 1,   -- a moment in history informs the prompt
     city_name     TEXT NOT NULL DEFAULT '',         -- display name of the location
     auto_timezone INTEGER NOT NULL DEFAULT 1,        -- tz follows the location automatically
     schedule      TEXT NOT NULL DEFAULT 'daily',     -- daily | weekly | custom
@@ -87,6 +89,8 @@ _MIGRATIONS = {
     "pending_command": "TEXT NOT NULL DEFAULT ''",  # one-shot cmd the frame picks up on its next poll
     "date_format": "TEXT NOT NULL DEFAULT 'weekday'",  # embedded-date style
     "wake_minute": "INTEGER NOT NULL DEFAULT 0",  # minute of the daily update time
+    "use_weather": "INTEGER NOT NULL DEFAULT 1",  # location+weather informs the prompt
+    "use_event": "INTEGER NOT NULL DEFAULT 1",    # a moment in history informs the prompt
     "last_auto_gen": "TEXT NOT NULL DEFAULT ''",  # date (YYYY-MM-DD) the scheduler last auto-generated
     "ota_error": "TEXT NOT NULL DEFAULT ''",   # last OTA failure code the frame reported ('' = none)
 }

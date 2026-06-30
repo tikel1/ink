@@ -32,6 +32,8 @@ class DeviceConfig:
     show_date: bool = True
     date_format: str = DEFAULT_DATE_FORMAT
     show_weather: bool = True
+    use_weather: bool = True    # let location + weather inform the artwork/prompt
+    use_event: bool = True      # tie the artwork to a moment in history
     custom_prompt_override: str | None = None
     enabled: bool = True
 

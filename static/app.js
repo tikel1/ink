@@ -744,6 +744,10 @@ function openArtwork() {
   hideSuggest();
   setLocEdit(!d.city_name);  // unset → start in edit mode; otherwise show static text
   $("show_weather").checked = d.show_weather !== false;
+  $("use_weather").checked = d.use_weather !== false;
+  $("loc-weather-body").hidden = d.use_weather === false;
+  $("use_event").checked = d.use_event !== false;
+  $("interests-body").hidden = d.use_event === false;
   $("show_date").checked = d.show_date !== false;
   $("date-format").value = d.date_format || "weekday";
   $("date-format-row").hidden = d.show_date === false;
@@ -774,6 +778,7 @@ function artworkBody() {
     lat: parseFloat($("lat").value), lon: parseFloat($("lon").value),
     temp_unit: getRadio("unit"), orientation: getRadio("orient"),
     show_weather: $("show_weather").checked, show_date: $("show_date").checked,
+    use_weather: $("use_weather").checked, use_event: $("use_event").checked,
     date_format: $("date-format").value,
     interests: [...chips, ...other].join(", "),
     signature: $("signature").value.trim() || "Ink.", language: $("language").value,
@@ -789,6 +794,8 @@ function wireArtwork() {
   $("artwork-back").addEventListener("click", () => go("frame"));
   $("manual-coords").addEventListener("change", (e) => { $("coords-row").hidden = !e.target.checked; });
   $("show_date").addEventListener("change", (e) => { $("date-format-row").hidden = !e.target.checked; });
+  $("use_weather").addEventListener("change", (e) => { $("loc-weather-body").hidden = !e.target.checked; });
+  $("use_event").addEventListener("change", (e) => { $("interests-body").hidden = !e.target.checked; });
   $("city-edit").addEventListener("click", () => { setLocEdit(true); $("city-name").focus(); $("city-name").select(); });
   $("city-find").addEventListener("click", geocode);
   $("city-accept").addEventListener("click", acceptLocation);

@@ -43,6 +43,8 @@ class ConfigUpdate(BaseModel):
     show_date: bool | None = None
     date_format: str | None = Field(default=None, pattern=r"^(weekday|month_day|abbr_year|dmy|mdy)$")
     show_weather: bool | None = None
+    use_weather: bool | None = None
+    use_event: bool | None = None
     city_name: str | None = Field(default=None, max_length=80)
     auto_timezone: bool | None = None
     schedule: str | None = Field(default=None, pattern=r"^(daily|weekly|custom)$")
@@ -234,6 +236,8 @@ def _device_payload(device: Device) -> dict:
         "show_date": device.show_date,
         "date_format": device.date_format,
         "show_weather": device.show_weather,
+        "use_weather": device.use_weather,
+        "use_event": device.use_event,
         "city_name": device.city_name,
         "auto_timezone": device.auto_timezone,
         "schedule": device.schedule,
