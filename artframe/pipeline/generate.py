@@ -45,12 +45,24 @@ class ArtworkResult:
     weather_summary: str
 
 
-async def generate_artwork(settings: Settings, config: DeviceConfig) -> ArtworkResult:
-    """Run the full pipeline for one device and return the dithered PNG."""
+async def generate_artwork(settings: Settings, config: DeviceConfig, on_phase=None) -> ArtworkResult:
+    """Run the full pipeline for one device and return the dithered PNG.
+
+    `on_phase(name)` (optional) is called as each stage begins, so the app can
+    show the real progress: discover → research → compose → paint → finish.
+    """
+    def phase(name: str) -> None:
+        if on_phase:
+            try:
+                on_phase(name)
+            except Exception:  # noqa: BLE001 — progress reporting must never break generation
+                pass
+
     today = now_in_tz(config.tz).date()
     date_str = today.isoformat()
 
     # Weather + holidays are independent — fetch concurrently.
+    phase("discover")
     wx, holiday_ctx = await asyncio.gather(
         weather.fetch_weather(config.lat, config.lon),
         holidays.fetch_holidays(
@@ -65,17 +77,21 @@ async def generate_artwork(settings: Settings, config: DeviceConfig) -> ArtworkR
     # pure abstract composition with no historical subject or caption.
     pick = _EMPTY_PICK
     if config.use_event:
+        phase("research")
         pick = await _select_event(settings, config, today, holiday_ctx)
         if pick.caption and not pick.visual:
             pick = pick._replace(visual=await _derive_visual(settings, pick.caption))
+    phase("compose")
     image_prompt = _build_image_prompt(config, wx, today, pick)
 
     # The image render dominates latency; run narration alongside it so the
     # app-triggered path is as quick as the image call itself.
+    phase("paint")
     raw_png, (narration_en, narration_he) = await asyncio.gather(
         generation_client.generate_image(settings, image_prompt, config.orientation),
         _narrate(settings, config, pick.caption),
     )
+    phase("finish")
     dithered = imaging.to_eink_image(raw_png, fmt="PNG", orientation=config.orientation)
 
     return ArtworkResult(

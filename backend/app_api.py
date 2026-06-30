@@ -148,7 +148,11 @@ async def generation_status(device_id: str, account: Account = auth.AccountDep):
 
 async def _run_generation(device: Device) -> None:
     try:
-        ok = await generate_for_device(device)
+        # Report each pipeline stage as the job's detail so the app's Generate
+        # button reflects real progress (discover → research → compose → paint → finish).
+        ok = await generate_for_device(
+            device, on_phase=lambda p: jobs.set_state(device.id, jobs.RUNNING, p)
+        )
         jobs.set_state(
             device.id,
             jobs.DONE if ok else jobs.ERROR,

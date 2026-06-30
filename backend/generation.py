@@ -31,8 +31,12 @@ def archive_image_path(device_id: str, date: str):
     return get_settings().archive_dir / _safe(device_id) / f"{date}.png"
 
 
-async def generate_for_device(device: Device) -> bool:
-    """Generate today's artwork for a paired device. Returns success."""
+async def generate_for_device(device: Device, on_phase=None) -> bool:
+    """Generate today's artwork for a paired device. Returns success.
+
+    `on_phase(name)` is forwarded to the pipeline so the app can show real
+    per-stage progress on the Generate button.
+    """
     if not device.account_id:
         logger.info("skip %s: not paired to an account", device.id)
         return False
@@ -42,7 +46,7 @@ async def generate_for_device(device: Device) -> bool:
 
     try:
         settings = keys.resolve_settings(account)
-        result = await generate_artwork(settings, device.to_pipeline_config())
+        result = await generate_artwork(settings, device.to_pipeline_config(), on_phase=on_phase)
     except KeyUnavailableError as exc:
         # Expected when an account must supply its own key but hasn't yet.
         logger.warning("no key for %s: %s", device.id, exc)
