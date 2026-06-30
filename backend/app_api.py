@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from . import artwork_repo, auth, crypto, jobs, keys, repositories, storage
+from . import artwork_repo, auth, crypto, firmware_repo, jobs, keys, repositories, storage
 from .config import get_settings
 from .generation import generate_for_device
 from .models import Account, Device
@@ -157,16 +157,25 @@ async def _run_generation(device: Device) -> None:
 
 
 class CommandRequest(BaseModel):
-    cmd: str = Field(pattern=r"^(refresh|sleep)$")
+    cmd: str = Field(pattern=r"^(refresh|sleep|ota|reset)$")
 
 
 @router.post("/devices/{device_id}/command")
 async def send_command(device_id: str, body: CommandRequest,
                        account: Account = auth.AccountDep):
     """Queue a one-shot command the physical frame picks up on its next poll
-    (≤60s): 'refresh' = re-fetch + redraw now, 'sleep' = go to sleep."""
+    (≤60s): 'refresh' = re-fetch + redraw now, 'sleep' = go to sleep,
+    'ota' = pull + flash the latest firmware, 'reset' = factory wipe."""
     _owned(device_id, account)
+    if body.cmd == "ota":
+        repositories.clear_ota_result(device_id)   # fresh attempt — drop any stale failure
     repositories.set_pending_command(device_id, body.cmd)
+    # Factory restore is a full wipe + unpair: the frame clears its Wi-Fi/account
+    # on the 'reset' command, and we forget it server-side so it returns to QR
+    # onboarding. (The pending command is still delivered — take_pending_command
+    # runs regardless of pairing — so order doesn't matter.)
+    if body.cmd == "reset":
+        repositories.unbind_device(device_id)
     return {"status": "queued", "cmd": body.cmd}
 
 
@@ -238,5 +247,8 @@ def _device_payload(device: Device) -> dict:
         "wifi_rssi": device.wifi_rssi,
         "last_seen": device.last_seen,
         "fw_version": device.fw_version,
+        "latest_fw": firmware_repo.latest_version(),
+        "update_available": firmware_repo.update_available(device.fw_version),
+        "ota_error": device.ota_error,
         "today_status": today_status,
     }

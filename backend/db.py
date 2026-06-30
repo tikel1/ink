@@ -88,6 +88,7 @@ _MIGRATIONS = {
     "date_format": "TEXT NOT NULL DEFAULT 'weekday'",  # embedded-date style
     "wake_minute": "INTEGER NOT NULL DEFAULT 0",  # minute of the daily update time
     "last_auto_gen": "TEXT NOT NULL DEFAULT ''",  # date (YYYY-MM-DD) the scheduler last auto-generated
+    "ota_error": "TEXT NOT NULL DEFAULT ''",   # last OTA failure code the frame reported ('' = none)
 }
 
 

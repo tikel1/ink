@@ -6,7 +6,7 @@ from urllib.parse import quote
 from fastapi import APIRouter
 from fastapi.responses import FileResponse, Response
 
-from . import generation, repositories, splash
+from . import firmware_repo, generation, repositories, splash
 from .config import get_settings
 
 router = APIRouter(prefix="/media", tags=["media"])
@@ -78,6 +78,9 @@ async def current_version(
         # Minute-precise wake as seconds-since-midnight (new firmware prefers this).
         headers["X-Wake-Secs"] = str(device.wake_hour * 3600 + device.wake_minute * 60)
         headers["X-Orient"] = device.orientation              # landscape | portrait
+        ota_md5 = firmware_repo.latest_md5()                  # md5 of the published firmware
+        if ota_md5:
+            headers["X-OTA-Md5"] = ota_md5
     # One-shot command queued by the app (delivered once): 'refresh' | 'sleep'.
     cmd = repositories.take_pending_command(device_id)
     if cmd:
@@ -90,6 +93,14 @@ async def report_sleep(device_id: str) -> Response:
     """The frame hits this just before deep sleep so the app reflects 'Asleep'
     immediately. Cleared on the next check-in (.ver/.png)."""
     repositories.mark_sleeping(device_id)
+    return Response(content="ok", media_type="text/plain")
+
+
+@router.get("/ota-result/{device_id}")
+async def report_ota_result(device_id: str, code: int = 0) -> Response:
+    """The frame reports an OTA failure here (code != 0). Success isn't reported —
+    the frame reboots into the new image and the app sees the version advance."""
+    repositories.set_ota_result(device_id, str(code))
     return Response(content="ok", media_type="text/plain")
 
 

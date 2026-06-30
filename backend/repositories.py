@@ -210,6 +210,18 @@ def set_pending_command(device_id: str, command: str) -> None:
                      (command, device_id))
 
 
+def set_ota_result(device_id: str, code: str) -> None:
+    """Record an OTA failure code the frame reported (so the app can show it)."""
+    with get_connection() as conn:
+        conn.execute("UPDATE devices SET ota_error = ? WHERE id = ?", (code, device_id))
+
+
+def clear_ota_result(device_id: str) -> None:
+    """Clear before a fresh OTA attempt so a stale failure isn't shown again."""
+    with get_connection() as conn:
+        conn.execute("UPDATE devices SET ota_error = '' WHERE id = ?", (device_id,))
+
+
 def take_pending_command(device_id: str) -> str:
     """Read + clear the pending command (delivered exactly once)."""
     with get_connection() as conn:

@@ -69,7 +69,8 @@ class Device:
     battery: Optional[float]
     wifi_rssi: Optional[int]
     fw_version: Optional[str]
-    created_at: str
+    ota_error: str = ""
+    created_at: str = ""
 
     @staticmethod
     def from_row(row: sqlite3.Row) -> "Device":
@@ -110,6 +111,7 @@ class Device:
             battery=row["battery"],
             wifi_rssi=row["wifi_rssi"],
             fw_version=row["fw_version"],
+            ota_error=row["ota_error"] if "ota_error" in row.keys() else "",
             created_at=row["created_at"],
         )
 

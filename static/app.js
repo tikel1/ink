@@ -324,20 +324,39 @@ async function startFrameOta(deviceId) {
   if (reason === "offline") return toast("Wake the frame first — it must be online to update");
   if (reason === "battery") return toast("Plug the frame into power before updating");
   if (reason) return;
-  if (!confirm(`Update ${displayName(d)} to ${d.latest_fw || "the latest version"}?\n\nThe frame downloads the new firmware and restarts — about a minute. Keep it powered.`)) return;
+  const target = d.latest_fw || "the latest version";
+  if (!confirm(`Update ${displayName(d)} to ${target}?\n\nThe frame downloads the new firmware and restarts — about a minute. Keep it powered.`)) return;
+  const fromVer = d.fw_version;
   otaInFlight = true;
   $("fw-toast-update").disabled = true; $("fw-toast-update").textContent = "Updating…";
   try {
     await api(`/devices/${deviceId}/command`, { method: "POST", body: { cmd: "ota" } });
     toast("Updating… the frame will download and restart.");
-  } catch (e) { otaInFlight = false; return toast(e.message); }
-  // The frame reboots onto the new version and re-checks in; clear the lock after
-  // a grace period and re-evaluate from fresh telemetry.
-  setTimeout(async () => {
+  } catch (e) { otaInFlight = false; renderFrameStatus(currentDevice); return toast(`Couldn't start update: ${e.message}`); }
+  pollOtaResult(deviceId, fromVer);
+}
+
+// After an OTA is queued, poll the device for the outcome and surface it as a
+// toast: version advanced -> success; the frame reported a failure code ->
+// failure; nothing after the window -> didn't complete.
+async function pollOtaResult(deviceId, fromVer) {
+  const DEADLINE = Date.now() + 150000;   // ~2.5 min: download + flash + reboot + re-checkin
+  const finish = (msg) => {
     otaInFlight = false;
-    try { ({ devices } = await api("/devices")); } catch {}
-    checkFirmwareUpdates();
-  }, 90000);
+    toast(msg);
+    api("/devices").then((r) => { devices = r.devices || r; checkFirmwareUpdates(); }).catch(() => {});
+  };
+  const tick = async () => {
+    let d;
+    try { d = await api(`/devices/${deviceId}`); } catch { d = null; }
+    if (d) {
+      if (d.ota_error && d.ota_error !== "0") return finish(`Update failed (error ${d.ota_error}) — the frame kept its current version.`);
+      if (d.fw_version && d.fw_version !== fromVer && !d.update_available) return finish(`✓ Frame updated to ${d.fw_version}.`);
+    }
+    if (Date.now() < DEADLINE) { setTimeout(tick, 6000); return; }
+    finish("Update didn't complete — the frame may be offline. Try again.");
+  };
+  setTimeout(tick, 8000);   // give the frame a beat to pick up the command
 }
 async function pollFrameStatus() {
   renderFrameStatus(currentDevice);              // age the relative time first

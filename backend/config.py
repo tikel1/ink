@@ -71,8 +71,14 @@ class Settings(BaseSettings):
     def archive_dir(self) -> Path:
         return self.data_dir / "archive"
 
+    @property
+    def firmware_dir(self) -> Path:
+        """Hosts the OTA firmware binary + manifest the frames pull from."""
+        return self.data_dir / "firmware"
+
     def ensure_dirs(self) -> None:
-        for directory in (self.data_dir, self.images_dir, self.archive_dir):
+        for directory in (self.data_dir, self.images_dir, self.archive_dir,
+                          self.firmware_dir):
             directory.mkdir(parents=True, exist_ok=True)
 
 

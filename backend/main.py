@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import app_api, device_api, media_api
+from . import app_api, device_api, firmware_api, media_api
 from .config import get_settings
 from .db import init_db
 from .scheduler import create_scheduler
@@ -50,6 +50,7 @@ app.add_middleware(
 
 app.include_router(device_api.router)
 app.include_router(media_api.router)
+app.include_router(firmware_api.router)
 app.include_router(app_api.router)
 
 

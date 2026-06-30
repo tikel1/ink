@@ -11,8 +11,9 @@
 #       - On USB power -> stays ON, refreshes the art periodically.
 #       - On battery   -> sleeps; press KEY1 to wake + refresh, then sleeps again
 #                         after `idle_minutes` of no interaction.
-#   Buttons: KEY1 = sleep / wake (press to sleep when on, press to wake when
-#   asleep), KEY2 = refresh, KEY3 = wake · hold 15s: factory reset.
+#   Buttons: KEY1 = tap to sleep / wake, KEY2 = refresh, KEY3 = wake.
+#   Factory reset (full wipe + re-onboard): hold KEY1 + KEY3 together for 15s.
+#   Firmware updates are pulled over the air on an 'ota' command from the app.
 #
 # Set `backend_base` before flashing. `timezone` is for the clock; the daily
 # generation hour is set per frame in the app.
@@ -26,7 +27,7 @@ substitutions:
   # edit this one file — no reflash. Falls back to backend_base if unreachable.
   config_url: "https://tikel1.github.io/ink/server.txt"
   app_url: "https://tikel1.github.io/ink/"   # QR on the setup screen points here
-  fw_label: "ink-1.0"                         # firmware version reported to the app
+  fw_label: "1.1.0"                           # firmware version reported to the app (match the published manifest)
   timezone: "Asia/Jerusalem"
   idle_minutes: "10"               # battery: sleep after this much idle time
   powered_voltage: "4.15"          # >= this reads as "on USB power" (calibrate)
@@ -88,7 +89,23 @@ api:
   reboot_timeout: 0s
 
 ota:
+  # esphome: local/network OTA for development flashing.
   - platform: esphome
+  # http_request: production OTA. On an 'ota' app command the frame pulls the
+  # binary from the backend and flashes itself (a browser can't push to it, and a
+  # cloud backend can't reach the frame's LAN). MD5 is verified against md5_url.
+  - platform: http_request
+    on_error:
+      then:
+        - lambda: 'ESP_LOGW("ink", "OTA failed (code %d) — keeping current firmware", x);'
+        # Report the failure so the app can show it (success needs no ping — the
+        # frame reboots into the new image and reports the new version).
+        - http_request.get:
+            url: !lambda |-
+              char u[170];
+              snprintf(u, sizeof(u), "%s/media/ota-result/%s?code=%d",
+                       id(g_backend).c_str(), get_mac_address().c_str(), (int) x);
+              return std::string(u);
 
 logger:
   level: INFO
@@ -151,6 +168,21 @@ globals:
   - id: g_asleep
     type: bool
     initial_value: "false"
+  # Set by the .ver poll when the app queues an 'ota' / 'reset' command; acted on
+  # by sibling actions AFTER the poll's HTTP call returns (never re-entrantly
+  # inside the response callback). One-shot — cleared as soon as they fire.
+  - id: g_do_ota
+    type: bool
+    initial_value: "false"
+  - id: g_do_reset
+    type: bool
+    initial_value: "false"
+  # MD5 of the latest published firmware, delivered in the .ver poll header
+  # (X-OTA-Md5). Passed straight to the OTA flash action so we don't fetch a
+  # separate md5 URL during OTA (that fetch proved unreliable on this client).
+  - id: g_ota_md5
+    type: std::string
+    initial_value: '""'
   # Persisted across reboots/sleep (flash). Once the frame has shown art it is a
   # set-up frame, so reboots/wakes keep the retained artwork instead of flashing
   # the QR pairing screen. Cleared by factory reset.
@@ -173,20 +205,25 @@ button:
 
 binary_sensor:
   # KEY1 = sleep / wake. While asleep a press wakes the frame (ext1 wake pin);
-  # while awake a press puts it to sleep. Blocked until g_booted so a press
-  # during boot can't sleep before OTA/WiFi is up.
+  # while awake a short TAP puts it to sleep. We use on_click (50ms–1.5s) rather
+  # than on_press so that holding KEY1 — as part of the KEY1+KEY3 reset combo —
+  # does NOT sleep the frame. Blocked until g_booted so a tap during boot can't
+  # sleep before OTA/WiFi is up.
   - platform: gpio
     name: "KEY1 sleep/wake"
     id: key1_btn
     internal: true
     pin: { number: GPIO2, mode: INPUT_PULLUP, inverted: true }
-    on_press:
-      - if:
-          condition:
-            lambda: "return id(g_booted);"
-          then:
-            - logger.log: "KEY1 — entering sleep"
-            - script.execute: go_to_sleep
+    on_click:
+      min_length: 50ms
+      max_length: 1500ms
+      then:
+        - if:
+            condition:
+              lambda: "return id(g_booted);"
+            then:
+              - logger.log: "KEY1 tap — entering sleep"
+              - script.execute: go_to_sleep
 
   # KEY2 = refresh (re-fetch + redraw the current artwork).
   - platform: gpio
@@ -197,18 +234,26 @@ binary_sensor:
       - logger.log: "KEY2 refresh"
       - component.update: online_artwork
 
-  # KEY3 = wake (a press wakes from sleep via ext1); hold 15s to factory-reset.
+  # KEY3 = wake (a press wakes from sleep via ext1). Factory reset is the
+  # KEY1+KEY3 combo below, so KEY3 alone has no awake action.
   - platform: gpio
-    name: "KEY3 wake / factory reset"
+    name: "KEY3 wake"
     id: key3_btn
     internal: true
     pin: { number: GPIO5, mode: INPUT_PULLUP, inverted: true }
-    on_multi_click:
-      - timing:
-          - ON for at least 15s
-        then:
-          - logger.log: "KEY3 held 15s — factory reset"
-          - button.press: factory_reset_button
+
+  # Factory reset = hold KEY1 + KEY3 together for 15s (accident-resistant vs a
+  # single long-hold). This template is ON only while BOTH are pressed; the
+  # delayed_on filter requires that to hold continuously for 15s before it fires.
+  - platform: template
+    id: combo_reset
+    internal: true
+    lambda: "return id(key1_btn).state && id(key3_btn).state;"
+    filters:
+      - delayed_on: 15s
+    on_press:
+      - logger.log: "KEY1+KEY3 held 15s — factory reset"
+      - button.press: factory_reset_button
 
 sensor:
   - platform: adc
@@ -219,6 +264,12 @@ sensor:
     attenuation: 12db
     filters:
       - multiply: 1.1
+  # ESPHome manages Wi-Fi itself, so the raw Arduino WiFi.RSSI() returns 0.
+  # This sensor reads the real signal strength the app reports.
+  - platform: wifi_signal
+    id: wifi_rssi_sensor
+    update_interval: 60s
+    internal: true
 
 # Fraunces — the same display serif as the Ink app, for a consistent look.
 font:
@@ -256,11 +307,14 @@ interval:
           # Piggyback telemetry on the poll so the app can show battery / Wi-Fi /
           # firmware (the backend reads these query params on the .ver check-in).
           url: !lambda |-
+            float rssi = id(wifi_rssi_sensor).state;
+            int rssi_i = isnan(rssi) ? 0 : (int) rssi;
+            float bv = id(batt).state;
+            if (isnan(bv)) bv = 0.0f;
             char q[72];
-            snprintf(q, sizeof(q), ".ver?bat=%.2f&rssi=%d&fw=${fw_label}",
-                     id(batt).state, (int) WiFi.RSSI());
+            snprintf(q, sizeof(q), ".ver?bat=%.2f&rssi=%d&fw=${fw_label}", bv, rssi_i);
             return id(g_backend) + "/media/current/" + get_mac_address() + q;
-          collect_headers: ["x-ver", "x-power", "x-sleep", "x-wake", "x-wake-secs", "x-orient", "x-cmd"]
+          collect_headers: ["x-ver", "x-power", "x-sleep", "x-wake", "x-wake-secs", "x-orient", "x-ota-md5", "x-cmd"]
           on_response:
             then:
               - lambda: |-
@@ -277,6 +331,8 @@ interval:
                          if (!wh.empty()) id(g_wake_secs) = atoi(wh.c_str()) * 3600; }
                   std::string ori = response->get_response_header("x-orient");
                   if (!ori.empty()) id(g_portrait) = (ori == "portrait");
+                  std::string m5 = response->get_response_header("x-ota-md5");
+                  if (!m5.empty()) id(g_ota_md5) = m5;
                   // Decide whether to redraw — from a version change and/or an
                   // app 'refresh' command — but redraw at most ONCE per poll so a
                   // freshly generated image (new version + queued refresh) doesn't
@@ -293,6 +349,10 @@ interval:
                     id(go_to_sleep)->execute();
                     return;                       // don't also redraw when sleeping
                   }
+                  // OTA / reset run AFTER this HTTP call returns (sibling actions
+                  // below) so we never start a second request inside this callback.
+                  if (cmd == "ota")   { ESP_LOGI("ink", "app command: OTA");   id(g_do_ota)   = true; }
+                  if (cmd == "reset") { ESP_LOGI("ink", "app command: reset"); id(g_do_reset) = true; }
                   if (cmd == "refresh") do_refresh = true;
                   if (do_refresh) {
                     ESP_LOGI("ink", "refreshing artwork");
@@ -301,6 +361,20 @@ interval:
                   ESP_LOGI("ink", "poll: power=%s sleep_min=%d uptime=%us cmd=%s",
                            id(g_power).c_str(), id(g_sleep_min),
                            (unsigned)(millis() / 1000UL), cmd.c_str());
+      # Factory reset (full wipe + re-onboard) requested from the app.
+      - if:
+          condition:
+            lambda: "return id(g_do_reset);"
+          then:
+            - lambda: "id(g_do_reset) = false;"
+            - button.press: factory_reset_button
+      # OTA: pull + flash the latest firmware from the backend (reboots on success).
+      - if:
+          condition:
+            lambda: "return id(g_do_ota);"
+          then:
+            - lambda: "id(g_do_ota) = false;"
+            - script.execute: do_ota
       # On battery: after the awake window, sleep until the next update hour.
       # Sleep rules: plugged in (usb) -> always awake; on battery -> sleep after
       # g_sleep_min minutes of uptime (applies whether paired or still pairing).
@@ -447,8 +521,34 @@ script:
                     ESP_LOGI("ink", "backend resolved: %s", u.c_str());
                   }
 
+  # Pull + flash the latest firmware from the backend. ESPHome verifies the
+  # downloaded image against md5_url before swapping the partition, then reboots.
+  # On failure the ota on_error handler logs and the current firmware stays put.
+  - id: do_ota
+    then:
+      # Safety backstop (the app gates too): never flash on low battery off USB —
+      # a power loss mid-write wastes the cycle. ~3.75V ≈ 50%. The dual-partition +
+      # MD5 scheme means an interrupted flash can't brick it, but we still refuse.
+      - if:
+          condition:
+            lambda: 'return id(g_power) != "usb" && id(batt).state > 0.0f && id(batt).state < 3.75f;'
+          then:
+            - lambda: 'ESP_LOGW("ink", "OTA refused: low battery (%.2fV), not on USB", id(batt).state);'
+          else:
+            - if:
+                condition:
+                  lambda: 'return id(g_ota_md5).length() != 32;'
+                then:
+                  - lambda: 'ESP_LOGW("ink", "OTA refused: no/invalid md5 from server (len=%u)", (unsigned) id(g_ota_md5).length());'
+                else:
+                  # md5 comes from the .ver header (reliable), not a separate fetch.
+                  - lambda: 'ESP_LOGI("ink", "OTA: pulling %s (md5 %s)", (id(g_backend) + "/firmware/ink-frame.bin").c_str(), id(g_ota_md5).c_str());'
+                  - ota.http_request.flash:
+                      md5: !lambda 'return id(g_ota_md5);'
+                      url: !lambda 'return id(g_backend) + "/firmware/ink-frame.bin";'
+
   # Sleep until the next daily update hour (timer = guaranteed wake); KEY1 or KEY3
-  # also wake it any time. Used by the battery idle timer and by a KEY1 press.
+  # also wake it any time. Used by the battery idle timer and by a KEY1 tap.
   - id: go_to_sleep
     then:
       - lambda: 'ESP_LOGI("ink", "go_to_sleep: START (backend=%s)", id(g_backend).c_str());'
