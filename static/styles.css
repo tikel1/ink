@@ -229,11 +229,12 @@ input:focus, select:focus { outline: none; border-color: var(--ink);
 .home-eyebrow { margin-bottom: 14px; }
 .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center;
                justify-content: center; text-align: center; padding: 10px; }
-/* Brand lockup: the animated ink blob next to a big "Ink" wordmark. */
-.empty-brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 24px; }
-.empty-brand .inkmark { width: 92px; height: 92px; margin: 0; }
-.empty-wordmark { font-family: "Fraunces"; font-weight: 800; line-height: 1; letter-spacing: -.02em;
-                  color: var(--ink); font-size: clamp(56px, 18vw, 84px); }
+/* Brand lockup: the "Ink" wordmark sits on top of the animated ink blob, which
+   drifts behind it as a soft ink wash. */
+.empty-brand { position: relative; display: grid; place-items: center; margin-bottom: 26px; }
+.empty-brand .inkmark { grid-area: 1 / 1; width: 172px; height: 172px; margin: 0; opacity: .17; }
+.empty-wordmark { grid-area: 1 / 1; z-index: 1; font-family: "Fraunces"; font-weight: 800;
+                  line-height: 1; letter-spacing: -.02em; color: var(--ink); font-size: clamp(56px, 18vw, 84px); }
 /* The empty state carries the branding, so drop the header wordmark + blob
    (the gear stays for account access). */
 #screen-home.is-empty .home-top .brand-word,
