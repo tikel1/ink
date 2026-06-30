@@ -27,7 +27,7 @@ substitutions:
   # edit this one file — no reflash. Falls back to backend_base if unreachable.
   config_url: "https://tikel1.github.io/ink/server.txt"
   app_url: "https://tikel1.github.io/ink/"   # QR on the setup screen points here
-  fw_label: "1.1.0"                           # firmware version reported to the app (match the published manifest)
+  fw_label: "1.1.3"                           # firmware version reported to the app (match the published manifest)
   timezone: "Asia/Jerusalem"
   idle_minutes: "10"               # battery: sleep after this much idle time
   powered_voltage: "4.15"          # >= this reads as "on USB power" (calibrate)
@@ -175,6 +175,11 @@ globals:
     type: bool
     initial_value: "false"
   - id: g_do_reset
+    type: bool
+    initial_value: "false"
+  # True while an OTA is in progress — draws the "Updating…" screen so the panel
+  # shows what's happening instead of a frozen image during the flash.
+  - id: g_updating
     type: bool
     initial_value: "false"
   # MD5 of the latest published firmware, delivered in the .ver poll header
@@ -424,6 +429,13 @@ display:
     model: 7.50inv2
     update_interval: never
     lambda: |-
+      // OTA in progress: a dedicated branded portrait "Updating…" screen (drawn
+      // before the flash starts). Takes priority over art/onboarding.
+      if (id(g_updating)) {
+        it.fill(Color::WHITE);
+        it.image(0, 0, id(updating_img), Color::BLACK, Color::WHITE);
+        return;
+      }
       if (id(image_loaded) && id(online_artwork).get_width() > 0) {
         it.image(0, 0, id(online_artwork), Color::BLACK, Color::WHITE);
       } else {
@@ -464,6 +476,12 @@ display:
 image:
   - file: onboarding.png
     id: onboarding_img
+    type: BINARY
+    resize: 800x480
+  # Branded portrait "Updating…" screen shown during an OTA (panel-oriented, same
+  # style as the onboarding/pairing splashes).
+  - file: updating.png
+    id: updating_img
     type: BINARY
     resize: 800x480
 
@@ -541,11 +559,17 @@ script:
                 then:
                   - lambda: 'ESP_LOGW("ink", "OTA refused: no/invalid md5 from server (len=%u)", (unsigned) id(g_ota_md5).length());'
                 else:
-                  # md5 comes from the .ver header (reliable), not a separate fetch.
+                  # Show the branded "Updating…" screen first, then pull + flash.
+                  - lambda: 'id(g_updating) = true;'
+                  - component.update: my_display
                   - lambda: 'ESP_LOGI("ink", "OTA: pulling %s (md5 %s)", (id(g_backend) + "/firmware/ink-frame.bin").c_str(), id(g_ota_md5).c_str());'
+                  # md5 comes from the .ver header (reliable), not a separate fetch.
                   - ota.http_request.flash:
                       md5: !lambda 'return id(g_ota_md5);'
                       url: !lambda 'return id(g_backend) + "/firmware/ink-frame.bin";'
+                  # Only reached if the flash FAILED (success reboots) — clear the
+                  # screen flag so the next redraw restores the artwork.
+                  - lambda: 'id(g_updating) = false;'
 
   # Sleep until the next daily update hour (timer = guaranteed wake); KEY1 or KEY3
   # also wake it any time. Used by the battery idle timer and by a KEY1 tap.

@@ -114,3 +114,14 @@ def connect_splash(ap_name: str) -> bytes:
     _center_text(draw, 360, "Your first work of art", 24, weight=450)
     _center_text(draw, 392, "is on its way.", 24, weight=450)
     return _finish(img)
+
+
+def updating_splash() -> bytes:
+    """Shown on the frame while a firmware update downloads + installs."""
+    img, draw = _portrait()
+    _masthead(draw)
+    _center_text(draw, 320, "Updating", 34, weight=600)
+    _center_text(draw, 392, "Installing the latest firmware.", 22, weight=450)
+    _center_text(draw, 426, "This takes about a minute —", 22, weight=450)
+    _center_text(draw, 458, "keep the frame plugged in.", 22, weight=450)
+    return _finish(img)
