@@ -1,6 +1,11 @@
 app = "ink-art-frame"
 primary_region = "fra"
 
+# Insurance for the once-a-day image decode/dither spike: lets a brief memory
+# peak spill to disk instead of OOM-killing the process. Keeps us on the cheap
+# 512MB tier safely.
+swap_size_mb = 256
+
 [build]
 
 [env]
