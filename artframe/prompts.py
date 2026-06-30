@@ -89,11 +89,12 @@ Rules:
   albums/films/concerts. AVOID routine, minor, or fan-only events (an ordinary
   album release, a regular tour concert, a minor premiere). Avoid war, violence,
   tragedy, and copyrighted characters.
-- ALSO search what is happening in the world RIGHT NOW (this week). When a
-  historical event on {date} echoes something current — an ongoing tournament or
-  season, a country / team / artist / work in the news today, or a milestone
-  anniversary this year — capture that connection in "now_tie". A timely echo makes
-  the artwork feel alive, so surface those candidates.
+- Pick the events purely on their own significance (above). Then, for each one,
+  note in "now_tie" whether it happens to echo something in the world right now —
+  an ongoing tournament or season, a country / team / artist / work in the news
+  today, a milestone anniversary this year — or leave it empty. This is CONTEXT
+  ONLY for the caption; it must NOT change which events you choose (keep the day
+  diverse — don't over-pick one topic just because it's currently in the news).
 
 Reply with ONLY a compact JSON array (no prose) of objects (aim for 2-3 per topic):
 [{{"category": "<exactly one of the topics listed above>",
@@ -131,14 +132,10 @@ and find meaningful, not just something that merely occurred:
   date, a minor or fan-only premiere, an incremental or obscure event.
 
 Choose the event with the widest, most lasting resonance AND a strong, instantly
-recognizable visual.
-
-TIE-BREAKER — timeliness: among events that are comparably significant, strongly
-prefer one that connects to what is happening in the world RIGHT NOW (shown as
-"now:" in the listing) — e.g. a team that just played, a tournament under way, a
-fresh anniversary. A historical event that echoes today's news feels alive and
-makes the artwork resonate. Do NOT let a timely echo override a clearly bigger
-event, but use it to break ties and to favour the lively pick.
+recognizable visual. If several are comparably strong, pick the most visually
+iconic. Judge purely on the event's own significance — do NOT factor in whether it
+relates to current news (that is handled separately and must not bias the pick, so
+the day stays diverse).
 
 Candidates:
 {candidates}
@@ -277,16 +274,16 @@ NARRATION_EN_PROMPT = """Here is an event description:
 
 {event}
 
-Expand on it in 15-25 words in English. Give only an explanation of the event
+Expand on it in 15-30 words in English. Give only an explanation of the event
 with no introduction. If it is a historical event, mention the date it
-happened. Important! Do not exceed 250 characters."""
+happened. {connection}Important! Do not exceed 250 characters."""
 
 NARRATION_HE_PROMPT = """יש פה פירוט על אירוע:
 
 {event}
 
 תרחיב עליו ב-25-45 מילים בעברית עבור תסריט לקריינות לקהל הצעיר. תן רק הסבר על
-האירוע בלי הקדמה. אם זה אירוע היסטורי, תציין את התאריך שבו הוא קרה. חשוב! לא
+האירוע בלי הקדמה. אם זה אירוע היסטורי, תציין את התאריך שבו הוא קרה. {connection}חשוב! לא
 לחרוג מ-250 תווים."""
 
 
