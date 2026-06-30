@@ -26,7 +26,7 @@ substitutions:
   # edit this one file — no reflash. Falls back to backend_base if unreachable.
   config_url: "https://tikel1.github.io/ink/server.txt"
   app_url: "https://tikel1.github.io/ink/"   # QR on the setup screen points here
-  fw_label: "1.1.4"                           # firmware version reported to the app (match the published manifest)
+  fw_label: "1.1.5"                           # firmware version reported to the app (match the published manifest)
   timezone: "Asia/Jerusalem"
   idle_minutes: "10"               # battery: sleep after this much idle time
   powered_voltage: "4.15"          # >= this reads as "on USB power" (calibrate)

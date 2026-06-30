@@ -41,6 +41,7 @@ input{width:100%;margin-top:6px;padding:13px;font-size:16px;border:1.5px solid v
 input:focus{outline:none;border-color:var(--ink)}
 button{width:100%;margin-top:18px;padding:15px;font-size:15px;font-weight:600;color:var(--paper);background:var(--ink);border:none;border-radius:10px;cursor:pointer}
 button:active{opacity:.85}
+.appbtn{display:block;text-align:center;text-decoration:none;margin-top:18px;padding:15px;font-size:15px;font-weight:600;color:var(--paper);background:var(--ink);border-radius:10px}
 .foot{text-align:center;color:var(--muted);font-size:12px;margin-top:14px;line-height:1.5}
 .ok{text-align:center}.ok .spin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--ink);border-radius:50%;animation:s 1s linear infinite;margin:14px auto}
 @keyframes s{to{transform:rotate(360deg)}}
@@ -62,12 +63,17 @@ button:active{opacity:.85}
     <p class=foot>After connecting, your frame shows a pairing code to enter in the Ink app.</p>
   </div>
   <div id=done class=ok style=display:none>
-    <h1>Connecting…</h1><div class=spin></div>
-    <p class=sub>Your Ink frame is joining the network and will restart. When it shows a <b>pairing code</b>, enter it in the Ink app to finish setup.</p>
+    <h1>Frame connected</h1>
+    <p class=sub>Your Ink frame is joining your Wi-Fi. Continue in the Ink app — your frame will show a pairing code to scan or enter.</p>
+    <a class=appbtn href="https://tikel1.github.io/ink/">Open the Ink app &rarr;</a>
+    <p class=foot>Didn't open? Reconnect to your home Wi-Fi, then open Ink.</p>
   </div>
 </div>
 <script>
-if(location.search.indexOf('save')>=0){document.getElementById('form').style.display='none';document.getElementById('done').style.display='block';}
+if(location.search.indexOf('save')>=0){document.getElementById('form').style.display='none';document.getElementById('done').style.display='block';
+  /* Best-effort hand-off to the Ink app. The OS captive browser usually opens
+     this in the real browser once Wi-Fi reconnects; the button is the fallback. */
+  setTimeout(function(){try{location.href='https://tikel1.github.io/ink/';}catch(e){}},2500);}
 else{fetch('/config.json').then(function(r){return r.json()}).then(function(d){
   var ul=document.getElementById('nets'),seen={},rows=[];
   (d.aps||[]).filter(function(a){return a&&a.ssid}).sort(function(a,b){return b.rssi-a.rssi}).forEach(function(a){
