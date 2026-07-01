@@ -419,6 +419,39 @@ function renderFrameStatus(d) {
   const st = frameState(d);
   $("fr-dot").className = `dot ${st.cls}`;
   $("fr-status").textContent = st.sub ? `${st.label} · ${st.sub}` : st.label;
+  renderMorningStatus(d, st);
+}
+
+// Was today's daily update supposed to run, and did it? Surfaces a friendly banner
+// when the frame missed its morning update (it was offline at wake time), or an
+// "updating now" hint while it's catching up. Uses last_auto_gen (the date the
+// daily update last ran) + the wake time + reachability.
+function two(n) { return String(n).padStart(2, "0"); }
+function scheduledToday(d, now) {
+  if ((d.schedule || "daily") === "daily") return true;
+  const days = (d.schedule_days || "").toLowerCase();
+  if (!days.trim()) return true;
+  const wd = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][now.getDay()];
+  return days.split(",").map((s) => s.trim()).includes(wd);
+}
+function renderMorningStatus(d, st) {
+  const el = $("frame-alert");
+  if (!el) return;
+  const now = new Date();
+  const wakeH = d.wake_hour ?? 6, wakeM = d.wake_minute ?? 0;
+  const wake = new Date(now); wake.setHours(wakeH, wakeM, 0, 0);
+  const todayISO = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}`;
+  const ranToday = d.last_auto_gen === todayISO;
+  // No banner if: today's time hasn't arrived, not a scheduled day, or it already ran.
+  if (now < wake || !scheduledToday(d, now) || ranToday) { el.hidden = true; return; }
+  const when = `${two(wakeH)}:${two(wakeM)}`;
+  if (st && st.label === "Online") {
+    el.className = "frame-alert info"; el.hidden = false;
+    el.textContent = "Creating today's artwork now…";
+  } else {
+    el.className = "frame-alert"; el.hidden = false;
+    el.textContent = `Couldn't update this morning — your frame was offline at ${when}. It'll update the next time it wakes.`;
+  }
 }
 
 // --------------------------------------------------------------------------

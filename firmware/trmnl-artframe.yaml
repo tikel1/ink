@@ -184,6 +184,12 @@ globals:
   - id: g_updating
     type: bool
     initial_value: "false"
+  # True while the backend is generating this frame's daily image (X-Gen: pending
+  # on the .ver poll). Blocks sleep so a frame that just woke doesn't nod off
+  # mid-generation before the new image lands. A hard max-awake cap overrides it.
+  - id: g_gen_pending
+    type: bool
+    initial_value: "false"
   # MD5 of the latest published firmware, delivered in the .ver poll header
   # (X-OTA-Md5). Passed straight to the OTA flash action so we don't fetch a
   # separate md5 URL during OTA (that fetch proved unreliable on this client).
@@ -331,7 +337,7 @@ interval:
                   char q[72];
                   snprintf(q, sizeof(q), ".ver?bat=%.2f&rssi=%d&fw=${fw_label}", bv, rssi_i);
                   return id(g_backend) + "/media/current/" + get_mac_address() + q;
-                collect_headers: ["x-ver", "x-power", "x-sleep", "x-wake", "x-wake-secs", "x-orient", "x-ota-md5", "x-cmd"]
+                collect_headers: ["x-ver", "x-power", "x-sleep", "x-wake", "x-wake-secs", "x-orient", "x-ota-md5", "x-cmd", "x-gen"]
                 on_response:
                   then:
                     - lambda: |-
@@ -350,6 +356,8 @@ interval:
                         if (!ori.empty()) id(g_portrait) = (ori == "portrait");
                         std::string m5 = response->get_response_header("x-ota-md5");
                         if (!m5.empty()) id(g_ota_md5) = m5;
+                        // Generation in progress? Stay awake until the image lands.
+                        id(g_gen_pending) = (response->get_response_header("x-gen") == "pending");
                         // Decide whether to redraw — from a version change and/or an
                         // app 'refresh' command — but redraw at most ONCE per poll so a
                         // freshly generated image (new version + queued refresh) doesn't
@@ -399,8 +407,16 @@ interval:
       # after N", or on battery). Applies whether paired or still pairing.
       - if:
           condition:
-            lambda: 'return id(g_sleep_min) > 0 &&
-                            millis() > (uint32_t) id(g_sleep_min) * 60000UL;'
+            lambda: |-
+              if (id(g_sleep_min) <= 0) return false;        // plugged "always on" -> never sleep
+              uint32_t up = millis();
+              uint32_t base = (uint32_t) id(g_sleep_min) * 60000UL;
+              const uint32_t MIN_AWAKE = 300000UL;           // 5 min floor: never sleep before an image can land
+              const uint32_t GEN_GRACE = 300000UL;           // wait up to +5 min for a pending generation
+              if (up < MIN_AWAKE) return false;              // detached min-awake window
+              if (up < base) return false;                   // honor the user's sleep timer
+              if (id(g_gen_pending) && up < base + GEN_GRACE) return false;  // still generating -> wait (capped)
+              return true;                                   // sleep (also the fallback if a gen got stuck)
           then:
             - script.execute: go_to_sleep
 
@@ -422,10 +438,22 @@ online_image:
           if (w > 0) {
             id(image_loaded) = true;
             if (!id(g_paired_once)) id(g_paired_once) = true;  // set-up frame now
+            id(g_gen_pending) = false;                          // the awaited image arrived
             id(my_display)->update();
           } else {
             ESP_LOGW("ink", "image fetch failed — keeping the previous frame");
           }
+      # Confirm delivery: tell the backend we fetched + rendered the new image,
+      # closing the wake->generate->refresh handshake (the frame is then free to
+      # fall back to its sleep timer). Only on a successful decode.
+      - if:
+          condition:
+            and:
+              - wifi.connected:
+              - lambda: "return id(online_artwork).get_width() > 0;"
+          then:
+            - http_request.get:
+                url: !lambda 'return id(g_backend) + "/media/refreshed/" + get_mac_address();'
 
 spi:
   clk_pin: GPIO7

@@ -293,6 +293,7 @@ def _device_payload(device: Device) -> dict:
         "battery": device.battery,
         "wifi_rssi": device.wifi_rssi,
         "last_seen": device.last_seen,
+        "last_auto_gen": device.last_auto_gen,   # date (YYYY-MM-DD) the daily update last ran
         "fw_version": device.fw_version,
         "latest_fw": firmware_repo.latest_version(),
         "update_available": firmware_repo.update_available(device.fw_version),

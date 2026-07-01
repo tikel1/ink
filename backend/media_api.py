@@ -1,18 +1,54 @@
 """Serve the bytes a device fetches: real artwork, or a splash by device state."""
 from __future__ import annotations
 
+import asyncio
+import logging
 from urllib.parse import quote
 
 from fastapi import APIRouter
 from fastapi.responses import FileResponse, Response
 
-from . import firmware_repo, generation, repositories, splash
+from artframe.timeutil import now_in_tz
+
+from . import firmware_repo, generation, jobs, repositories, splash
 from .config import get_settings
+from .scheduler import _is_due
 
 router = APIRouter(prefix="/media", tags=["media"])
+logger = logging.getLogger(__name__)
 
 PNG = "image/png"
 AP_NAME = "Ink Frame"
+
+
+async def _run_frame_generation(device) -> None:
+    """Generate for a frame that just checked in and is due. Marks the per-day
+    'done' flag on success (so it fires once), and leaves the job state so the
+    poll can tell the frame to stay awake while it runs."""
+    try:
+        ok = await generation.generate_for_device(
+            device, on_phase=lambda p: jobs.set_state(device.id, jobs.RUNNING, p))
+        jobs.set_state(device.id, jobs.DONE if ok else jobs.ERROR)
+        if ok:
+            repositories.mark_auto_generated(
+                device.id, now_in_tz(device.tz).date().isoformat())
+    except Exception:  # noqa: BLE001
+        logger.exception("frame-driven generation failed for %s", device.id)
+        jobs.set_state(device.id, jobs.ERROR)
+
+
+def _maybe_start_generation(device) -> bool:
+    """Frame-driven handshake: a paired frame that polls while its daily update is
+    due kicks generation right then (proof it's awake + reachable). Deduped via the
+    job state so repeated polls don't stack. Returns True while a job is running."""
+    if jobs.get(device.id).get("state") == jobs.RUNNING:
+        return True
+    if not _is_due(device, get_settings().generation_lead_minutes):
+        return False
+    jobs.set_state(device.id, jobs.RUNNING)
+    asyncio.create_task(_run_frame_generation(device))
+    logger.info("frame-driven generation started for %s", device.id)
+    return True
 
 
 def _png(data: bytes) -> Response:
@@ -86,6 +122,11 @@ async def current_version(
         ota_md5 = firmware_repo.latest_md5()                  # md5 of the published firmware
         if ota_md5:
             headers["X-OTA-Md5"] = ota_md5
+        # Frame-driven generation: if the daily update is due, this poll (proof the
+        # frame is awake) kicks it. X-Gen=pending tells the frame to stay awake
+        # until the new image lands, instead of sleeping mid-generation.
+        if device.status == "paired" and _maybe_start_generation(device):
+            headers["X-Gen"] = "pending"
     # One-shot command queued by the app (delivered once): 'refresh' | 'sleep'.
     cmd = repositories.take_pending_command(device_id)
     if cmd:
@@ -108,6 +149,16 @@ async def report_awake(device_id: str) -> Response:
     heartbeat. Stamps last_seen + clears the sleeping flag; unlike .ver it does
     NOT consume a queued command (the poll handles those)."""
     repositories.update_telemetry(device_id)
+    return Response(content="ok", media_type="text/plain")
+
+
+@router.get("/refreshed/{device_id}")
+async def report_refreshed(device_id: str) -> Response:
+    """The frame pings this once it has fetched + rendered the new image, closing
+    the wake→generate→refresh handshake. We stamp the check-in and clear the job so
+    the app shows 'updated' and the frame is free to fall back to its sleep timer."""
+    repositories.update_telemetry(device_id)
+    jobs.set_state(device_id, jobs.IDLE)
     return Response(content="ok", media_type="text/plain")
 
 
