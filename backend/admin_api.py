@@ -12,6 +12,11 @@ from . import artwork_repo, auth, firmware_repo, monitoring_repo, repositories, 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[auth.AdminDep])
 
 ONLINE_WINDOW_S = 180
+# Preset interest chips offered in the app (mirror of static INTEREST_CHIPS).
+# Anything else in a frame's interests is user-entered custom text. 'israel' is
+# the default applied to a brand-new frame.
+PRESET_INTERESTS = {"israel", "science", "history", "sports", "astronomy", "art", "music", "cinema"}
+DEFAULT_INTEREST = "israel"
 
 
 def _age_seconds(last_seen: str | None) -> float | None:
@@ -36,9 +41,19 @@ def _state(device) -> str:
 
 
 def _frame(device, latest) -> dict:
+    tokens = [t.strip() for t in (device.interests or "").split(",") if t.strip()]
+    preset = [t for t in tokens if t.lower() in PRESET_INTERESTS]
+    custom = [t for t in tokens if t.lower() not in PRESET_INTERESTS]
+    holidays = [n for n, on in (("Jewish", device.holiday_jewish),
+                                ("Israeli", device.holiday_israeli),
+                                ("Global", device.holiday_global)) if on]
     return {
         "id": device.id,
         "name": device.name or "",
+        "interests_preset": preset,
+        "interests_custom": custom,
+        "interests_default": DEFAULT_INTEREST if tokens == [DEFAULT_INTEREST] else None,
+        "holidays": holidays,
         "account_id": device.account_id,
         "status": device.status,
         "state": _state(device),

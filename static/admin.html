@@ -92,11 +92,11 @@
     /* Gallery */
     .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; align-items: start; }
     .shot { background: var(--card); border: 1.5px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
-    /* Match the tile aspect to the artwork's orientation so it fills edge-to-edge
-       (no letterbox, no crop) — the date/signature at the margins stay visible. */
-    .shot img { width: 100%; display: block; background: #fff; object-fit: contain; aspect-ratio: 800 / 480; }
-    .shot.portrait img { aspect-ratio: 480 / 800; }
-    .shot.landscape img { aspect-ratio: 800 / 480; }
+    /* Portrait frames store an 800x480 PNG with the composition rotated 90°, so
+       rotate it back for display. Square tile keeps the grid uniform; contain +
+       rotate shows the art upright (as it hangs) for both orientations. */
+    .shot img { width: 100%; display: block; background: #fff; object-fit: contain; aspect-ratio: 1 / 1; }
+    .shot.portrait img { transform: rotate(90deg); }
     .shot .cap { padding: 8px 10px; }
     .shot .cap .d { font-size: 11px; color: var(--muted); }
     .shot .cap .c { font-size: 12px; color: var(--soft); margin-top: 2px;
@@ -119,6 +119,18 @@
       background: var(--paper-2); border: 1.5px solid var(--line); border-radius: 999px; color: var(--ink); }
     .filter-count { font-size: 12px; font-weight: 400; color: var(--muted); }
     .hrow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    /* Facet filter chips (status, date range) */
+    .facets { display: inline-flex; gap: 5px; }
+    .facet { padding: 5px 11px; border-radius: 999px; border: 1.5px solid var(--line);
+      background: var(--paper-2); color: var(--soft); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .facet.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    /* Interest chips in the frames table */
+    .chips-cell { white-space: normal; max-width: 250px; }
+    .ichip { display: inline-block; margin: 2px 3px 0 0; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+    .ichip.preset { background: rgba(27,24,19,.08); color: var(--soft); }
+    .ichip.custom { background: rgba(176,125,43,.18); color: var(--warn); }
+    .ichip.default { background: rgba(63,107,76,.16); color: var(--ok); }
+    .ichip.holi { background: transparent; color: var(--muted); border: 1px solid var(--line); }
     .shot { cursor: pointer; }
     .shot:hover { border-color: var(--ink); }
 
@@ -135,7 +147,8 @@
     .modal-close:hover { background: var(--line); color: var(--ink); }
     .modal-body { padding: 16px 18px; display: grid; grid-template-columns: minmax(200px, 320px) 1fr; gap: 20px; }
     @media (max-width: 620px) { .modal-body { grid-template-columns: 1fr; } }
-    .modal-body img { width: 100%; border-radius: var(--radius-sm); border: 1.5px solid var(--line); background: #fff; }
+    .modal-body img { width: 100%; aspect-ratio: 1 / 1; object-fit: contain; border-radius: var(--radius-sm); border: 1.5px solid var(--line); background: #fff; }
+    .modal-body.portrait img { transform: rotate(90deg); }
     .detail dt { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-top: 12px; }
     .detail dt:first-child { margin-top: 0; }
     .detail dd { margin: 3px 0 0; font-size: 14px; color: var(--ink); }

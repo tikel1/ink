@@ -91,31 +91,54 @@ async function unlock(candidate) {
 }
 function stamp() { $("refreshed").textContent = "updated " + new Date().toLocaleTimeString(); }
 
-// A per-section text filter: show only rows/cards whose data-search contains the query.
+// Per-section filtering: free-text (data-search) + optional facets — a status
+// group (data-state) and a date-range group (data-ts, epoch ms). Rows/cards show
+// only when they match the text AND the active status AND the active range.
 const filterBox = (ph) => `<input class="filter" placeholder="${ph}" /> <span class="filter-count"></span>`;
-function wireFilter(sectionId) {
-  const sec = $(sectionId), inp = sec.querySelector(".filter");
-  if (!inp) return;
+const statusFacets = () => `<div class="facets">` +
+  [["", "All"], ["online", "Online"], ["sleep", "Sleep"], ["offline", "Offline"]].map(([v, l], i) =>
+    `<button type="button" class="facet state ${i === 0 ? "active" : ""}" data-state="${v}">${l}</button>`).join("") + `</div>`;
+const rangeFacets = () => `<div class="facets">` +
+  [["1", "24h"], ["7", "7d"], ["30", "30d"], ["0", "All"]].map(([v, l]) =>
+    `<button type="button" class="facet range ${v === "0" ? "active" : ""}" data-range="${v}">${l}</button>`).join("") + `</div>`;
+
+function applyFilters(sec) {
+  const inp = sec.querySelector(".filter");
+  const q = inp ? inp.value.trim().toLowerCase() : "";
+  const state = (sec.querySelector(".facet.state.active") || {}).dataset?.state || "";
+  const days = Number((sec.querySelector(".facet.range.active") || {}).dataset?.range || 0);
+  const cutoff = days ? Date.now() - days * 86400000 : 0;
   const items = [...sec.querySelectorAll("[data-search]")];
-  const count = sec.querySelector(".filter-count");
-  const apply = () => {
-    const q = inp.value.trim().toLowerCase();
-    let n = 0;
-    items.forEach((el) => {
-      const show = !q || el.dataset.search.includes(q);
-      el.style.display = show ? "" : "none";
-      if (show) n++;
-    });
-    if (count) count.textContent = q ? `${n} of ${items.length}` : "";
-  };
-  inp.addEventListener("input", apply);
+  let n = 0;
+  items.forEach((el) => {
+    let show = !q || el.dataset.search.includes(q);
+    if (show && state && el.dataset.state) show = el.dataset.state === state;
+    if (show && cutoff && el.dataset.ts) show = Number(el.dataset.ts) >= cutoff;
+    el.style.display = show ? "" : "none";
+    if (show) n++;
+  });
+  const c = sec.querySelector(".filter-count");
+  if (c) c.textContent = (q || state || days) ? `${n} of ${items.length}` : "";
 }
+function setupFilters(sectionId) {
+  const sec = $(sectionId);
+  const inp = sec.querySelector(".filter");
+  if (inp) inp.addEventListener("input", () => applyFilters(sec));
+  sec.querySelectorAll(".facet").forEach((chip) => chip.addEventListener("click", () => {
+    const group = chip.classList.contains("state") ? "state" : "range";
+    sec.querySelectorAll(`.facet.${group}`).forEach((c) => c.classList.toggle("active", c === chip));
+    applyFilters(sec);
+  }));
+  applyFilters(sec);
+}
+const tsOf = (iso) => iso ? Date.parse(iso) || 0 : 0;
 
 // ── gallery preview lightbox ──────────────────────────────────────────────
 let galleryItems = [];
 function openArt(i) {
   const it = galleryItems[i]; if (!it) return;
   $("art-title").textContent = `${it.device_name || shortId(it.device_id)} · ${it.date}`;
+  $("art-img").closest(".modal-body").classList.toggle("portrait", it.orientation === "portrait");
   $("art-img").src = BASE + it.image_url;
   const row = (label, val, pre) => !val ? "" :
     `<dt>${esc(label)}</dt><dd>${pre ? `<pre>${esc(val)}</pre>` : esc(val)}</dd>`;
@@ -194,10 +217,18 @@ function renderFrames(d) {
   const rows = d.frames.map((fr) => {
     const bat = fr.state === "online" || fr.battery ? (fr.battery != null ? fr.battery.toFixed(2) + "V" : "—") : "—";
     const upd = fr.update_available ? ` <span class="pill manual">upd</span>` : "";
-    const s = [fr.name, fr.id, fr.state, fr.fw_version, fr.account_id, fr.last_art_caption, fr.ota_error].join(" ").toLowerCase();
-    return `<tr data-search="${esc(s)}">
+    const preset = fr.interests_preset || [], custom = fr.interests_custom || [], holis = fr.holidays || [];
+    const iChips = [
+      ...preset.map((t) => `<span class="ichip ${fr.interests_default ? "default" : "preset"}">${esc(t)}</span>`),
+      ...custom.map((t) => `<span class="ichip custom">${esc(t)}</span>`),
+      ...holis.map((h) => `<span class="ichip holi">${esc(h)}</span>`),
+    ].join("") || `<span style="color:var(--muted)">—</span>`;
+    const s = [fr.name, fr.id, fr.state, fr.fw_version, fr.account_id, fr.last_art_caption, fr.ota_error,
+      ...preset, ...custom].join(" ").toLowerCase();
+    return `<tr data-search="${esc(s)}" data-state="${esc(fr.state)}">
       <td>${statePill(fr.state)}</td>
       <td>${esc(fr.name || shortId(fr.id))}<div class="mono" style="color:var(--muted)">${esc(shortId(fr.id))}</div></td>
+      <td class="chips-cell">${iChips}</td>
       <td>${bat}</td><td>${esc(wifiLabel(fr.wifi_rssi))}</td>
       <td>${esc(fr.fw_version || "—")}${upd}</td>
       <td>${relTime(fr.last_seen)}</td>
@@ -207,19 +238,20 @@ function renderFrames(d) {
       <td class="mono">${esc(shortId(fr.account_id))}</td>
       <td>${fr.ota_error ? `<span class="pill fail">${esc(fr.ota_error)}</span>` : "—"}</td></tr>`;
   }).join("");
-  $("tab-frames").innerHTML = `<div class="card"><h3 class="hrow">All frames (${d.frames.length}) ${filterBox("Filter frames…")}</h3>
+  $("tab-frames").innerHTML = `<div class="card">
+    <h3 class="hrow">All frames (${d.frames.length}) ${statusFacets()} ${filterBox("Filter frames…")}</h3>
     <div class="tbl-wrap"><table><thead><tr>
-      <th>State</th><th>Name</th><th>Battery</th><th>Wi-Fi</th><th>Firmware</th><th>Last seen</th>
+      <th>State</th><th>Name</th><th>Interests</th><th>Battery</th><th>Wi-Fi</th><th>Firmware</th><th>Last seen</th>
       <th>Last art</th><th>Wake</th><th>Sleep</th><th>Account</th><th>OTA</th>
-    </tr></thead><tbody>${rows || `<tr><td colspan="11" class="empty">No frames yet.</td></tr>`}</tbody></table></div></div>`;
-  wireFilter("tab-frames");
+    </tr></thead><tbody>${rows || `<tr><td colspan="12" class="empty">No frames yet.</td></tr>`}</tbody></table></div></div>`;
+  setupFilters("tab-frames");
 }
 
 let genFailedOnly = false;
 async function loadGenerations() {
   $("tab-generations").innerHTML = `<p class="loading">Loading…</p>`;
   const d = await api("/generations?limit=200" + (genFailedOnly ? "&failed=true" : ""));
-  const rows = d.runs.map((r) => `<tr data-search="${esc([r.device_id, r.trigger, r.ok ? "ok" : "fail failed", r.provider, r.phase, r.error].join(" ").toLowerCase())}">
+  const rows = d.runs.map((r) => `<tr data-ts="${tsOf(r.created_at)}" data-search="${esc([r.device_id, r.trigger, r.ok ? "ok" : "fail failed", r.provider, r.phase, r.error].join(" ").toLowerCase())}">
     <td>${relTime(r.created_at)}</td>
     <td class="mono">${esc(shortId(r.device_id))}</td>
     <td><span class="pill ${r.trigger}">${esc(r.trigger)}</span></td>
@@ -233,13 +265,13 @@ async function loadGenerations() {
   $("tab-generations").innerHTML = `<div class="card">
     <h3 class="hrow">Generation runs (${d.runs.length})
       <label style="font-size:12px;font-weight:400;color:var(--soft)"><input type="checkbox" id="gen-failed" ${genFailedOnly ? "checked" : ""}/> failures only</label>
-      ${filterBox("Filter runs…")}</h3>
+      ${rangeFacets()} ${filterBox("Filter runs…")}</h3>
     <div class="tbl-wrap"><table><thead><tr>
       <th>When</th><th>Device</th><th>Trigger</th><th>Result</th><th>Duration</th><th>Retries</th>
       <th>Cost</th><th>Calls</th><th>Provider</th><th>Error</th>
     </tr></thead><tbody>${rows || `<tr><td colspan="10" class="empty">No generation runs recorded yet.</td></tr>`}</tbody></table></div></div>`;
   $("gen-failed").addEventListener("change", (e) => { genFailedOnly = e.target.checked; loadGenerations(); });
-  wireFilter("tab-generations");
+  setupFilters("tab-generations");
 }
 
 async function loadGallery() {
@@ -248,16 +280,16 @@ async function loadGallery() {
   galleryItems = d.items;
   const shots = d.items.map((it, i) => {
     const search = [it.device_name, it.device_id, it.date, it.caption, it.event_visual, it.image_prompt].join(" ").toLowerCase();
-    return `<div class="shot ${it.orientation === "portrait" ? "portrait" : "landscape"}" data-i="${i}" data-search="${esc(search)}">
+    return `<div class="shot ${it.orientation === "portrait" ? "portrait" : "landscape"}" data-i="${i}" data-ts="${tsOf(it.created_at || it.date)}" data-search="${esc(search)}">
       <img loading="lazy" src="${esc(BASE + it.image_url)}" alt="${esc(it.caption || "")}" />
       <div class="cap"><div class="d">${esc(it.device_name || shortId(it.device_id))} · ${esc(it.date)}</div>
         <div class="c">${esc(it.caption || "—")}</div></div></div>`;
   }).join("");
-  $("tab-gallery").innerHTML = `<div class="card"><h3 class="hrow">Gallery (${d.items.length}) ${filterBox("Filter by device, event, prompt…")}</h3>
+  $("tab-gallery").innerHTML = `<div class="card"><h3 class="hrow">Gallery (${d.items.length}) ${rangeFacets()} ${filterBox("Filter by device, event, prompt…")}</h3>
     ${shots ? `<div class="gallery">${shots}</div>` : `<p class="empty">No images yet.</p>`}</div>`;
   $("tab-gallery").querySelectorAll(".shot").forEach((el) =>
     el.addEventListener("click", () => openArt(Number(el.dataset.i))));
-  wireFilter("tab-gallery");
+  setupFilters("tab-gallery");
 }
 
 const INACTIVE_DAYS = 30;
@@ -291,7 +323,7 @@ async function loadAccounts() {
       <th>Account</th><th>Status</th><th>Frames</th><th>Last active</th><th>Created</th><th>Key</th><th></th>
     </tr></thead><tbody>${rows || `<tr><td colspan="7" class="empty">No accounts.</td></tr>`}</tbody></table></div></div>`;
   $("tab-accounts").querySelectorAll(".rowbtn").forEach((b) => b.addEventListener("click", onAccountAction));
-  wireFilter("tab-accounts");
+  setupFilters("tab-accounts");
 }
 async function onAccountAction(e) {
   const b = e.currentTarget, id = b.dataset.id;
@@ -312,18 +344,18 @@ async function loadApi() {
   $("tab-api").innerHTML = `<p class="loading">Loading…</p>`;
   const d = await api("/api-calls?limit=250");
   const byKind = d.stats.by_kind.map((k) => `${esc(k.kind)} ${num(k.calls)}`).join(" · ");
-  const rows = d.calls.map((c) => `<tr data-search="${esc([c.method, c.path, c.kind, c.device_id, c.status].join(" ").toLowerCase())}">
+  const rows = d.calls.map((c) => `<tr data-ts="${tsOf(c.ts)}" data-search="${esc([c.method, c.path, c.kind, c.device_id, c.status].join(" ").toLowerCase())}">
     <td>${relTime(c.ts)}</td><td>${esc(c.method)}</td>
     <td class="mono wrap-cell">${esc(c.path)}</td>
     <td>${esc(c.kind)}</td><td class="mono">${esc(shortId(c.device_id))}</td>
     <td><span class="pill ${c.status >= 400 ? "fail" : "ok"}">${c.status}</span></td>
     <td>${c.ms}ms</td></tr>`).join("");
-  $("tab-api").innerHTML = `<div class="card"><h3 class="hrow">Recent API calls ${filterBox("Filter by path, device, status…")}</h3>
+  $("tab-api").innerHTML = `<div class="card"><h3 class="hrow">Recent API calls ${rangeFacets()} ${filterBox("Filter by path, device, status…")}</h3>
     <div class="chart-legend" style="margin:0 0 10px">${esc(byKind || "no traffic yet")}</div>
     <div class="tbl-wrap"><table><thead><tr>
       <th>When</th><th>Method</th><th>Path</th><th>Kind</th><th>Device</th><th>Status</th><th>Latency</th>
     </tr></thead><tbody>${rows || `<tr><td colspan="7" class="empty">No API calls logged yet.</td></tr>`}</tbody></table></div></div>`;
-  wireFilter("tab-api");
+  setupFilters("tab-api");
 }
 
 // ── tab routing ────────────────────────────────────────────────────────────
