@@ -36,10 +36,21 @@ const wifiLabel = (r) => (r == null || r === 0) ? "—"
   : (r >= -60 ? "Strong" : r >= -70 ? "Good" : r >= -80 ? "Weak" : "Poor") + ` (${r})`;
 
 async function api(path) {
-  const res = await fetch(API + path, { headers: { "X-Admin-Token": token }, cache: "no-store" });
-  if (res.status === 403) throw new Error("403");
-  if (!res.ok) throw new Error("HTTP " + res.status);
-  return res.json();
+  const url = API + path;
+  console.log("[admin] fetch", url);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12000);   // never hang forever
+  try {
+    const res = await fetch(url, { headers: { "X-Admin-Token": token }, cache: "no-store", signal: ctrl.signal });
+    if (res.status === 403) throw new Error("403");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  } catch (e) {
+    if (e.name === "AbortError") throw new Error("timed out (12s) reaching " + url);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ── auth ────────────────────────────────────────────────────────────────
