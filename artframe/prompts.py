@@ -120,8 +120,9 @@ If web search verifies no real event on {date} for any topic, reply: []"""
 # different topics; pick the single most meaningful one, enforcing a real
 # significance bar so a routine release never wins over a landmark moment.
 POOL_CURATE_EVENT_PROMPT = """Below are real events that each happened on {date},
-gathered across several topics. Pick the SINGLE most remarkable one to celebrate as
-today's artwork.
+gathered across several topics. RANK them from most to least remarkable: #1 becomes
+today's artwork, and the next few are shown to the user as "also on this day" — so
+ordering the runners-up by real significance matters too, not just the winner.
 
 Judge by genuine, lasting significance — a moment a wide audience would recognize
 and find meaningful, not just something that merely occurred:
@@ -140,8 +141,8 @@ the day stays diverse).
 Candidates:
 {candidates}
 
-Reply with ONLY the number of the best candidate (e.g. 4). Always pick the strongest
-one available — never reply 0."""
+Reply with ONLY the candidate numbers separated by commas, most remarkable FIRST
+(e.g. 4, 1, 7, 2). Rank every candidate exactly once; never reply 0."""
 
 # Fallback when the chosen event has no iconic_visual (some providers omit it).
 VISUAL_PROMPT = """Name the single most iconic, INSTANTLY recognizable image of this

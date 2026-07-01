@@ -190,71 +190,51 @@ async def _search_candidates(
 
 async def _curate_pool(
     settings: Settings, date_label: str, pool: list[dict]
-) -> EventPick | None:
-    """Pick the single most meaningful event from a cross-category candidate pool.
-    Returns the chosen EventPick (keeping its iconic_visual), or None if empty."""
+) -> tuple[EventPick | None, list[dict]]:
+    """Rank a cross-category candidate pool by significance. Returns the winner
+    (#1) as an EventPick plus the ordered runner-ups (#2, #3, …) as
+    {"caption","visual"} dicts — so "also on this day" shows the genuinely
+    next-best events, not one arbitrary pick per category. (None, []) if empty."""
     if not pool:
-        return None
+        return None, []
 
     def _pick(c: dict) -> EventPick:
-        return EventPick(
-            c["event"].strip(),
-            (c.get("iconic_visual") or "").strip(),
-            (c.get("now_tie") or "").strip(),
-        )
+        return EventPick(c["event"].strip(), (c.get("iconic_visual") or "").strip(),
+                         (c.get("now_tie") or "").strip())
+
+    def _other(c: dict) -> dict:
+        return {"caption": c["event"].strip(), "visual": (c.get("iconic_visual") or "").strip()}
 
     if len(pool) == 1:
-        return _pick(pool[0])
+        return _pick(pool[0]), []
 
-    # Deliberately omit now_tie from the listing: selection must be objective
-    # (significance only). The chosen event's tie is carried through to enrich the
-    # narration, but it must never bias which event wins.
+    # Deliberately omit now_tie from the listing: ranking must be objective
+    # (significance only). The winner's tie enriches the narration but must never
+    # bias the order.
     listing = "\n".join(
         f'{i+1}. [{c.get("_interest", "")}] {c["event"].strip()}'
         f'  (visual: {(c.get("iconic_visual") or "").strip()})'
         for i, c in enumerate(pool))
-    chosen = pool[0]
+    order = list(range(len(pool)))   # fallback: pool order (search's own ranking)
     try:
         reply = await generation_client.generate_text(
             settings, prompts.POOL_CURATE_EVENT_PROMPT.format(date=date_label, candidates=listing))
-        m = re.search(r"\d+", reply)
-        if m:
-            idx = int(m.group(0))
-            if 1 <= idx <= len(pool):
-                chosen = pool[idx - 1]
-    except Exception:  # noqa: BLE001 — curation is best-effort; keep first candidate
-        logger.warning("event curation failed; using first candidate", exc_info=True)
-    return _pick(chosen)
+        ranked, seen = [], set()
+        for n in re.findall(r"\d+", reply):
+            idx = int(n) - 1
+            if 0 <= idx < len(pool) and idx not in seen:
+                seen.add(idx)
+                ranked.append(idx)
+        # Append any candidate the model left out, keeping its original order.
+        ranked += [i for i in range(len(pool)) if i not in seen]
+        if ranked:
+            order = ranked
+    except Exception:  # noqa: BLE001 — ranking is best-effort; keep pool order
+        logger.warning("event ranking failed; using pool order", exc_info=True)
+    return _pick(pool[order[0]]), [_other(pool[i]) for i in order[1:]]
 
 
-_MAX_OTHER_EVENTS = 4   # show ~#2–#5
-
-
-def _diverse_runner_ups(pool: list[dict], winner_caption: str) -> list[dict]:
-    """Runner-up events for "also on this day", spanning interest categories.
-
-    The curator only names the single winner (no full #2–#5 ranking), and the
-    search pool tends to cluster by category — so naively taking the first few
-    leftovers shows all one topic. Instead take the best (first-seen) candidate
-    from each distinct category first, then backfill from the rest, so the list
-    has variety. Excludes the winner; every candidate is already date-verified.
-    """
-    seen_captions = {winner_caption.strip()}
-    seen_cats: set[str] = set()
-    primary, backfill = [], []
-    for c in pool:
-        caption = (c.get("event") or "").strip()
-        if not caption or caption in seen_captions:
-            continue
-        seen_captions.add(caption)
-        item = {"caption": caption, "visual": (c.get("iconic_visual") or "").strip()}
-        cat = (c.get("_interest") or "").strip().lower()
-        if cat and cat not in seen_cats:
-            seen_cats.add(cat)
-            primary.append(item)
-        else:
-            backfill.append(item)
-    return (primary + backfill)[:_MAX_OTHER_EVENTS]
+_MAX_OTHER_EVENTS = 4   # show #2–#5
 
 
 async def _select_event(
@@ -283,10 +263,10 @@ async def _select_event(
         if pool:
             logger.info("web search pooled %d candidates across %s",
                         len(pool), ", ".join(chosen))
-            pick = await _curate_pool(settings, date_label, pool)
+            pick, ranked_others = await _curate_pool(settings, date_label, pool)
             if pick:
                 logger.info("curated event: %s", pick.caption)
-                return pick, _diverse_runner_ups(pool, pick.caption)
+                return pick, ranked_others[:_MAX_OTHER_EVENTS]
 
     # 2) Model-only topic-forced fallback (no search), rotated by day.
     if interests:
