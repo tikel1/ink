@@ -9,6 +9,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import admin_api, app_api, device_api, firmware_api, media_api, monitoring_repo
@@ -102,6 +103,24 @@ async def log_api_calls(request: Request, call_next):
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok"}
+
+
+# --------------------------------------------------------------------------- #
+# Admin console — served OUTSIDE the PWA's /app service-worker scope and with
+# no-store, so it can't be intercepted by a stale service worker or HTTP cache.
+# --------------------------------------------------------------------------- #
+_NO_STORE = {"Cache-Control": "no-store, must-revalidate"}
+
+
+@app.get("/admin", include_in_schema=False)
+async def admin_page():
+    return HTMLResponse((STATIC_DIR / "admin.html").read_text(encoding="utf-8"), headers=_NO_STORE)
+
+
+@app.get("/admin.js", include_in_schema=False)
+async def admin_script():
+    return Response((STATIC_DIR / "admin.js").read_text(encoding="utf-8"),
+                    media_type="application/javascript", headers=_NO_STORE)
 
 
 if STATIC_DIR.exists():
