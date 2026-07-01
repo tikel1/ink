@@ -210,7 +210,7 @@ function openArt(i) {
     row("Iconic visual", it.event_visual) +
     row("Weather", it.weather_summary) +
     row("Orientation", it.orientation) +
-    row("Interests", interestChips(it)) +
+    (interestChips(it) ? `<dt>Interests</dt><dd>${interestChips(it)}</dd>` : "") +
     row("Image prompt", it.image_prompt, true);
   $("art-modal").hidden = false;
 }
