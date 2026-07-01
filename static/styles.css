@@ -510,7 +510,8 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
    like home, so the vertical pull engages reliably on Android Chrome instead of
    fighting the browser's default gesture handling. The gallery keeps native
    horizontal swipe; when expanded for "Read more", normal scrolling resumes. */
-.frame-screen:not(.scroll), .frame-screen:not(.scroll) * { touch-action: none; }
+/* Frame scrolls natively (pan-y on .frame-screen); the gallery keeps horizontal
+   swipe; the pull-to-refresh only engages at scrollTop 0 (see attachPullToRefresh). */
 .frame-screen .gallery, .frame-screen .gallery * { touch-action: pan-x; }
 /* Shared pull-to-refresh spinner. Absolute within #app (which is position:
    relative) — more reliable on mobile than `fixed`, which jitters under the
@@ -677,17 +678,15 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .dot-i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: all .25s var(--ease); }
 .dot-i.on { background: var(--ink); width: 18px; border-radius: 3px; }
 
-/* ── Frame screen: one fixed viewport ─────────────────────────────────
-   The gallery flexes and its artwork shrinks to fit, so status, placard,
-   controls + nav stay on screen. The daily description is clamped to 4 lines;
-   "Read more" expands it and unlocks the screen so the rest is reachable. */
-.frame-screen { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
-.frame-screen .gallery { flex: 1 1 auto; min-height: 0; align-items: center; margin: 4px -20px 0; padding: 6px 0;
-  touch-action: pan-x; }   /* horizontal swipe stays native; vertical is the pull-to-refresh */
-.frame-screen .slide { height: 100%; }
-.frame-screen .art-card { max-height: 100%; }
-.frame-screen .art-card:not(.is-portrait) img { max-height: 100%; max-width: 100%; width: auto; height: auto; }
-.frame-screen .art-card.is-portrait { height: 100%; max-height: 100%; }
+/* ── Frame screen: a big preview + a page that scrolls ─────────────────
+   The artwork gets a large fixed size; status, placard, "also", controls + nav
+   flow below and the page scrolls when it's taller than the viewport. Vertical
+   pan is native scrolling; the pull-to-refresh engages only at scrollTop 0. */
+.frame-screen { display: flex; flex-direction: column; touch-action: pan-y; }
+.frame-screen .gallery { align-items: center; margin: 4px -20px 0; padding: 6px 0; touch-action: pan-x; }
+.frame-screen .slide { height: auto; }
+.frame-screen .art-card.is-portrait { height: 66dvh; }
+.frame-screen .art-card:not(.is-portrait) img { width: auto; height: auto; max-width: min(92vw, 600px); max-height: 60dvh; }
 .frame-screen .artframe { margin: 4px 0 12px; }
 .status-line { display: flex; align-items: center; justify-content: center; gap: 8px;
                font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin: 6px 0 8px; }
@@ -701,12 +700,7 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .nav-list.compact .nav-row { padding: 11px 14px; }
 .nav-list.compact .nav-t { font-family: "Fraunces"; font-size: 15px; font-weight: 600; flex: 1; }
 
-/* Scroll mode: the page unlocks (Read-more OR the "Also on this day" section is
-   open), so the frame screen grows and scrolls. The image keeps a large fixed
-   height instead of being flexed to the last remaining pixels. */
-.frame-screen.scroll { height: auto; min-height: 100%; overflow: visible; }
-.frame-screen.scroll .gallery { flex: none; height: 54dvh; }
-/* Expanded (Read-more only): reveal the full description text. */
+/* Read more: reveal the full description text (the page already scrolls). */
 .frame-screen.expanded .placard-body { -webkit-line-clamp: unset; overflow: visible; display: block; }
 
 /* "Also on this day" — collapsed runner-up events. */
