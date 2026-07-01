@@ -303,33 +303,27 @@ function statePill(s) { return `<span class="pill ${s}">${s}</span>`; }
 function renderFrames(d) {
   framesData = d.frames;
   const rows = d.frames.map((fr) => {
-    const bat = fr.battery != null ? fr.battery.toFixed(2) + "V" : "—";
-    const upd = fr.update_available ? ` <span class="pill manual">upd</span>` : "";
+    const upd = fr.update_available ? ` <span class="pill manual">update</span>` : "";
     const off = fr.enabled === false ? ` <span class="pill fail">deactivated</span>` : "";
+    const otaBad = fr.ota_error ? ` <span class="pill fail" title="${esc(fr.ota_error)}">OTA</span>` : "";
     const susp = fr.account_suspended ? ` <span class="pill fail">susp</span>` : "";
     const s = [fr.name, fr.id, fr.state, fr.fw_version, fr.account_id, fr.last_art_caption, fr.ota_error,
       ...(fr.interests_preset || []), ...(fr.interests_custom || [])].join(" ").toLowerCase();
     return `<tr class="frow" data-fid="${esc(fr.id)}" data-search="${esc(s)}" data-state="${esc(fr.state)}">
-      <td>${statePill(fr.state)}${off}</td>
+      <td>${statePill(fr.state)}${off}${otaBad}</td>
       <td><span class="linkname">${esc(displayName(fr.name))}</span>
         <div class="mono" style="color:var(--muted)">${esc(frameCode(fr.id))}</div></td>
-      <td class="chips-cell">${interestChips(fr, 3) || `<span style="color:var(--muted)">—</span>`}</td>
-      <td>${bat}</td><td>${esc(wifiLabel(fr.wifi_rssi))}</td>
-      <td>${esc(fr.fw_version || "—")}${upd}</td>
       <td>${relTime(fr.last_seen)}</td>
-      <td>${fr.last_art_date ? esc(dayLabel(fr.last_art_date)) : "—"}<div class="wrap-cell" style="font-size:11px">${esc((fr.last_art_caption || "").slice(0, 80))}</div></td>
-      <td>${String(fr.wake_hour).padStart(2, "0")}:${String(fr.wake_minute).padStart(2, "0")} · ${esc(fr.schedule || "")}</td>
-      <td>${fr.sleep_after_minutes ? fr.sleep_after_minutes + "m" : "always on"}</td>
-      <td class="mono">${fr.account_id ? esc(shortId(fr.account_id)) + susp : "—"}</td>
-      <td>${fr.ota_error ? `<span class="pill fail">${esc(fr.ota_error)}</span>` : "—"}</td></tr>`;
+      <td>${esc(fr.fw_version || "—")}${upd}</td>
+      <td>${fr.last_art_date ? esc(dayLabel(fr.last_art_date)) : "—"}<div class="wrap-cell" style="font-size:11px">${esc((fr.last_art_caption || "").slice(0, 70))}</div></td>
+      <td class="mono">${fr.account_id ? esc(shortId(fr.account_id)) + susp : "—"}</td></tr>`;
   }).join("");
   $("tab-frames").innerHTML = `<div class="card">
     <h3 class="hrow">All frames (${d.frames.length}) ${statusFacets()} ${filterBox("Filter frames…")}</h3>
-    <p class="chart-legend" style="margin:0 0 10px">Click a frame name for full details + actions (deactivate frame or account).</p>
+    <p class="chart-legend" style="margin:0 0 10px">Click a row for full details + actions. (Battery, Wi-Fi, interests, schedule &amp; sleep are in the popup.)</p>
     <div class="tbl-wrap"><table><thead><tr>
-      <th>State</th><th>Name</th><th>Interests</th><th>Battery</th><th>Wi-Fi</th><th>Firmware</th><th>Last seen</th>
-      <th>Last art</th><th>Update</th><th>Sleep</th><th>Account</th><th>OTA</th>
-    </tr></thead><tbody>${rows || `<tr><td colspan="12" class="empty">No frames yet.</td></tr>`}</tbody></table></div></div>`;
+      <th>State</th><th>Name</th><th>Last seen</th><th>Firmware</th><th>Last artwork</th><th>Account</th>
+    </tr></thead><tbody>${rows || `<tr><td colspan="6" class="empty">No frames yet.</td></tr>`}</tbody></table></div></div>`;
   $("tab-frames").querySelectorAll("tr.frow").forEach((tr) => tr.addEventListener("click", () => openFrame(tr.dataset.fid)));
   setupFilters("tab-frames");
 }
