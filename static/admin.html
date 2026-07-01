@@ -141,13 +141,18 @@
     .ichip.default { background: rgba(63,107,76,.16); color: var(--ok); }
     .ichip.holi { background: transparent; color: var(--muted); border: 1px solid var(--line); }
     .ichip.more { background: var(--paper-2); color: var(--muted); border: 1px solid var(--line); }
-    /* Clickable frame name -> detail popup */
-    .linkname { background: none; border: none; padding: 0; font: inherit; font-weight: 600;
-      color: var(--ink); cursor: pointer; text-align: left; }
-    .linkname:hover { text-decoration: underline; }
-    /* Frame detail modal (single column) + shared modal action row */
-    .modal-body.single { display: block; }
-    .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+    /* Whole frame row opens the detail popup */
+    tr.frow { cursor: pointer; }
+    tr.frow:hover td { background: rgba(27,24,19,.05); }
+    .linkname { font-weight: 700; color: var(--ink); }
+    tr.frow:hover .linkname { text-decoration: underline; }
+    /* Frame detail popup */
+    .modal-body.single { display: block; padding: 18px 20px 20px; }
+    #frame-detail { display: grid; grid-template-columns: 120px 1fr; gap: 10px 16px; margin: 0; align-items: baseline; }
+    #frame-detail dt { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+    #frame-detail dd { margin: 0; font-size: 14px; color: var(--ink); word-break: break-word; }
+    .modal-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+    .modal-actions .rowbtn { padding: 9px 16px; font-size: 13.5px; }
     .shot { cursor: pointer; }
     .shot:hover { border-color: var(--ink); }
 
