@@ -95,44 +95,50 @@ async function unlock(candidate) {
 }
 function stamp() { $("refreshed").textContent = "updated " + new Date().toLocaleTimeString(); }
 
-// Per-section filtering: free-text (data-search) + optional facets — a status
-// group (data-state) and a date-range group (data-ts, epoch ms). Rows/cards show
-// only when they match the text AND the active status AND the active range.
+// Per-section filtering: a free-text box + dropdown facets. Each <select.facet>
+// declares data-facet (the row data-* attribute it filters); "range" compares a
+// row's data-ts (epoch ms) to N days; "activation" maps a row's data-enabled.
 const filterBox = (ph) => `<input class="filter" placeholder="${ph}" /> <span class="filter-count"></span>`;
-const statusFacets = () => `<div class="facets">` +
-  [["", "All"], ["online", "Online"], ["sleep", "Sleep"], ["offline", "Offline"]].map(([v, l], i) =>
-    `<button type="button" class="facet state ${i === 0 ? "active" : ""}" data-state="${v}">${l}</button>`).join("") + `</div>`;
-const rangeFacets = () => `<div class="facets">` +
-  [["1", "24h"], ["7", "7d"], ["30", "30d"], ["0", "All"]].map(([v, l]) =>
-    `<button type="button" class="facet range ${v === "0" ? "active" : ""}" data-range="${v}">${l}</button>`).join("") + `</div>`;
+function selectFacet(facet, options) {
+  return `<select class="facet" data-facet="${facet}">` +
+    options.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join("") + `</select>`;
+}
+const rangeSelect = () => selectFacet("range", [["", "All time"], ["1", "Last 24h"], ["7", "Last 7 days"], ["30", "Last 30 days"]]);
+const stateSelect = () => selectFacet("state", [["", "Any state"], ["online", "Online"], ["sleep", "Sleep"], ["offline", "Offline"]]);
+const activationSelect = () => selectFacet("activation", [["active", "Active only"], ["", "Incl. deactivated"], ["off", "Deactivated only"]]);
 
 function applyFilters(sec) {
   const inp = sec.querySelector(".filter");
   const q = inp ? inp.value.trim().toLowerCase() : "";
-  const state = (sec.querySelector(".facet.state.active") || {}).dataset?.state || "";
-  const days = Number((sec.querySelector(".facet.range.active") || {}).dataset?.range || 0);
-  const cutoff = days ? Date.now() - days * 86400000 : 0;
+  const selects = [...sec.querySelectorAll("select.facet")];
   const items = [...sec.querySelectorAll("[data-search]")];
   let n = 0;
   items.forEach((el) => {
     let show = !q || el.dataset.search.includes(q);
-    if (show && state && el.dataset.state) show = el.dataset.state === state;
-    if (show && cutoff && el.dataset.ts) show = Number(el.dataset.ts) >= cutoff;
+    for (const sel of selects) {
+      if (!show || !sel.value) continue;
+      const f = sel.dataset.facet;
+      if (f === "range") {
+        if (el.dataset.ts && Number(el.dataset.ts) < Date.now() - Number(sel.value) * 86400000) show = false;
+      } else if (f === "activation") {
+        if (sel.value === "active" && el.dataset.enabled === "0") show = false;
+        if (sel.value === "off" && el.dataset.enabled !== "0") show = false;
+      } else if (el.dataset[f] !== undefined && el.dataset[f] !== sel.value) {
+        show = false;
+      }
+    }
     el.style.display = show ? "" : "none";
     if (show) n++;
   });
   const c = sec.querySelector(".filter-count");
-  if (c) c.textContent = (q || state || days) ? `${n} of ${items.length}` : "";
+  const active = q || selects.some((s) => s.value !== s.options[0].value);
+  if (c) c.textContent = active ? `${n} of ${items.length}` : "";
 }
 function setupFilters(sectionId) {
   const sec = $(sectionId);
   const inp = sec.querySelector(".filter");
   if (inp) inp.addEventListener("input", () => applyFilters(sec));
-  sec.querySelectorAll(".facet").forEach((chip) => chip.addEventListener("click", () => {
-    const group = chip.classList.contains("state") ? "state" : "range";
-    sec.querySelectorAll(`.facet.${group}`).forEach((c) => c.classList.toggle("active", c === chip));
-    applyFilters(sec);
-  }));
+  sec.querySelectorAll("select.facet").forEach((s) => s.addEventListener("change", () => applyFilters(sec)));
   applyFilters(sec);
 }
 const tsOf = (iso) => iso ? Date.parse(iso) || 0 : 0;
@@ -253,10 +259,10 @@ function barChart(series, { errKey } = {}) {
     const x = pad + i * bw;
     const h = (d.value / max) * (H - 34);
     const y = H - 18 - h;
-    bars += `<rect class="bar" x="${x + gap / 2}" y="${y}" width="${bw - gap}" height="${h}"><title>${esc(d.label)}: ${num(d.value)}</title></rect>`;
+    bars += `<rect class="bar" x="${x + gap / 2}" y="${y}" width="${bw - gap}" height="${h}" rx="2"><title>${esc(d.label)}: ${num(d.value)}</title></rect>`;
     if (errKey && d[errKey]) {
       const eh = (d[errKey] / max) * (H - 34);
-      bars += `<rect class="bar err" x="${x + gap / 2}" y="${H - 18 - eh}" width="${bw - gap}" height="${eh}"></rect>`;
+      bars += `<rect class="bar err" x="${x + gap / 2}" y="${H - 18 - eh}" width="${bw - gap}" height="${eh}" rx="2"></rect>`;
     }
     if (i % step === 0)
       labels += `<text x="${x + bw / 2}" y="${H - 4}" font-size="10" fill="#8b8473" text-anchor="middle">${esc(d.label)}</text>`;
@@ -266,8 +272,8 @@ function barChart(series, { errKey } = {}) {
 }
 
 // ── renderers ─────────────────────────────────────────────────────────────
-function kpi(label, value, sub) {
-  return `<div class="kpi"><div class="label">${esc(label)}</div>
+function kpi(label, value, sub, accent) {
+  return `<div class="kpi${accent ? " " + accent : ""}"><div class="label">${esc(label)}</div>
     <div class="value">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
 }
 
@@ -277,24 +283,33 @@ function renderOverview(d) {
   const genSeries = g.by_day.map((r) => ({ label: dayLabel(r.day), value: r.runs || 0, err: (r.runs || 0) - (r.ok || 0) }));
   const costSeries = g.by_day.map((r) => ({ label: dayLabel(r.day), value: Math.round((r.cost || 0) * 100) / 100 }));
   const apiSeries = d.api.by_day.map((r) => ({ label: dayLabel(r.day), value: r.calls || 0, err: r.errors || 0 }));
+  const deact = f.deactivated ? ` · ${f.deactivated} deactivated` : "";
   $("tab-overview").innerHTML = `
+    <h3 class="section-title">Fleet</h3>
     <div class="kpis">
-      ${kpi("Frames", num(f.total), `<span class="pill online">${f.online} online</span> <span class="pill sleep">${f.sleep} sleep</span> <span class="pill offline">${f.offline} off</span>`)}
+      ${kpi("Online", num(f.online), `of ${num(f.active)} active`, f.online ? "good" : "")}
+      ${kpi("Asleep", num(f.sleep))}
+      ${kpi("Offline", num(f.offline), null, f.offline ? "bad" : "")}
+      ${kpi("Frames", num(f.total), `${num(f.active)} active${esc(deact)}`)}
       ${kpi("Accounts", num(d.accounts))}
-      ${kpi("Images made", num(d.artwork.ready), `${num(d.artwork.total)} total rows`)}
-      ${kpi("Success rate", rate, `${num(g.ok)}/${num(g.runs)} runs`)}
-      ${kpi("Est. spend", usd(g.cost_usd), "images + text + search")}
-      ${kpi("Failures", num(g.failed), `${num(g.retries)} retries`)}
+      ${kpi("Images made", num(d.artwork.ready))}
+      ${kpi("Updates ready", num(f.update_available), `fw ${esc(d.latest_fw || "—")}`, f.update_available ? "warn" : "")}
+    </div>
+    <h3 class="section-title">Generation · last 30 days</h3>
+    <div class="kpis">
+      ${kpi("Success rate", rate, `${num(g.ok)}/${num(g.runs)} runs`, g.runs && g.failed ? "warn" : (g.runs ? "good" : ""))}
+      ${kpi("Est. spend", usd(g.cost_usd), "images · text · search")}
+      ${kpi("Failures", num(g.failed), `${num(g.retries)} retries`, g.failed ? "bad" : "")}
       ${kpi("Avg gen time", g.avg_ms ? (g.avg_ms / 1000).toFixed(1) + "s" : "—")}
-      ${kpi("Updates ready", num(f.update_available), `fw ${esc(d.latest_fw || "—")}`)}
     </div>
     <div class="grid2">
-      <div class="card"><h3>Generations / day (30d)</h3>${barChart(genSeries, { errKey: "err" })}
+      <div class="card"><h3>Generations / day</h3>${barChart(genSeries, { errKey: "err" })}
         <div class="chart-legend"><span><i style="background:var(--ink)"></i>ok</span><span><i style="background:var(--danger)"></i>failed</span></div></div>
       <div class="card"><h3>Estimated cost / day</h3>${barChart(costSeries)}
         <div class="chart-legend"><span>USD per day</span></div></div>
     </div>
-    <div class="card"><h3>API calls / day (14d)</h3>${barChart(apiSeries, { errKey: "err" })}
+    <h3 class="section-title">Traffic · last 14 days</h3>
+    <div class="card"><h3>API calls / day</h3>${barChart(apiSeries, { errKey: "err" })}
       <div class="chart-legend"><span><i style="background:var(--ink)"></i>calls ${num(a.calls)}</span><span><i style="background:var(--danger)"></i>errors ${num(a.errors)}</span><span>avg ${a.avg_ms ? Math.round(a.avg_ms) + "ms" : "—"}</span></div></div>`;
 }
 
@@ -309,7 +324,7 @@ function renderFrames(d) {
     const susp = fr.account_suspended ? ` <span class="pill fail">susp</span>` : "";
     const s = [fr.name, fr.id, fr.state, fr.fw_version, fr.account_id, fr.last_art_caption, fr.ota_error,
       ...(fr.interests_preset || []), ...(fr.interests_custom || [])].join(" ").toLowerCase();
-    return `<tr class="frow" data-fid="${esc(fr.id)}" data-search="${esc(s)}" data-state="${esc(fr.state)}">
+    return `<tr class="frow" data-fid="${esc(fr.id)}" data-search="${esc(s)}" data-state="${esc(fr.state)}" data-enabled="${fr.enabled === false ? "0" : "1"}">
       <td>${statePill(fr.state)}${off}${otaBad}</td>
       <td><span class="linkname">${esc(displayName(fr.name))}</span>
         <div class="mono" style="color:var(--muted)">${esc(frameCode(fr.id))}</div></td>
@@ -319,8 +334,8 @@ function renderFrames(d) {
       <td class="mono">${fr.account_id ? esc(shortId(fr.account_id)) + susp : "—"}</td></tr>`;
   }).join("");
   $("tab-frames").innerHTML = `<div class="card">
-    <h3 class="hrow">All frames (${d.frames.length}) ${statusFacets()} ${filterBox("Filter frames…")}</h3>
-    <p class="chart-legend" style="margin:0 0 10px">Click a row for full details + actions. (Battery, Wi-Fi, interests, schedule &amp; sleep are in the popup.)</p>
+    <h3 class="hrow">All frames <span class="filter-count-h">(${d.frames.length})</span> ${activationSelect()} ${stateSelect()} ${filterBox("Filter frames…")}</h3>
+    <p class="chart-legend" style="margin:0 0 10px">Click a row for full details + actions. Deactivated frames are hidden by default. (Battery, Wi-Fi, interests, schedule &amp; sleep are in the popup.)</p>
     <div class="tbl-wrap"><table><thead><tr>
       <th>State</th><th>Name</th><th>Last seen</th><th>Firmware</th><th>Last artwork</th><th>Account</th>
     </tr></thead><tbody>${rows || `<tr><td colspan="6" class="empty">No frames yet.</td></tr>`}</tbody></table></div></div>`;
@@ -328,11 +343,10 @@ function renderFrames(d) {
   setupFilters("tab-frames");
 }
 
-let genFailedOnly = false;
 async function loadGenerations() {
   $("tab-generations").innerHTML = `<p class="loading">Loading…</p>`;
-  const d = await api("/generations?limit=200" + (genFailedOnly ? "&failed=true" : ""));
-  const rows = d.runs.map((r) => `<tr data-ts="${tsOf(r.created_at)}" data-search="${esc([r.device_id, r.trigger, r.ok ? "ok" : "fail failed", r.provider, r.phase, r.error].join(" ").toLowerCase())}">
+  const d = await api("/generations?limit=300");
+  const rows = d.runs.map((r) => `<tr data-ts="${tsOf(r.created_at)}" data-trigger="${esc(r.trigger)}" data-result="${r.ok ? "ok" : "fail"}" data-search="${esc([r.device_id, r.trigger, r.ok ? "ok" : "fail failed", r.provider, r.phase, r.error].join(" ").toLowerCase())}">
     <td>${relTime(r.created_at)}</td>
     <td class="mono">${esc(frameCode(r.device_id))}</td>
     <td><span class="pill ${r.trigger}">${esc(r.trigger)}</span></td>
@@ -344,14 +358,13 @@ async function loadGenerations() {
     <td>${esc(r.provider || "—")}</td>
     <td class="wrap-cell">${r.ok ? "" : `<b>${esc(r.phase || "?")}</b> ${esc(r.error || "")}`}</td></tr>`).join("");
   $("tab-generations").innerHTML = `<div class="card">
-    <h3 class="hrow">Generation runs (${d.runs.length})
-      <label style="font-size:12px;font-weight:400;color:var(--soft)"><input type="checkbox" id="gen-failed" ${genFailedOnly ? "checked" : ""}/> failures only</label>
-      ${rangeFacets()} ${filterBox("Filter runs…")}</h3>
+    <h3 class="hrow">Generation runs <span class="filter-count-h">(${d.runs.length})</span>
+      ${rangeSelect()} ${selectFacet("trigger", [["", "Any trigger"], ["auto", "Auto"], ["manual", "Manual"]])}
+      ${selectFacet("result", [["", "Any result"], ["ok", "OK"], ["fail", "Failed"]])} ${filterBox("Filter runs…")}</h3>
     <div class="tbl-wrap"><table><thead><tr>
       <th>When</th><th>Device</th><th>Trigger</th><th>Result</th><th>Duration</th><th>Retries</th>
       <th>Cost</th><th>Calls</th><th>Provider</th><th>Error</th>
     </tr></thead><tbody>${rows || `<tr><td colspan="10" class="empty">No generation runs recorded yet.</td></tr>`}</tbody></table></div></div>`;
-  $("gen-failed").addEventListener("change", (e) => { genFailedOnly = e.target.checked; loadGenerations(); });
   setupFilters("tab-generations");
 }
 
@@ -366,7 +379,7 @@ async function loadGallery() {
       <div class="cap"><div class="d">${esc(it.device_name || frameCode(it.device_id))} · ${esc(it.date)}</div>
         <div class="c">${esc(it.caption || "—")}</div></div></div>`;
   }).join("");
-  $("tab-gallery").innerHTML = `<div class="card"><h3 class="hrow">Gallery (${d.items.length}) ${rangeFacets()} ${filterBox("Filter by device, event, prompt…")}</h3>
+  $("tab-gallery").innerHTML = `<div class="card"><h3 class="hrow">Gallery <span class="filter-count-h">(${d.items.length})</span> ${rangeSelect()} ${filterBox("Filter by device, event, prompt…")}</h3>
     ${shots ? `<div class="gallery">${shots}</div>` : `<p class="empty">No images yet.</p>`}</div>`;
   $("tab-gallery").querySelectorAll(".shot").forEach((el) =>
     el.addEventListener("click", () => openArt(Number(el.dataset.i))));
@@ -385,7 +398,7 @@ async function loadAccounts() {
   const rows = d.accounts.map((a) => {
     const st = acctStatus(a);
     const pill = st === "active" ? "online" : st === "suspended" ? "fail" : "sleep";
-    return `<tr data-search="${esc([a.email, a.id, st].join(" ").toLowerCase())}">
+    return `<tr data-astatus="${st}" data-search="${esc([a.email, a.id, st].join(" ").toLowerCase())}">
       <td>${esc(a.email || "—")}<div class="mono" style="color:var(--muted)">${esc(shortId(a.id))}</div></td>
       <td><span class="pill ${pill}">${st}</span></td>
       <td>${a.device_count}</td>
@@ -398,7 +411,8 @@ async function loadAccounts() {
       </td></tr>`;
   }).join("");
   $("tab-accounts").innerHTML = `<div class="card">
-    <h3 class="hrow">Accounts (${d.accounts.length})
+    <h3 class="hrow">Accounts <span class="filter-count-h">(${d.accounts.length})</span>
+      ${selectFacet("astatus", [["", "Any status"], ["active", "Active"], ["inactive", "Inactive"], ["suspended", "Suspended"]])}
       ${d.accounts.filter((a) => a.device_count === 0).length ? `<button class="rowbtn danger" id="purge-empty">Delete ${d.accounts.filter((a) => a.device_count === 0).length} empty</button>` : ""}
       ${filterBox("Filter accounts…")}</h3>
     <p class="chart-legend" style="margin:0 0 10px">Empty = anonymous accounts the app created on first launch that never paired a frame. Deactivate blocks the app + scheduler (reversible); Delete removes the account and unbinds its frames (permanent).</p>
@@ -435,13 +449,13 @@ async function loadApi() {
   $("tab-api").innerHTML = `<p class="loading">Loading…</p>`;
   const d = await api("/api-calls?limit=250");
   const byKind = d.stats.by_kind.map((k) => `${esc(k.kind)} ${num(k.calls)}`).join(" · ");
-  const rows = d.calls.map((c) => `<tr data-ts="${tsOf(c.ts)}" data-search="${esc([c.method, c.path, c.kind, c.device_id, c.status].join(" ").toLowerCase())}">
+  const rows = d.calls.map((c) => `<tr data-ts="${tsOf(c.ts)}" data-kind="${esc(c.kind)}" data-search="${esc([c.method, c.path, c.kind, c.device_id, c.status].join(" ").toLowerCase())}">
     <td>${relTime(c.ts)}</td><td>${esc(c.method)}</td>
     <td class="mono wrap-cell">${esc(c.path)}</td>
     <td>${esc(c.kind)}</td><td class="mono">${esc(frameCode(c.device_id))}</td>
     <td><span class="pill ${c.status >= 400 ? "fail" : "ok"}">${c.status}</span></td>
     <td>${c.ms}ms</td></tr>`).join("");
-  $("tab-api").innerHTML = `<div class="card"><h3 class="hrow">Recent API calls ${rangeFacets()} ${filterBox("Filter by path, device, status…")}</h3>
+  $("tab-api").innerHTML = `<div class="card"><h3 class="hrow">Recent API calls ${rangeSelect()} ${selectFacet("kind", [["", "All kinds"], ["app", "App"], ["media", "Media"], ["firmware", "Firmware"]])} ${filterBox("Filter by path, device, status…")}</h3>
     <div class="chart-legend" style="margin:0 0 10px">${esc(byKind || "no traffic yet")}</div>
     <div class="tbl-wrap"><table><thead><tr>
       <th>When</th><th>Method</th><th>Path</th><th>Kind</th><th>Device</th><th>Status</th><th>Latency</th>

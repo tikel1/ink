@@ -85,7 +85,8 @@ def _frame(device, latest) -> dict:
 @router.get("/overview")
 async def overview() -> dict:
     devices = repositories.list_all_devices()
-    states = [_state(d) for d in devices]
+    active = [d for d in devices if d.enabled]        # deactivated frames excluded from the live buckets
+    states = [_state(d) for d in active]
     gen = monitoring_repo.generation_stats(days=30)
     api = monitoring_repo.api_call_stats(days=14)
     art = artwork_repo.counts()
@@ -96,9 +97,11 @@ async def overview() -> dict:
         "accounts": repositories.count_accounts(),
         "frames": {
             "total": len(devices),
+            "active": len(active),
             "online": states.count("online"),
             "sleep": states.count("sleep"),
             "offline": states.count("offline"),
+            "deactivated": len(devices) - len(active),
             "update_available": sum(
                 1 for d in devices if firmware_repo.update_available(d.fw_version)),
         },
