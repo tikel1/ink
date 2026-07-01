@@ -91,5 +91,39 @@ def list_archive(device_id: str, limit: int = 30) -> list[DailyArtwork]:
         return [DailyArtwork.from_row(r) for r in rows]
 
 
+def list_all_ready(limit: int = 200) -> list[DailyArtwork]:
+    """Every ready artwork across all devices, newest first (admin gallery)."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            """SELECT * FROM daily_artwork WHERE status = ?
+               ORDER BY created_at DESC LIMIT ?""",
+            (READY, limit),
+        ).fetchall()
+        return [DailyArtwork.from_row(r) for r in rows]
+
+
+def count_by_day(days: int = 30) -> list[dict]:
+    """Ready-artwork counts per calendar day (usage graph)."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            """SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n
+               FROM daily_artwork WHERE status = ?
+               GROUP BY day ORDER BY day DESC LIMIT ?""",
+            (READY, days),
+        ).fetchall()
+        return [dict(r) for r in rows][::-1]
+
+
+def counts() -> dict:
+    with get_connection() as conn:
+        row = conn.execute(
+            """SELECT COUNT(*) AS total,
+                      SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS ready
+               FROM daily_artwork""",
+            (READY,),
+        ).fetchone()
+        return dict(row)
+
+
 def make_now() -> str:
     return now_iso()

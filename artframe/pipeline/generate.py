@@ -15,6 +15,7 @@ from datetime import date as date_cls
 from typing import NamedTuple
 
 from .. import prompts
+from . import metrics
 from ..constants import format_date
 from ..devicecfg import DeviceConfig
 from ..settings import Settings
@@ -272,6 +273,8 @@ async def _select_event(
         date=date_label, holiday_context=holiday_block, interests=interest_str,
     )
     for attempt in range(_EVENT_ATTEMPTS):
+        if attempt:
+            metrics.record_retry()
         event = await generation_client.generate_text(settings, prompt)
         if await _fact_check(settings, event, date_label):
             return EventPick(event, "")

@@ -13,6 +13,7 @@ import secrets
 from fastapi import Depends, Header, HTTPException
 
 from . import repositories
+from .config import get_settings
 from .models import Account
 
 
@@ -47,3 +48,14 @@ async def require_account(
 
 
 AccountDep = Depends(require_account)
+
+
+async def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
+    """Gate the admin/monitoring API. Disabled (403) when ADMIN_TOKEN is unset, so
+    the console can never be reached on a misconfigured deploy. Constant-time compare."""
+    admin = getattr(get_settings(), "admin_token", "") or ""
+    if not admin or not x_admin_token or not secrets.compare_digest(x_admin_token, admin):
+        raise HTTPException(status_code=403, detail="admin only")
+
+
+AdminDep = Depends(require_admin)

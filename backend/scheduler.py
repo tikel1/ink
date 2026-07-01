@@ -50,7 +50,7 @@ async def run_due_generations() -> None:
                             device.id, device.last_seen)
                 continue
             logger.info("generating for %s", device.id)
-            await generate_for_device(device)
+            await generate_for_device(device, trigger="auto")
             today = now_in_tz(device.tz).date().isoformat()
             repositories.mark_auto_generated(device.id, today)
         except Exception:  # noqa: BLE001

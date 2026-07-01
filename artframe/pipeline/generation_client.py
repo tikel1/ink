@@ -13,8 +13,21 @@ from openai import AsyncOpenAI
 
 from ..constants import DISPLAY_HEIGHT, DISPLAY_WIDTH
 from ..settings import Settings
+from . import metrics
 
 logger = logging.getLogger(__name__)
+
+
+def _tokens(resp) -> int:
+    """Best-effort total-token count across OpenAI/Gemini response shapes."""
+    usage = getattr(resp, "usage", None) or getattr(resp, "usage_metadata", None)
+    if usage is None:
+        return 0
+    for attr in ("total_tokens", "total_token_count"):
+        val = getattr(usage, attr, None)
+        if isinstance(val, int):
+            return val
+    return 0
 
 # gpt-image only accepts a fixed set of sizes; pick the closest one per
 # orientation and let the imaging step crop to the exact panel geometry.
@@ -43,6 +56,7 @@ async def _gemini_text(settings: Settings, prompt: str, search: bool) -> str:
             tools=[types.Tool(google_search=types.GoogleSearch())])
     resp = await client.aio.models.generate_content(
         model=settings.gemini_text_model, contents=prompt, config=config)
+    metrics.record(metrics.SEARCH if search else metrics.TEXT, "gemini", _tokens(resp))
     return (resp.text or "").strip()
 
 
@@ -52,6 +66,7 @@ async def _openai_text(settings: Settings, prompt: str) -> str:
         model=settings.openai_text_model,
         messages=[{"role": "user", "content": prompt}],
     )
+    metrics.record(metrics.TEXT, "openai", _tokens(response))
     return (response.choices[0].message.content or "").strip()
 
 
@@ -62,6 +77,7 @@ async def _openai_search(settings: Settings, prompt: str) -> str:
         tools=[{"type": "web_search"}],
         input=prompt,
     )
+    metrics.record(metrics.SEARCH, "openai", _tokens(response))
     return (getattr(response, "output_text", "") or "").strip()
 
 
@@ -108,6 +124,7 @@ async def generate_image(
         quality=settings.openai_image_quality,
         n=1,
     )
+    metrics.record(metrics.IMAGE, "openai")
     payload = response.data[0]
     if getattr(payload, "b64_json", None):
         return base64.b64decode(payload.b64_json)

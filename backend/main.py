@@ -2,14 +2,16 @@
 from __future__ import annotations
 
 import logging
+import re
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import app_api, device_api, firmware_api, media_api
+from . import admin_api, app_api, device_api, firmware_api, media_api, monitoring_repo
 from .config import get_settings
 from .db import init_db
 from .scheduler import create_scheduler
@@ -52,6 +54,49 @@ app.include_router(device_api.router)
 app.include_router(media_api.router)
 app.include_router(firmware_api.router)
 app.include_router(app_api.router)
+app.include_router(admin_api.router)
+
+
+# --------------------------------------------------------------------------- #
+# API-call logging (feeds the admin monitoring console).
+# --------------------------------------------------------------------------- #
+_DEVICE_IN_PATH = re.compile(r"/(?:current|sleep|awake|ota-result|archive)/([^/.]+)")
+_DEVICE_IN_APP = re.compile(r"/devices/([^/]+)")
+
+
+def _classify(path: str) -> tuple[bool, str, str | None]:
+    """(should_log, kind, device_id). We log the device + control-app + firmware
+    traffic, but not the admin console's own polling or static asset serving."""
+    if path.startswith("/api/admin"):
+        return False, "admin", None
+    if path.startswith("/api/app"):
+        kind = "app"
+    elif path.startswith("/media"):
+        kind = "media"
+    elif path.startswith("/firmware"):
+        kind = "firmware"
+    elif path.startswith("/api"):
+        kind = "api"
+    else:
+        return False, "other", None          # static assets, /healthz, /app/*
+    m = _DEVICE_IN_PATH.search(path) or _DEVICE_IN_APP.search(path)
+    return True, kind, (m.group(1) if m else None)
+
+
+@app.middleware("http")
+async def log_api_calls(request: Request, call_next):
+    start = time.monotonic()
+    response = await call_next(request)
+    try:
+        should_log, kind, device_id = _classify(request.url.path)
+        if should_log:
+            monitoring_repo.record_api_call(
+                request.method, request.url.path, kind, device_id,
+                response.status_code, int((time.monotonic() - start) * 1000),
+            )
+    except Exception:  # noqa: BLE001 — logging must never break a request.
+        logger.debug("api-call logging failed", exc_info=True)
+    return response
 
 
 @app.get("/healthz")

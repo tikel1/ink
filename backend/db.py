@@ -61,6 +61,37 @@ CREATE TABLE IF NOT EXISTS devices (
     created_at   TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS generation_runs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id    TEXT NOT NULL,
+    account_id   TEXT,
+    date         TEXT,                          -- artwork date (local)
+    trigger      TEXT NOT NULL DEFAULT 'manual', -- manual | auto
+    ok           INTEGER NOT NULL DEFAULT 0,
+    duration_ms  INTEGER NOT NULL DEFAULT 0,
+    retries      INTEGER NOT NULL DEFAULT 0,
+    image_calls  INTEGER NOT NULL DEFAULT 0,
+    text_calls   INTEGER NOT NULL DEFAULT 0,
+    search_calls INTEGER NOT NULL DEFAULT 0,
+    text_tokens  INTEGER NOT NULL DEFAULT 0,
+    cost_usd     REAL NOT NULL DEFAULT 0,
+    provider     TEXT NOT NULL DEFAULT '',
+    phase        TEXT NOT NULL DEFAULT '',       -- last phase reached (failure locus)
+    error        TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS api_calls (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts         TEXT NOT NULL,
+    method     TEXT NOT NULL,
+    path       TEXT NOT NULL,
+    kind       TEXT NOT NULL DEFAULT 'other',   -- app | media | firmware | other
+    device_id  TEXT,
+    status     INTEGER NOT NULL,
+    ms         INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS daily_artwork (
     device_id      TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
     date           TEXT NOT NULL,

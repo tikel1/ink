@@ -216,6 +216,20 @@ def set_device_order(account_id: str, ordered_ids: list[str]) -> None:
             )
 
 
+def list_all_devices() -> list[Device]:
+    """Every device across all accounts (admin/monitoring view)."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM devices ORDER BY last_seen IS NULL, last_seen DESC, created_at"
+        ).fetchall()
+        return [Device.from_row(r) for r in rows]
+
+
+def count_accounts() -> int:
+    with get_connection() as conn:
+        return conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
+
+
 def list_enabled_paired_devices() -> list[Device]:
     # Skip devices whose account is suspended — the scheduler must not generate for
     # a blocked account.
