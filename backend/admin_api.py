@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
-from . import artwork_repo, auth, costs, firmware_repo, generation, monitoring_repo, repositories, storage
+from . import (artwork_repo, auth, costs, firmware_repo, generation, monitoring_repo,
+               openai_costs, repositories, storage)
+from .config import get_settings
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[auth.AdminDep])
 
@@ -121,7 +123,9 @@ async def overview() -> dict:
             "tokens": t.get("tokens") or 0,
             "by_day": gen["by_day"],
         },
-        "costs": _cost_breakdown(t),
+        "costs": {**_cost_breakdown(t),
+                  "openai_actual": await openai_costs.fetch(30),
+                  "fly_monthly_usd": get_settings().fly_monthly_usd},
         "api": api,
     }
 

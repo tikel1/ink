@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # Token guarding admin endpoints (e.g. flipping an account to own-key-required).
     admin_token: str = ""
 
+    # Fly has no per-app cost API, so the admin console shows this fixed monthly
+    # infra estimate (machine + volume). Override via FLY_MONTHLY_USD.
+    fly_monthly_usd: float = 5.0
+
     # Storage
     data_dir: Path = Path("./data")
 
