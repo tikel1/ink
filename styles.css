@@ -686,7 +686,10 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .frame-screen .gallery { align-items: center; margin: 4px -20px 0; padding: 6px 0; touch-action: pan-x; }
 .frame-screen .slide { height: auto; }
 .frame-screen .art-card.is-portrait { height: 66dvh; }
-.frame-screen .art-card:not(.is-portrait) img { width: auto; height: auto; max-width: min(92vw, 600px); max-height: 60dvh; }
+/* Landscape: the card fills the slide width and the image fills the card, so the
+   art is centered (no viewport-vs-container width mismatch that offsets it). */
+.frame-screen .art-card:not(.is-portrait) { width: 100%; }
+.frame-screen .art-card:not(.is-portrait) img { display: block; width: 100%; height: auto; max-height: 60dvh; margin: 0 auto; }
 .frame-screen .artframe { margin: 4px 0 12px; }
 .status-line { display: flex; align-items: center; justify-content: center; gap: 8px;
                font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin: 6px 0 8px; }
