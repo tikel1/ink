@@ -17,6 +17,12 @@
     /* The `hidden` attribute must win over author display rules (e.g. .login{display:flex}),
        otherwise hiding the login overlay after unlock does nothing. */
     [hidden] { display: none !important; }
+    /* On-brand scrollbars */
+    * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+    ::-webkit-scrollbar { width: 11px; height: 11px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; border: 3px solid var(--paper); }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
     body { margin: 0; background: var(--paper); color: var(--ink); -webkit-font-smoothing: antialiased; }
     h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; font-weight: 700; }
     a { color: var(--ink); }
@@ -131,6 +137,14 @@
     .ichip.custom { background: rgba(176,125,43,.18); color: var(--warn); }
     .ichip.default { background: rgba(63,107,76,.16); color: var(--ok); }
     .ichip.holi { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+    .ichip.more { background: var(--paper-2); color: var(--muted); border: 1px solid var(--line); }
+    /* Clickable frame name -> detail popup */
+    .linkname { background: none; border: none; padding: 0; font: inherit; font-weight: 600;
+      color: var(--ink); cursor: pointer; text-align: left; }
+    .linkname:hover { text-decoration: underline; }
+    /* Frame detail modal (single column) + shared modal action row */
+    .modal-body.single { display: block; }
+    .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
     .shot { cursor: pointer; }
     .shot:hover { border-color: var(--ink); }
 
@@ -192,6 +206,18 @@
     <section id="tab-gallery" class="tab" hidden></section>
     <section id="tab-accounts" class="tab" hidden></section>
     <section id="tab-api" class="tab" hidden></section>
+  </div>
+
+  <!-- Frame detail -->
+  <div id="frame-modal" class="modal-overlay" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Frame detail">
+      <div class="modal-head">
+        <h3 id="frame-title">Frame</h3>
+        <button type="button" id="frame-close" class="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body single"><dl class="detail" id="frame-detail"></dl>
+        <div class="modal-actions" id="frame-actions"></div></div>
+    </div>
   </div>
 
   <!-- Gallery image preview -->
