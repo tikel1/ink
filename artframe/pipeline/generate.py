@@ -227,7 +227,34 @@ async def _curate_pool(
     return _pick(chosen)
 
 
-_MAX_OTHER_EVENTS = 3
+_MAX_OTHER_EVENTS = 4   # show ~#2–#5
+
+
+def _diverse_runner_ups(pool: list[dict], winner_caption: str) -> list[dict]:
+    """Runner-up events for "also on this day", spanning interest categories.
+
+    The curator only names the single winner (no full #2–#5 ranking), and the
+    search pool tends to cluster by category — so naively taking the first few
+    leftovers shows all one topic. Instead take the best (first-seen) candidate
+    from each distinct category first, then backfill from the rest, so the list
+    has variety. Excludes the winner; every candidate is already date-verified.
+    """
+    seen_captions = {winner_caption.strip()}
+    seen_cats: set[str] = set()
+    primary, backfill = [], []
+    for c in pool:
+        caption = (c.get("event") or "").strip()
+        if not caption or caption in seen_captions:
+            continue
+        seen_captions.add(caption)
+        item = {"caption": caption, "visual": (c.get("iconic_visual") or "").strip()}
+        cat = (c.get("_interest") or "").strip().lower()
+        if cat and cat not in seen_cats:
+            seen_cats.add(cat)
+            primary.append(item)
+        else:
+            backfill.append(item)
+    return (primary + backfill)[:_MAX_OTHER_EVENTS]
 
 
 async def _select_event(
@@ -259,14 +286,7 @@ async def _select_event(
             pick = await _curate_pool(settings, date_label, pool)
             if pick:
                 logger.info("curated event: %s", pick.caption)
-                # Runner-ups: every other date-verified candidate in the pool (the
-                # search already dropped anything not on_date / fabricated), capped.
-                others = [
-                    {"caption": c["event"].strip(), "visual": (c.get("iconic_visual") or "").strip()}
-                    for c in pool
-                    if c["event"].strip() and c["event"].strip() != pick.caption
-                ][:_MAX_OTHER_EVENTS]
-                return pick, others
+                return pick, _diverse_runner_ups(pool, pick.caption)
 
     # 2) Model-only topic-forced fallback (no search), rotated by day.
     if interests:
