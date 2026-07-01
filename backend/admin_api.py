@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
-from . import artwork_repo, auth, firmware_repo, monitoring_repo, repositories, storage
+from . import artwork_repo, auth, firmware_repo, generation, monitoring_repo, repositories, storage
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[auth.AdminDep])
 
@@ -119,7 +119,12 @@ async def overview() -> dict:
 
 @router.get("/frames")
 async def frames() -> dict:
-    out = [_frame(d, artwork_repo.latest_ready(d.id)) for d in repositories.list_all_devices()]
+    suspended = {a.id: a.suspended for a in repositories.list_accounts(limit=500)}
+    out = []
+    for d in repositories.list_all_devices():
+        fr = _frame(d, artwork_repo.latest_ready(d.id))
+        fr["account_suspended"] = suspended.get(d.account_id) if d.account_id else None
+        out.append(fr)
     return {"frames": out}
 
 
@@ -135,6 +140,9 @@ async def gallery(limit: int = 120) -> dict:
     names = {d.id: (d.name or "") for d in repositories.list_all_devices()}
     items = []
     for a in artwork_repo.list_all_ready(limit=min(limit, 500)):
+        # Skip rows whose image file is gone — they'd render as a broken thumbnail.
+        if not generation.archive_image_path(a.device_id, a.date).exists():
+            continue
         items.append({
             "device_id": a.device_id,
             "device_name": names.get(a.device_id, ""),
