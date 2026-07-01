@@ -284,9 +284,9 @@ function renderFrames(d) {
     const susp = fr.account_suspended ? ` <span class="pill fail">susp</span>` : "";
     const s = [fr.name, fr.id, fr.state, fr.fw_version, fr.account_id, fr.last_art_caption, fr.ota_error,
       ...(fr.interests_preset || []), ...(fr.interests_custom || [])].join(" ").toLowerCase();
-    return `<tr data-search="${esc(s)}" data-state="${esc(fr.state)}">
+    return `<tr class="frow" data-fid="${esc(fr.id)}" data-search="${esc(s)}" data-state="${esc(fr.state)}">
       <td>${statePill(fr.state)}${off}</td>
-      <td><button class="linkname" data-fid="${esc(fr.id)}">${esc(fr.name || shortId(fr.id))}</button>
+      <td><span class="linkname">${esc(fr.name || shortId(fr.id))}</span>
         <div class="mono" style="color:var(--muted)">${esc(shortId(fr.id))}</div></td>
       <td class="chips-cell">${interestChips(fr, 3) || `<span style="color:var(--muted)">—</span>`}</td>
       <td>${bat}</td><td>${esc(wifiLabel(fr.wifi_rssi))}</td>
@@ -305,7 +305,7 @@ function renderFrames(d) {
       <th>State</th><th>Name</th><th>Interests</th><th>Battery</th><th>Wi-Fi</th><th>Firmware</th><th>Last seen</th>
       <th>Last art</th><th>Update</th><th>Sleep</th><th>Account</th><th>OTA</th>
     </tr></thead><tbody>${rows || `<tr><td colspan="12" class="empty">No frames yet.</td></tr>`}</tbody></table></div></div>`;
-  $("tab-frames").querySelectorAll(".linkname").forEach((b) => b.addEventListener("click", () => openFrame(b.dataset.fid)));
+  $("tab-frames").querySelectorAll("tr.frow").forEach((tr) => tr.addEventListener("click", () => openFrame(tr.dataset.fid)));
   setupFilters("tab-frames");
 }
 
