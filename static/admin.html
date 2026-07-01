@@ -14,6 +14,9 @@
       font-family: "Inter", system-ui, -apple-system, sans-serif;
     }
     * { box-sizing: border-box; }
+    /* The `hidden` attribute must win over author display rules (e.g. .login{display:flex}),
+       otherwise hiding the login overlay after unlock does nothing. */
+    [hidden] { display: none !important; }
     body { margin: 0; background: var(--paper); color: var(--ink); -webkit-font-smoothing: antialiased; }
     h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; font-weight: 700; }
     a { color: var(--ink); }
