@@ -18,6 +18,10 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
 const num = (n) => (n == null ? "—" : Number(n).toLocaleString());
 const usd = (n) => (n == null ? "—" : "$" + Number(n).toFixed(2));
 const shortId = (id) => (id || "").length > 10 ? (id || "").slice(-6) : (id || "—");
+// A friendly, stable, unique frame id derived from the hardware MAC (the true
+// unique id). Display name is separate and may be blank/duplicated.
+const frameCode = (id) => id ? "INK-" + id.replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase() : "—";
+const displayName = (name) => name && name.trim() ? name : "Unnamed frame";
 
 function relTime(iso) {
   if (!iso) return "never";
@@ -152,11 +156,13 @@ function interestChips(o, limit) {
 let framesData = [];
 function openFrame(id) {
   const fr = framesData.find((f) => f.id === id); if (!fr) return;
-  $("frame-title").textContent = fr.name || shortId(fr.id);
+  $("frame-title").textContent = displayName(fr.name);
   const row = (k, v) => (v == null || v === "") ? "" : `<dt>${esc(k)}</dt><dd>${v}</dd>`;
   $("frame-detail").innerHTML =
+    row("Display name", esc(displayName(fr.name))) +
+    row("Frame ID", `<span class="mono">${esc(frameCode(fr.id))}</span>`) +
+    row("Hardware ID", `<span class="mono">${esc(fr.id)}</span>`) +
     row("State", statePill(fr.state) + (fr.enabled === false ? ` <span class="pill fail">disabled</span>` : "")) +
-    row("Frame ID", `<span class="mono">${esc(fr.id)}</span>`) +
     row("Account", fr.account_id ? `<span class="mono">${esc(fr.account_id)}</span>${fr.account_suspended ? ` <span class="pill fail">suspended</span>` : ""}` : "unpaired") +
     row("Battery", fr.battery != null ? fr.battery.toFixed(2) + " V" : "—") +
     row("Wi-Fi", wifiLabel(fr.wifi_rssi)) +
@@ -198,7 +204,7 @@ async function onFrameModalAction(e) {
 let galleryItems = [];
 function openArt(i) {
   const it = galleryItems[i]; if (!it) return;
-  $("art-title").textContent = `${it.device_name || shortId(it.device_id)} · ${it.date}`;
+  $("art-title").textContent = `${it.device_name || frameCode(it.device_id)} · ${it.date}`;
   $("art-img").closest(".modal-body").classList.toggle("portrait", it.orientation === "portrait");
   $("art-img").src = BASE + it.image_url;
   const row = (label, val, pre) => !val ? "" :
@@ -286,8 +292,8 @@ function renderFrames(d) {
       ...(fr.interests_preset || []), ...(fr.interests_custom || [])].join(" ").toLowerCase();
     return `<tr class="frow" data-fid="${esc(fr.id)}" data-search="${esc(s)}" data-state="${esc(fr.state)}">
       <td>${statePill(fr.state)}${off}</td>
-      <td><span class="linkname">${esc(fr.name || shortId(fr.id))}</span>
-        <div class="mono" style="color:var(--muted)">${esc(shortId(fr.id))}</div></td>
+      <td><span class="linkname">${esc(displayName(fr.name))}</span>
+        <div class="mono" style="color:var(--muted)">${esc(frameCode(fr.id))}</div></td>
       <td class="chips-cell">${interestChips(fr, 3) || `<span style="color:var(--muted)">—</span>`}</td>
       <td>${bat}</td><td>${esc(wifiLabel(fr.wifi_rssi))}</td>
       <td>${esc(fr.fw_version || "—")}${upd}</td>
@@ -315,7 +321,7 @@ async function loadGenerations() {
   const d = await api("/generations?limit=200" + (genFailedOnly ? "&failed=true" : ""));
   const rows = d.runs.map((r) => `<tr data-ts="${tsOf(r.created_at)}" data-search="${esc([r.device_id, r.trigger, r.ok ? "ok" : "fail failed", r.provider, r.phase, r.error].join(" ").toLowerCase())}">
     <td>${relTime(r.created_at)}</td>
-    <td class="mono">${esc(shortId(r.device_id))}</td>
+    <td class="mono">${esc(frameCode(r.device_id))}</td>
     <td><span class="pill ${r.trigger}">${esc(r.trigger)}</span></td>
     <td><span class="pill ${r.ok ? "ok" : "fail"}">${r.ok ? "ok" : "fail"}</span></td>
     <td>${r.duration_ms ? (r.duration_ms / 1000).toFixed(1) + "s" : "—"}</td>
@@ -344,7 +350,7 @@ async function loadGallery() {
     const search = [it.device_name, it.device_id, it.date, it.caption, it.event_visual, it.image_prompt].join(" ").toLowerCase();
     return `<div class="shot ${it.orientation === "portrait" ? "portrait" : "landscape"}" data-i="${i}" data-ts="${tsOf(it.created_at || it.date)}" data-search="${esc(search)}">
       <img loading="lazy" src="${esc(BASE + it.image_url)}" alt="${esc(it.caption || "")}" />
-      <div class="cap"><div class="d">${esc(it.device_name || shortId(it.device_id))} · ${esc(it.date)}</div>
+      <div class="cap"><div class="d">${esc(it.device_name || frameCode(it.device_id))} · ${esc(it.date)}</div>
         <div class="c">${esc(it.caption || "—")}</div></div></div>`;
   }).join("");
   $("tab-gallery").innerHTML = `<div class="card"><h3 class="hrow">Gallery (${d.items.length}) ${rangeFacets()} ${filterBox("Filter by device, event, prompt…")}</h3>
@@ -409,7 +415,7 @@ async function loadApi() {
   const rows = d.calls.map((c) => `<tr data-ts="${tsOf(c.ts)}" data-search="${esc([c.method, c.path, c.kind, c.device_id, c.status].join(" ").toLowerCase())}">
     <td>${relTime(c.ts)}</td><td>${esc(c.method)}</td>
     <td class="mono wrap-cell">${esc(c.path)}</td>
-    <td>${esc(c.kind)}</td><td class="mono">${esc(shortId(c.device_id))}</td>
+    <td>${esc(c.kind)}</td><td class="mono">${esc(frameCode(c.device_id))}</td>
     <td><span class="pill ${c.status >= 400 ? "fail" : "ok"}">${c.status}</span></td>
     <td>${c.ms}ms</td></tr>`).join("");
   $("tab-api").innerHTML = `<div class="card"><h3 class="hrow">Recent API calls ${rangeFacets()} ${filterBox("Filter by path, device, status…")}</h3>
