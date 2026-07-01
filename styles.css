@@ -596,9 +596,11 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 /* Landscape: image capped by width + height so the whole home fits one screen. */
 .home-card:not(.is-portrait) .gframe-mat img {
   display: block; opacity: 0; transition: opacity .5s var(--ease); border-radius: 1px;
-  /* Cap by viewport width MINUS the mat+molding chrome (~64px) + #app padding,
-     so the whole landscape frame fits and isn't clipped sideways. */
-  width: auto; height: auto; max-width: min(500px, calc(100vw - 112px)); max-height: 47dvh;
+  /* Cap by viewport width MINUS the mat+molding chrome (~68px) AND the #app
+     padding (40px), with headroom, so the whole wooden frame fits and is never
+     clipped sideways. Height is capped so the frame + placard + button fit the
+     locked home viewport without cropping the molding top/bottom. */
+  width: auto; height: auto; max-width: min(440px, calc(100vw - 132px)); max-height: 40dvh;
 }
 /* Portrait: served PNG is the panel buffer (landscape px); show it upright by
    swapping dims via container-query units + rotating 90° clockwise. */
@@ -683,13 +685,15 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
    flow below and the page scrolls when it's taller than the viewport. Vertical
    pan is native scrolling; the pull-to-refresh engages only at scrollTop 0. */
 .frame-screen { display: flex; flex-direction: column; touch-action: pan-y; }
-.frame-screen .gallery { align-items: center; margin: 4px -20px 0; padding: 6px 0; touch-action: pan-x; }
+/* flex:0 0 auto → the gallery is exactly as tall as the artwork; it never grows
+   to fill leftover height (which would float a short landscape card in a big gap). */
+.frame-screen .gallery { flex: 0 0 auto; align-items: center; margin: 4px -20px 0; padding: 6px 0; touch-action: pan-x; }
 .frame-screen .slide { height: auto; }
+/* Portrait: tall image. Landscape: fills the card width (short + centered). Each
+   orientation sizes itself — nothing is forced to portrait proportions. */
 .frame-screen .art-card.is-portrait { height: 66dvh; }
-/* Landscape: the card fills the slide width and the image fills the card, so the
-   art is centered (no viewport-vs-container width mismatch that offsets it). */
 .frame-screen .art-card:not(.is-portrait) { width: 100%; }
-.frame-screen .art-card:not(.is-portrait) img { display: block; width: 100%; height: auto; max-height: 60dvh; margin: 0 auto; }
+.frame-screen .art-card:not(.is-portrait) img { display: block; width: 100%; height: auto; max-height: 72dvh; margin: 0 auto; }
 .frame-screen .artframe { margin: 4px 0 12px; }
 .status-line { display: flex; align-items: center; justify-content: center; gap: 8px;
                font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin: 6px 0 8px; }
