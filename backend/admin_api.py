@@ -197,6 +197,18 @@ async def accounts() -> dict:
     return {"accounts": out}
 
 
+@router.post("/accounts/purge-empty")
+async def purge_empty_accounts() -> dict:
+    """Delete every account with no paired frames (the anonymous accounts the app
+    mints on first launch that never paired). Frames are unaffected."""
+    removed = 0
+    for a in repositories.list_accounts(limit=1000):
+        if not repositories.list_account_devices(a.id):
+            repositories.delete_account(a.id)
+            removed += 1
+    return {"deleted": removed}
+
+
 @router.post("/frames/{device_id}/enable")
 async def set_frame_enabled(device_id: str, enabled: bool = True) -> dict:
     """Enable/disable a single frame (device.enabled). A disabled frame is skipped

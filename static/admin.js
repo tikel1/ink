@@ -189,9 +189,14 @@ function openFrame(id) {
       ["Interests", interestChips(fr)],
       ["Last artwork", fr.last_art_date ? `${esc(fr.last_art_date)} — ${esc(fr.last_art_caption || "")}` : "none"],
     ]);
+  const nav = `<div class="modal-nav">
+    <button class="rowbtn" data-nav="generations" data-q="${esc(fr.id)}">Generations & stats ›</button>
+    <button class="rowbtn" data-nav="gallery" data-q="${esc(fr.id)}">Gallery ›</button>
+    <button class="rowbtn" data-nav="api" data-q="${esc(fr.id)}">API log ›</button></div>`;
   const frameBtn = `<button class="rowbtn ${fr.enabled === false ? "" : "danger"}" data-fa="frame" data-id="${esc(fr.id)}" data-to="${fr.enabled === false ? "1" : "0"}">${fr.enabled === false ? "Activate frame" : "Deactivate frame"}</button>`;
   const acctBtn = fr.account_id ? `<button class="rowbtn ${fr.account_suspended ? "" : "danger"}" data-fa="acct" data-id="${esc(fr.account_id)}" data-to="${fr.account_suspended ? "0" : "1"}">${fr.account_suspended ? "Reactivate account" : "Deactivate account"}</button>` : "";
-  $("frame-actions").innerHTML = frameBtn + acctBtn;
+  $("frame-actions").innerHTML = nav + frameBtn + acctBtn;
+  $("frame-actions").querySelectorAll("[data-nav]").forEach((b) => b.addEventListener("click", () => openTabFor(b.dataset.nav, b.dataset.q)));
   $("frame-actions").querySelectorAll("[data-fa]").forEach((b) => b.addEventListener("click", onFrameModalAction));
   $("frame-modal").hidden = false;
 }
@@ -399,12 +404,22 @@ async function loadAccounts() {
       </td></tr>`;
   }).join("");
   $("tab-accounts").innerHTML = `<div class="card">
-    <h3 class="hrow">Accounts (${d.accounts.length}) ${filterBox("Filter accounts…")}</h3>
-    <p class="chart-legend" style="margin:0 0 10px">Deactivate blocks the app + scheduler (reversible). Delete unbinds its frames and removes the account (permanent).</p>
+    <h3 class="hrow">Accounts (${d.accounts.length})
+      ${d.accounts.filter((a) => a.device_count === 0).length ? `<button class="rowbtn danger" id="purge-empty">Delete ${d.accounts.filter((a) => a.device_count === 0).length} empty</button>` : ""}
+      ${filterBox("Filter accounts…")}</h3>
+    <p class="chart-legend" style="margin:0 0 10px">Empty = anonymous accounts the app created on first launch that never paired a frame. Deactivate blocks the app + scheduler (reversible); Delete removes the account and unbinds its frames (permanent).</p>
     <div class="tbl-wrap"><table><thead><tr>
       <th>Account</th><th>Status</th><th>Frames</th><th>Last active</th><th>Created</th><th>Key</th><th></th>
     </tr></thead><tbody>${rows || `<tr><td colspan="7" class="empty">No accounts.</td></tr>`}</tbody></table></div></div>`;
   $("tab-accounts").querySelectorAll(".rowbtn").forEach((b) => b.addEventListener("click", onAccountAction));
+  const purge = $("purge-empty");
+  if (purge) purge.addEventListener("click", async () => {
+    const n = d.accounts.filter((a) => a.device_count === 0).length;
+    if (!confirm(`Delete ${n} empty account${n === 1 ? "" : "s"} (no frames paired)? This can't be undone.`)) return;
+    purge.disabled = true;
+    try { await apiSend("/accounts/purge-empty", "POST"); await loadTab("accounts"); }
+    catch (err) { if (err.message !== "403") { alert("Purge failed: " + err.message); purge.disabled = false; } }
+  });
   setupFilters("tab-accounts");
 }
 async function onAccountAction(e) {
@@ -441,6 +456,7 @@ async function loadApi() {
 }
 
 // ── tab routing ────────────────────────────────────────────────────────────
+let pendingFilter = "";   // set when jumping to a tab pre-filtered for one frame
 async function loadTab(tab) {
   activeTab = tab;
   try {
@@ -450,12 +466,24 @@ async function loadTab(tab) {
     else if (tab === "gallery") await loadGallery();
     else if (tab === "accounts") await loadAccounts();
     else if (tab === "api") await loadApi();
+    if (pendingFilter) {
+      const inp = $("tab-" + tab).querySelector(".filter");
+      if (inp) { inp.value = pendingFilter; applyFilters($("tab-" + tab)); }
+      pendingFilter = "";
+    }
     stamp();
   } catch (e) {
     if (e.message === "403") logout("Session expired — re-enter the token.");
     else $("tab-" + tab).innerHTML = `<p class="empty">Failed to load: ${esc(e.message)}</p>`;
   }
 }
+function switchTab(tab) {
+  document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("active", x.dataset.tab === tab));
+  document.querySelectorAll(".tab").forEach((s) => (s.hidden = s.id !== "tab-" + tab));
+  loadTab(tab);
+}
+// Jump to a tab pre-filtered to a frame (used by the frame popup's view links).
+function openTabFor(tab, query) { pendingFilter = query; closeFrame(); switchTab(tab); }
 
 // ── wiring ──────────────────────────────────────────────────────────────
 $("login-form").addEventListener("submit", (e) => {
@@ -472,11 +500,7 @@ $("frame-close").addEventListener("click", closeFrame);
 $("frame-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeFrame(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeArt(); closeFrame(); } });
 document.querySelectorAll("#tabs button").forEach((b) =>
-  b.addEventListener("click", () => {
-    document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("active", x === b));
-    document.querySelectorAll(".tab").forEach((s) => (s.hidden = s.id !== "tab-" + b.dataset.tab));
-    loadTab(b.dataset.tab);
-  }));
+  b.addEventListener("click", () => switchTab(b.dataset.tab)));
 
 // Auto-unlock if a token is already in this session.
 if (token) unlock(token); else { $("login").hidden = false; }
