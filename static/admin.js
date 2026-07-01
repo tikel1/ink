@@ -154,27 +154,41 @@ function interestChips(o, limit) {
 
 // ── frame detail popup ────────────────────────────────────────────────────
 let framesData = [];
+// Build one card section: a titled card with a label/value grid; "" if empty.
+function section(title, pairs) {
+  const rows = pairs.filter(([, v]) => v != null && v !== "")
+    .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("");
+  return rows ? `<div class="fcard"><h4>${esc(title)}</h4><dl class="detail">${rows}</dl></div>` : "";
+}
 function openFrame(id) {
   const fr = framesData.find((f) => f.id === id); if (!fr) return;
   $("frame-title").textContent = displayName(fr.name);
-  const row = (k, v) => (v == null || v === "") ? "" : `<dt>${esc(k)}</dt><dd>${v}</dd>`;
+  const wake = `${String(fr.wake_hour).padStart(2, "0")}:${String(fr.wake_minute).padStart(2, "0")} · ${esc(fr.schedule || "")}`;
   $("frame-detail").innerHTML =
-    row("Display name", esc(displayName(fr.name))) +
-    row("Frame ID", `<span class="mono">${esc(frameCode(fr.id))}</span>`) +
-    row("Hardware ID", `<span class="mono">${esc(fr.id)}</span>`) +
-    row("State", statePill(fr.state) + (fr.enabled === false ? ` <span class="pill fail">disabled</span>` : "")) +
-    row("Account", fr.account_id ? `<span class="mono">${esc(fr.account_id)}</span>${fr.account_suspended ? ` <span class="pill fail">suspended</span>` : ""}` : "unpaired") +
-    row("Battery", fr.battery != null ? fr.battery.toFixed(2) + " V" : "—") +
-    row("Wi-Fi", wifiLabel(fr.wifi_rssi)) +
-    row("Firmware", esc(fr.fw_version || "—") + (fr.update_available ? ` → ${esc(fr.latest_fw)} available` : "")) +
-    row("Orientation", esc(fr.orientation || "—")) +
-    row("Update time", `${String(fr.wake_hour).padStart(2, "0")}:${String(fr.wake_minute).padStart(2, "0")} · ${esc(fr.schedule || "")}`) +
-    row("Sleep", fr.sleep_after_minutes ? fr.sleep_after_minutes + " min" : "always on") +
-    row("Interests", interestChips(fr)) +
-    row("Last artwork", fr.last_art_date ? `${esc(fr.last_art_date)} — ${esc(fr.last_art_caption || "")}` : "none") +
-    row("Last seen", fr.last_seen ? relTime(fr.last_seen) : "never") +
-    row("Created", fr.created_at ? fr.created_at.slice(0, 10) : "—") +
-    row("OTA error", fr.ota_error ? `<span class="pill fail">${esc(fr.ota_error)}</span>` : "");
+    section("Identity", [
+      ["Display name", esc(displayName(fr.name))],
+      ["Frame ID", `<span class="mono">${esc(frameCode(fr.id))}</span>`],
+      ["Hardware ID", `<span class="mono">${esc(fr.id)}</span>`],
+      ["Account", fr.account_id ? `<span class="mono">${esc(fr.account_id)}</span>${fr.account_suspended ? ` <span class="pill fail">suspended</span>` : ""}` : "unpaired"],
+      ["Created", fr.created_at ? fr.created_at.slice(0, 10) : ""],
+    ]) +
+    section("Status", [
+      ["State", statePill(fr.state) + (fr.enabled === false ? ` <span class="pill fail">deactivated</span>` : "")],
+      ["Battery", fr.battery != null ? fr.battery.toFixed(2) + " V" : "—"],
+      ["Wi-Fi", wifiLabel(fr.wifi_rssi)],
+      ["Firmware", esc(fr.fw_version || "—") + (fr.update_available ? ` → ${esc(fr.latest_fw)} available` : "")],
+      ["Last seen", fr.last_seen ? relTime(fr.last_seen) : "never"],
+      ["OTA error", fr.ota_error ? `<span class="pill fail">${esc(fr.ota_error)}</span>` : ""],
+    ]) +
+    section("Schedule & display", [
+      ["Orientation", esc(fr.orientation || "—")],
+      ["Update time", wake],
+      ["Sleep", fr.sleep_after_minutes ? fr.sleep_after_minutes + " min" : "always on"],
+    ]) +
+    section("Content", [
+      ["Interests", interestChips(fr)],
+      ["Last artwork", fr.last_art_date ? `${esc(fr.last_art_date)} — ${esc(fr.last_art_caption || "")}` : "none"],
+    ]);
   const frameBtn = `<button class="rowbtn ${fr.enabled === false ? "" : "danger"}" data-fa="frame" data-id="${esc(fr.id)}" data-to="${fr.enabled === false ? "1" : "0"}">${fr.enabled === false ? "Activate frame" : "Deactivate frame"}</button>`;
   const acctBtn = fr.account_id ? `<button class="rowbtn ${fr.account_suspended ? "" : "danger"}" data-fa="acct" data-id="${esc(fr.account_id)}" data-to="${fr.account_suspended ? "0" : "1"}">${fr.account_suspended ? "Reactivate account" : "Deactivate account"}</button>` : "";
   $("frame-actions").innerHTML = frameBtn + acctBtn;
@@ -286,7 +300,7 @@ function renderFrames(d) {
   const rows = d.frames.map((fr) => {
     const bat = fr.battery != null ? fr.battery.toFixed(2) + "V" : "—";
     const upd = fr.update_available ? ` <span class="pill manual">upd</span>` : "";
-    const off = fr.enabled === false ? ` <span class="pill fail">off</span>` : "";
+    const off = fr.enabled === false ? ` <span class="pill fail">deactivated</span>` : "";
     const susp = fr.account_suspended ? ` <span class="pill fail">susp</span>` : "";
     const s = [fr.name, fr.id, fr.state, fr.fw_version, fr.account_id, fr.last_art_caption, fr.ota_error,
       ...(fr.interests_preset || []), ...(fr.interests_custom || [])].join(" ").toLowerCase();
