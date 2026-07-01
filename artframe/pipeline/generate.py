@@ -50,6 +50,9 @@ class ArtworkResult:
     image_prompt: str = ""        # the full prompt sent to the image model (for debug/admin)
     event_caption: str = ""       # the chosen event
     event_visual: str = ""        # the iconic visual depicted ('' = abstract)
+    # Date-verified runner-up events considered by the curator but not chosen, so
+    # the app can show "also on this day". Each: {"caption": str, "visual": str}.
+    other_events: tuple = ()
 
 
 async def generate_artwork(settings: Settings, config: DeviceConfig, on_phase=None) -> ArtworkResult:
@@ -83,9 +86,10 @@ async def generate_artwork(settings: Settings, config: DeviceConfig, on_phase=No
     # The daily event is optional: when the device turns it off, the artwork is a
     # pure abstract composition with no historical subject or caption.
     pick = _EMPTY_PICK
+    other_events: list[dict] = []
     if config.use_event:
         phase("research")
-        pick = await _select_event(settings, config, today, holiday_ctx)
+        pick, other_events = await _select_event(settings, config, today, holiday_ctx)
         if pick.caption and not pick.visual:
             pick = pick._replace(visual=await _derive_visual(settings, pick.caption))
     phase("compose")
@@ -111,6 +115,7 @@ async def generate_artwork(settings: Settings, config: DeviceConfig, on_phase=No
         image_prompt=image_prompt,
         event_caption=pick.caption,
         event_visual=pick.visual,
+        other_events=tuple(other_events),
     )
 
 
@@ -222,10 +227,15 @@ async def _curate_pool(
     return _pick(chosen)
 
 
+_MAX_OTHER_EVENTS = 3
+
+
 async def _select_event(
     settings: Settings, config: DeviceConfig, today: date_cls, holiday_ctx
-) -> EventPick:
-    """Pick a date-verified, interest-matched event for today.
+) -> tuple[EventPick, list[dict]]:
+    """Pick a date-verified, interest-matched event for today, plus up to
+    `_MAX_OTHER_EVENTS` date-verified runner-ups from the same pool (the ones the
+    curator considered but didn't choose) for the app's "also on this day".
 
     1) Web search several interest categories (grounds dates in reality + returns
        iconic visuals), pool the candidates, and curate the single most meaningful
@@ -249,7 +259,14 @@ async def _select_event(
             pick = await _curate_pool(settings, date_label, pool)
             if pick:
                 logger.info("curated event: %s", pick.caption)
-                return pick
+                # Runner-ups: every other date-verified candidate in the pool (the
+                # search already dropped anything not on_date / fabricated), capped.
+                others = [
+                    {"caption": c["event"].strip(), "visual": (c.get("iconic_visual") or "").strip()}
+                    for c in pool
+                    if c["event"].strip() and c["event"].strip() != pick.caption
+                ][:_MAX_OTHER_EVENTS]
+                return pick, others
 
     # 2) Model-only topic-forced fallback (no search), rotated by day.
     if interests:
@@ -261,7 +278,7 @@ async def _select_event(
             if event.strip().upper().startswith("NONE") or not event.strip():
                 continue
             if await _is_real_event(settings, event):
-                return EventPick(event, "")
+                return EventPick(event, ""), []
             logger.info("%s event looked fabricated: %s", interest, event)
 
     # 3) General interest-aware selector.
@@ -277,7 +294,7 @@ async def _select_event(
             metrics.record_retry()
         event = await generation_client.generate_text(settings, prompt)
         if await _fact_check(settings, event, date_label):
-            return EventPick(event, "")
+            return EventPick(event, ""), []
         logger.info("event failed fact-check (try %d/%d): %s",
                     attempt + 1, _EVENT_ATTEMPTS, event)
 
@@ -285,9 +302,9 @@ async def _select_event(
     generic = await generation_client.generate_text(
         settings, prompts.GENERIC_EVENT_PROMPT.format(date=date_label))
     if await _fact_check(settings, generic, date_label):
-        return EventPick(generic, "")
+        return EventPick(generic, ""), []
     logger.warning("%s: all events failed fact-check — drawing without an event", config.id)
-    return _EMPTY_PICK
+    return _EMPTY_PICK, []
 
 
 async def _is_real_event(settings: Settings, event: str) -> bool:

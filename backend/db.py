@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS daily_artwork (
     image_prompt   TEXT,                       -- the full prompt sent to the image model
     event_caption  TEXT,                       -- the chosen event (caption)
     event_visual   TEXT,                       -- the iconic visual depicted ('' = abstract)
+    other_events   TEXT,                       -- JSON: date-verified runner-up events not chosen
     status         TEXT NOT NULL DEFAULT 'pending',
     created_at     TEXT NOT NULL,
     PRIMARY KEY (device_id, date)
@@ -147,6 +148,7 @@ _ARTWORK_MIGRATIONS = {
     "image_prompt": "TEXT",
     "event_caption": "TEXT",
     "event_visual": "TEXT",
+    "other_events": "TEXT",   # JSON list of date-verified runner-up events
 }
 
 

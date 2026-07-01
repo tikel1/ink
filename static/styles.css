@@ -510,7 +510,7 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
    like home, so the vertical pull engages reliably on Android Chrome instead of
    fighting the browser's default gesture handling. The gallery keeps native
    horizontal swipe; when expanded for "Read more", normal scrolling resumes. */
-.frame-screen:not(.expanded), .frame-screen:not(.expanded) * { touch-action: none; }
+.frame-screen:not(.scroll), .frame-screen:not(.scroll) * { touch-action: none; }
 .frame-screen .gallery, .frame-screen .gallery * { touch-action: pan-x; }
 /* Shared pull-to-refresh spinner. Absolute within #app (which is position:
    relative) — more reliable on mobile than `fixed`, which jitters under the
@@ -701,10 +701,28 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .nav-list.compact .nav-row { padding: 11px 14px; }
 .nav-list.compact .nav-t { font-family: "Fraunces"; font-size: 15px; font-weight: 600; flex: 1; }
 
-/* Expanded: full description, screen scrolls (the #app lock is also removed). */
-.frame-screen.expanded { height: auto; min-height: 100%; overflow: visible; }
-.frame-screen.expanded .gallery { flex: none; }
+/* Scroll mode: the page unlocks (Read-more OR the "Also on this day" section is
+   open), so the frame screen grows and scrolls. The image keeps a large fixed
+   height instead of being flexed to the last remaining pixels. */
+.frame-screen.scroll { height: auto; min-height: 100%; overflow: visible; }
+.frame-screen.scroll .gallery { flex: none; height: 54dvh; }
+/* Expanded (Read-more only): reveal the full description text. */
 .frame-screen.expanded .placard-body { -webkit-line-clamp: unset; overflow: visible; display: block; }
+
+/* "Also on this day" — collapsed runner-up events. */
+.also { flex: none; margin: 12px 6px 0; }
+.also[hidden] { display: none; }
+.also-toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+               width: 100%; padding: 11px 14px; background: var(--paper-2); border: 1.5px solid var(--line);
+               border-radius: var(--radius-sm); font: inherit; font-size: 13.5px; font-weight: 600;
+               color: var(--ink-soft); cursor: pointer; }
+.also-title { font-family: "Fraunces"; }
+.also-chev { transition: transform .2s var(--ease); font-size: 18px; line-height: 1; }
+.also[open] .also-chev, .also-toggle[aria-expanded="true"] .also-chev { transform: rotate(90deg); }
+.also-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.also-list[hidden] { display: none; }
+.also-item { padding: 11px 14px; background: var(--paper); border: 1px solid var(--line);
+             border-radius: var(--radius-sm); font-size: 14px; line-height: 1.5; color: var(--ink); }
 
 /* ── Radio groups ────────────────────────────────────────────────────── */
 .radios { border: none; padding: 0; margin: 14px 0 0; }

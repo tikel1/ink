@@ -27,6 +27,7 @@ class DailyArtwork:
     image_prompt: Optional[str] = None
     event_caption: Optional[str] = None
     event_visual: Optional[str] = None
+    other_events: Optional[str] = None   # JSON list of runner-up events
 
     @staticmethod
     def from_row(row: sqlite3.Row) -> "DailyArtwork":
@@ -39,8 +40,8 @@ def upsert(artwork: DailyArtwork) -> None:
             """INSERT INTO daily_artwork
                (device_id, date, image_path, archive_path, event_text_en,
                 event_text_he, weather_summary, orientation, image_prompt,
-                event_caption, event_visual, status, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                event_caption, event_visual, other_events, status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(device_id, date) DO UPDATE SET
                  image_path = excluded.image_path,
                  archive_path = excluded.archive_path,
@@ -51,13 +52,14 @@ def upsert(artwork: DailyArtwork) -> None:
                  image_prompt = excluded.image_prompt,
                  event_caption = excluded.event_caption,
                  event_visual = excluded.event_visual,
+                 other_events = excluded.other_events,
                  status = excluded.status""",
             (
                 artwork.device_id, artwork.date, artwork.image_path,
                 artwork.archive_path, artwork.event_text_en, artwork.event_text_he,
                 artwork.weather_summary, artwork.orientation, artwork.image_prompt,
-                artwork.event_caption, artwork.event_visual, artwork.status,
-                artwork.created_at,
+                artwork.event_caption, artwork.event_visual, artwork.other_events,
+                artwork.status, artwork.created_at,
             ),
         )
 

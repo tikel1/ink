@@ -4,6 +4,7 @@ Resolves whose key to use, runs the pipeline, and persists the image + metadata.
 """
 from __future__ import annotations
 
+import json
 import logging
 import time
 
@@ -77,6 +78,7 @@ async def generate_for_device(device: Device, on_phase=None, trigger: str = "man
                 image_prompt=result.image_prompt,
                 event_caption=result.event_caption,
                 event_visual=result.event_visual,
+                other_events=json.dumps(list(result.other_events)) if result.other_events else None,
                 status=READY,
                 created_at=artwork_repo.make_now(),
             )

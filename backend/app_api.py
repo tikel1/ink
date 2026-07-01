@@ -1,6 +1,8 @@
 """Control-app API: accounts, API-key management, device pairing + preferences."""
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -148,7 +150,19 @@ async def archive(device_id: str, limit: int = 30, account: Account = auth.Accou
         "event_text_he": a.event_text_he,
         "weather_summary": a.weather_summary,
         "orientation": a.orientation,
+        "other_events": _parse_other_events(a.other_events),
     } for a in items]}
+
+
+def _parse_other_events(raw: str | None) -> list:
+    """Date-verified runner-up events stored as JSON; tolerate legacy/empty rows."""
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, list) else []
+    except (ValueError, TypeError):
+        return []
 
 
 @router.post("/devices/{device_id}/regenerate")
