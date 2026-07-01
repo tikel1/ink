@@ -59,11 +59,19 @@
 
     /* KPI cards */
     .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 22px; }
-    .kpi { background: var(--card); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
-    .kpi .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-    .kpi .value { font-family: Georgia, serif; font-size: 27px; font-weight: 700; margin-top: 4px; }
+    .kpi { background: var(--card); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 14px 16px;
+      box-shadow: 0 1px 2px rgba(27,24,19,.05); transition: transform .12s ease, box-shadow .12s ease; }
+    .kpi:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(27,24,19,.10); }
+    .kpi .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; font-weight: 600; }
+    .kpi .value { font-family: Georgia, serif; font-size: 28px; font-weight: 700; margin-top: 5px; line-height: 1; }
     .kpi .value small { font-size: 14px; color: var(--muted); font-weight: 400; }
-    .kpi .sub { font-size: 12px; color: var(--soft); margin-top: 3px; }
+    .kpi .sub { font-size: 12px; color: var(--soft); margin-top: 5px; }
+    .kpi.good .value { color: var(--ok); }
+    .kpi.bad .value { color: var(--danger); }
+    .kpi.warn .value { color: var(--warn); }
+    .section-title { font-family: Georgia, serif; font-size: 15px; font-weight: 700; color: var(--ink-soft);
+      margin: 24px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+    .section-title:first-child { margin-top: 0; }
 
     .card { background: var(--card); border: 1.5px solid var(--line); border-radius: var(--radius);
       padding: 16px 18px; margin-bottom: 18px; }
@@ -128,11 +136,15 @@
       background: var(--paper-2); border: 1.5px solid var(--line); border-radius: 999px; color: var(--ink); }
     .filter-count { font-size: 12px; font-weight: 400; color: var(--muted); }
     .hrow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-    /* Facet filter chips (status, date range) */
-    .facets { display: inline-flex; gap: 5px; }
-    .facet { padding: 5px 11px; border-radius: 999px; border: 1.5px solid var(--line);
-      background: var(--paper-2); color: var(--soft); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
-    .facet.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    /* Dropdown filter facets */
+    select.facet { padding: 6px 30px 6px 12px; border-radius: 999px; border: 1.5px solid var(--line);
+      background-color: var(--paper-2); color: var(--ink-soft); font: inherit; font-size: 12.5px; font-weight: 600;
+      cursor: pointer; -webkit-appearance: none; appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%234a4438' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 10px center; }
+    select.facet:focus { outline: none; border-color: var(--ink); }
+    select.facet:hover { border-color: var(--muted); }
+    .filter-count-h { color: var(--muted); font-weight: 400; font-size: 14px; }
     /* Interest chips in the frames table */
     .chips-cell { white-space: normal; max-width: 250px; }
     .ichip { display: inline-block; margin: 2px 3px 0 0; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
