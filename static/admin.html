@@ -72,8 +72,20 @@
     .section-title { font-family: Georgia, serif; font-size: 15px; font-weight: 700; color: var(--ink-soft);
       margin: 24px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
     .section-title:first-child { margin-top: 0; }
-    .cost-sub { margin: 16px 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
-    .card h3 + .cost-sub { margin-top: 4px; }
+    /* Compact cost card */
+    .coststats { display: flex; gap: 28px; flex-wrap: wrap; margin: 4px 0 12px; }
+    .cstat .cs-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+    .cstat .cs-val { font-family: Georgia, serif; font-size: 24px; font-weight: 700; line-height: 1.1; }
+    .cstat .cs-val small { font-size: 12px; color: var(--muted); font-weight: 400; }
+    .cstat .cs-sub { font-size: 11px; color: var(--soft); }
+    .costbreak { display: flex; gap: 8px 20px; flex-wrap: wrap; font-size: 13px; color: var(--soft);
+      padding: 11px 0; border-top: 1px solid var(--line); }
+    .costbreak b { color: var(--ink); font-weight: 700; }
+    .costbreak i { color: var(--muted); font-style: normal; font-size: 11.5px; }
+    .cost-lines { margin: 2px 0 4px; }
+    .cost-lines summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+    .cost-lines dl { display: grid; grid-template-columns: 1fr auto; gap: 5px 18px; margin: 9px 0 0; font-size: 13px; }
+    .cost-lines dt { color: var(--soft); } .cost-lines dd { margin: 0; }
 
     .card { background: var(--card); border: 1.5px solid var(--line); border-radius: var(--radius);
       padding: 16px 18px; margin-bottom: 18px; }

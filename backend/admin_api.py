@@ -89,6 +89,10 @@ async def overview() -> dict:
     devices = repositories.list_all_devices()
     active = [d for d in devices if d.enabled]        # deactivated frames excluded from the live buckets
     states = [_state(d) for d in active]
+    # "Active" = enabled and checked in within 48h (online frames poll ~1/min;
+    # healthy sleepers wake daily) — a single health number instead of 3 buckets.
+    active_48h = sum(1 for d in active
+                     if (_age_seconds(d.last_seen) or 1e12) < 48 * 3600)
     gen = monitoring_repo.generation_stats(days=30)
     api = monitoring_repo.api_call_stats(days=14)
     art = artwork_repo.counts()
@@ -100,6 +104,7 @@ async def overview() -> dict:
         "frames": {
             "total": len(devices),
             "active": len(active),
+            "active_48h": active_48h,
             "online": states.count("online"),
             "sleep": states.count("sleep"),
             "offline": states.count("offline"),
