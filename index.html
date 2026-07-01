@@ -478,6 +478,16 @@
     <button id="app-toast-close" type="button" class="fw-toast-x" aria-label="Close">✕</button>
   </div>
 
+  <!-- Artwork-waiting toast: a new work was generated but the frame is asleep/
+       offline, so it can't fetch it until it's back. Persists (no remote wake). -->
+  <div id="wake-toast" class="fw-toast" hidden role="status">
+    <div class="fw-toast-text">
+      <strong>New artwork ready</strong>
+      <span id="wake-toast-sub" class="fw-toast-sub">Wake the frame to show it.</span>
+    </div>
+    <button id="wake-toast-close" type="button" class="fw-toast-x" aria-label="Close">✕</button>
+  </div>
+
   <!-- Zoom lightbox: tap an artwork in the gallery to view it large -->
   <div id="lightbox" class="lightbox" hidden>
     <button id="lb-close" class="lb-close" aria-label="Close">✕</button>

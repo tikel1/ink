@@ -418,6 +418,8 @@ function renderFrameStatus(d) {
   const st = frameState(d);
   $("fr-dot").className = `dot ${st.cls}`;
   $("fr-status").textContent = st.sub ? `${st.label} · ${st.sub}` : st.label;
+  // The frame that had art waiting is back online → it can now fetch it; clear.
+  if (wakePendingId && d.id === wakePendingId && st.cls === "s-on") hideWakeToast();
   renderMorningStatus(d, st);
 }
 
@@ -933,8 +935,8 @@ async function pollGeneration(id) {
 async function afterGenerated(id) {
   const d = currentDevice || {};
   const st = frameState(d);
-  if (st.cls === "s-sleep") { toast("Artwork ready — wake the frame (KEY1) to show it"); return; }
-  if (st.cls === "s-off")   { toast("Artwork ready — the frame is offline"); return; }
+  if (st.cls === "s-sleep") { showWakeToast(id, "Wake the frame (KEY1) to show it."); return; }
+  if (st.cls === "s-off")   { showWakeToast(id, "Reconnect the frame to show it."); return; }
   const base = d.last_seen ? new Date(d.last_seen).getTime() : 0;
   genLabel("Updating frame…");
   for (let i = 0; i < 40; i++) {
@@ -943,11 +945,23 @@ async function afterGenerated(id) {
     let dev; try { dev = await api(`/devices/${id}`); } catch { continue; }
     currentDevice = dev; syncDeviceCache(dev); renderFrameStatus(dev); updateRefreshState();
     const st2 = frameState(dev);
-    if (st2.cls === "s-sleep") { toast("Frame slept — wake it (KEY1) to show the new art"); return; }
+    if (st2.cls === "s-sleep") { showWakeToast(id, "Wake the frame (KEY1) to show the new art."); return; }
     if ((dev.last_seen ? new Date(dev.last_seen).getTime() : 0) > base) { toast("Frame updated"); return; }
   }
   toast("Artwork ready — the frame will show it shortly");
 }
+
+// Persistent "artwork waiting" banner (mirrors the update toast) for when a new
+// work was generated but the frame can't fetch it yet (asleep/offline). There's
+// no remote wake, so it's informational; it auto-clears when the frame is back
+// (renderFrameStatus) or on close.
+let wakePendingId = null;
+function showWakeToast(deviceId, sub) {
+  wakePendingId = deviceId;
+  $("wake-toast-sub").textContent = sub;
+  $("wake-toast").hidden = false;
+}
+function hideWakeToast() { $("wake-toast").hidden = true; wakePendingId = null; }
 
 // Refresh re-pulls the app view AND tells the physical frame to re-fetch+redraw.
 // Sleep tells the frame to go to sleep. Both reach the frame on its next poll
@@ -1489,6 +1503,7 @@ function wireAccount() {
   $("update-btn").addEventListener("click", (e) => checkForUpdates(e.currentTarget));
   $("app-toast-refresh").addEventListener("click", () => location.reload());
   $("app-toast-close").addEventListener("click", () => { $("app-toast").hidden = true; });
+  $("wake-toast-close").addEventListener("click", hideWakeToast);
   $("logout-btn").addEventListener("click", () => {
     if (!confirm("Log out of this account on this device?\n\nKeep your account token saved if you want to return.")) return;
     localStorage.removeItem(TOKEN_KEY); go("welcome");
