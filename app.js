@@ -914,15 +914,39 @@ async function pollGeneration(id) {
     await sleep(1000);   // poll briskly so quick early phases are caught
     let s; try { s = await api(`/devices/${id}/generation`); } catch { continue; }
     if (s.state === "done") {
-      genLabel(GEN_LABELS.finish);
-      if (id === currentId) await loadGallery(id);
-      toast("New artwork ready"); return;
+      if (id === currentId) await loadGallery(id);   // show it in the app immediately
+      await afterGenerated(id);                       // then reflect the physical frame updating
+      return;
     }
     if (s.state === "error") { toast(s.detail || "Couldn't create the artwork"); return; }
     const label = GEN_LABELS[s.detail] || "Working…";   // s.detail = the live phase
     if (label !== last) { genLabel(label); last = label; }
   }
   toast("Still working — check back shortly");
+}
+
+// After the backend finishes creating the art, the PHYSICAL frame still has to
+// fetch + redraw it — it picks up the queued refresh on its next poll (≤60s). So:
+//  • awake  → show "Updating frame…" until it checks in again (carrying the redraw);
+//  • asleep → it won't update until woken, so say so;
+//  • offline→ likewise.
+async function afterGenerated(id) {
+  const d = currentDevice || {};
+  const st = frameState(d);
+  if (st.cls === "s-sleep") { toast("Artwork ready — wake the frame (KEY1) to show it"); return; }
+  if (st.cls === "s-off")   { toast("Artwork ready — the frame is offline"); return; }
+  const base = d.last_seen ? new Date(d.last_seen).getTime() : 0;
+  genLabel("Updating frame…");
+  for (let i = 0; i < 40; i++) {
+    await sleep(2000);
+    if (id !== currentId) return;                        // user navigated away
+    let dev; try { dev = await api(`/devices/${id}`); } catch { continue; }
+    currentDevice = dev; syncDeviceCache(dev); renderFrameStatus(dev); updateRefreshState();
+    const st2 = frameState(dev);
+    if (st2.cls === "s-sleep") { toast("Frame slept — wake it (KEY1) to show the new art"); return; }
+    if ((dev.last_seen ? new Date(dev.last_seen).getTime() : 0) > base) { toast("Frame updated"); return; }
+  }
+  toast("Artwork ready — the frame will show it shortly");
 }
 
 // Refresh re-pulls the app view AND tells the physical frame to re-fetch+redraw.
@@ -940,7 +964,7 @@ function updateRefreshState() {
   $("sleep-btn").title = asleep ? "Frame is already asleep" : "Sleep the frame";
   const hint = $("refresh-hint");
   if (asleep) {
-    hint.textContent = "💤 Frame is asleep — press KEY1 on it to wake it";
+    hint.textContent = "💤 Frame is asleep — wake it (KEY1) to update the display";
     hint.hidden = false;
   } else if (offline) {
     hint.textContent = "⚠ Frame is offline — check it's powered and on Wi‑Fi";
