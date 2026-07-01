@@ -488,6 +488,12 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .home-top .inkmark-anim { margin-left: 4px; }
 /* Home: a larger ink blob sitting close to the "Ink" wordmark. */
 .home .inkmark-anim { width: 60px; height: 60px; margin-left: -8px; }
+/* Frame-screen alert (e.g. "couldn't update this morning"). */
+.frame-alert { margin: 2px 0 6px; padding: 9px 13px; border-radius: var(--radius-sm);
+               background: rgba(155,59,47,.10); border: 1px solid rgba(155,59,47,.28);
+               color: var(--danger); font-size: 13px; line-height: 1.4; text-align: center; }
+.frame-alert.info { background: rgba(27,24,19,.05); border-color: var(--line); color: var(--ink-soft); }
+.frame-alert[hidden] { display: none; }
 .home-actions { margin-left: auto; display: flex; align-items: center; gap: 0; }
 .home-actions .gear-btn { margin-left: 0; }
 .gear-btn { margin-left: auto; background: none; border: none; cursor: pointer; padding: 8px;
