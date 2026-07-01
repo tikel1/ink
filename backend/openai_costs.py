@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime, timedelta, timezone
 
 import httpx
 
@@ -18,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 _COSTS_URL = "https://api.openai.com/v1/organization/costs"
 _TTL_SECONDS = 3600
-_cache: dict = {"ts": 0.0, "data": None}
+# Cache keyed by (start, end, key_id) so each date window is cached independently.
+_cache: dict = {}
 
 
 def _to_float(value) -> float:
@@ -29,31 +31,48 @@ def _to_float(value) -> float:
         return 0.0
 
 
-async def fetch(days: int = 30) -> dict:
-    now = time.time()
-    if _cache["data"] is not None and now - _cache["ts"] < _TTL_SECONDS:
-        return _cache["data"]
+def _epoch(date_str: str, *, next_day: bool = False) -> int:
+    """UTC midnight epoch for a YYYY-MM-DD string; next_day makes an exclusive end."""
+    y, m, d = (int(x) for x in date_str.split("-"))
+    base = datetime(y, m, d, tzinfo=timezone.utc)
+    if next_day:
+        base += timedelta(days=1)
+    return int(base.timestamp())
 
+
+async def fetch(start: str | None = None, end: str | None = None,
+                days: int = 30) -> dict:
+    """Billed OpenAI cost over a date window (YYYY-MM-DD). Falls back to the last
+    `days` when no explicit window is given. Cached per-window for an hour."""
+    now = time.time()
     settings = get_settings()
     key = settings.openai_admin_key or settings.platform_openai_api_key
     key_id = settings.openai_cost_api_key_id
     scope = "key" if key_id else "org"
+    ck = (start, end, key_id)
+    hit = _cache.get(ck)
+    if hit and now - hit["ts"] < _TTL_SECONDS:
+        return hit["data"]
+
     result = {"available": False, "total_usd": 0.0, "by_line_item": [],
-              "days": days, "scope": scope, "note": ""}
+              "start": start, "end": end, "scope": scope, "note": ""}
     if not key:
         result["note"] = "No OpenAI key configured."
-        _cache.update(ts=now, data=result)
+        _cache[ck] = {"ts": now, "data": result}
         return result
 
-    start = int(now - days * 86400)
+    start_time = _epoch(start) if start else int(now - days * 86400)
+    end_time = _epoch(end, next_day=True) if end else None
     agg: dict[str, float] = {}
     total = 0.0
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             page = None
             for _ in range(20):  # safety-bounded pagination
-                params = {"start_time": start, "bucket_width": "1d", "limit": 180,
+                params = {"start_time": start_time, "bucket_width": "1d", "limit": 180,
                           "group_by[]": ["line_item"]}
+                if end_time:
+                    params["end_time"] = end_time
                 if key_id:  # scope spend to just the frame-generation key
                     params["api_key_ids[]"] = [key_id]
                 if page:
@@ -63,7 +82,7 @@ async def fetch(days: int = 30) -> dict:
                 if r.status_code != 200:
                     result["note"] = (f"OpenAI Costs API returned {r.status_code} — set OPENAI_ADMIN_KEY "
                                       "to an Admin key (Dashboard → Organization → Admin keys).")
-                    _cache.update(ts=now, data=result)
+                    _cache[ck] = {"ts": now, "data": result}
                     return result
                 body = r.json()
                 for bucket in body.get("data", []):
@@ -87,5 +106,5 @@ async def fetch(days: int = 30) -> dict:
     except Exception as exc:  # noqa: BLE001 — never break the overview on a billing hiccup
         logger.warning("OpenAI costs fetch failed: %s", exc)
         result["note"] = "Couldn't reach the OpenAI Costs API."
-    _cache.update(ts=now, data=result)
+    _cache[ck] = {"ts": now, "data": result}
     return result

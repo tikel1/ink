@@ -57,6 +57,25 @@
       background: var(--paper-2); color: var(--soft); font: inherit; font-weight: 600; font-size: 13.5px; cursor: pointer; }
     .tabs button.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 
+    /* Global filter bar — drives every tab (date window, frame status, frame, account) */
+    .filterbar { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap;
+      background: var(--card); border: 1.5px solid var(--line); border-radius: var(--radius);
+      padding: 10px 14px; margin-bottom: 20px; }
+    .filterbar .fb-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+      color: var(--muted); font-weight: 700; margin-right: 2px; }
+    .filterbar select, .filterbar input[type=date] { padding: 7px 30px 7px 12px; border-radius: 999px;
+      border: 1.5px solid var(--line); background-color: var(--paper-2); color: var(--ink);
+      font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; -webkit-appearance: none; appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%234a4438' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 10px center; }
+    .filterbar input[type=date] { padding: 7px 12px; background-image: none; cursor: text; }
+    .filterbar select:focus, .filterbar input[type=date]:focus { outline: none; border-color: var(--ink); }
+    .filterbar select:hover { border-color: var(--muted); }
+    .filterbar .fb-dates { display: flex; align-items: center; gap: 6px; }
+    .filterbar .fb-dates.hide { display: none; }
+    .filterbar .fb-reset { margin-left: auto; }
+    .filterbar select.dirty { border-color: var(--ink); background-color: var(--paper); }
+
     /* KPI cards */
     .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 22px; }
     .kpi { background: var(--card); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 14px 16px;
@@ -239,6 +258,7 @@
       <button data-tab="accounts">Accounts</button>
       <button data-tab="api">API calls</button>
     </nav>
+    <div class="filterbar" id="filterbar"></div>
     <section id="tab-overview" class="tab"></section>
     <section id="tab-frames" class="tab" hidden></section>
     <section id="tab-generations" class="tab" hidden></section>

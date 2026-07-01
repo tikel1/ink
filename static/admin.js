@@ -11,6 +11,13 @@ const TOKEN_KEY = "ink.admin.token";
 const $ = (id) => document.getElementById(id);
 let token = sessionStorage.getItem(TOKEN_KEY) || "";
 let activeTab = "overview";
+// Full (unfiltered) frame + account lists that populate the global filter dropdowns.
+let allFrames = [];
+let allAccounts = [];
+// The global filter bar state. `start`/`end` are the resolved YYYY-MM-DD window
+// (derived from `range`, or the custom pickers cstart/cend). Sent on every load.
+const filters = { range: "30d", start: "", end: "", cstart: "", cend: "",
+                  status: "active", device: "", account: "" };
 
 // ── helpers ─────────────────────────────────────────────────────────────
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
@@ -79,10 +86,12 @@ function logout(msg) {
 async function unlock(candidate) {
   token = candidate;
   try {
-    const data = await api("/overview");        // validates the token
+    await api("/overview");                      // validates the token
     sessionStorage.setItem(TOKEN_KEY, token);
     $("login").hidden = true; $("console").hidden = false;
-    renderOverview(data); stamp();
+    computeWindow();
+    await loadSelectors();                        // fill dropdowns + render the bar
+    await loadTab("overview");                    // first filtered load
   } catch (e) {
     token = "";
     console.error("admin unlock failed:", e, "API base:", API);
@@ -103,9 +112,80 @@ function selectFacet(facet, options) {
   return `<select class="facet" data-facet="${facet}">` +
     options.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join("") + `</select>`;
 }
-const rangeSelect = () => selectFacet("range", [["", "All time"], ["1", "Last 24h"], ["7", "Last 7 days"], ["30", "Last 30 days"]]);
-const stateSelect = () => selectFacet("state", [["", "Any state"], ["online", "Online"], ["sleep", "Sleep"], ["offline", "Offline"]]);
-const activationSelect = () => selectFacet("activation", [["active", "Active only"], ["", "Incl. deactivated"], ["off", "Deactivated only"]]);
+// ── global filter bar ───────────────────────────────────────────────────
+// One bar under the tabs drives every section: a date window (server-side, so
+// even the aggregate costs respond to it), plus frame-status / frame / account.
+const RANGE_LABELS = { today: "Today", "7d": "Last 7 days", "30d": "Last 30 days",
+                       all: "All time", custom: "Custom range" };
+const isoDay = (d) => d.toISOString().slice(0, 10);
+function computeWindow() {
+  const today = new Date();
+  const end = isoDay(today);
+  const daysAgo = (n) => { const x = new Date(today); x.setUTCDate(x.getUTCDate() - n); return isoDay(x); };
+  // "All time" uses a floor well before any data exists (rather than an empty
+  // start) so the aggregate cost call gets a real window instead of its default.
+  const w = { today: [end, end], "7d": [daysAgo(6), end], "30d": [daysAgo(29), end],
+              all: ["2020-01-01", end], custom: [filters.cstart, filters.cend] }[filters.range] || ["", ""];
+  [filters.start, filters.end] = w;
+}
+function rangeLabel() {
+  if (filters.range === "custom")
+    return filters.start && filters.end ? `${filters.start} → ${filters.end}` : "Custom range";
+  return RANGE_LABELS[filters.range] || "Last 30 days";
+}
+function filterQS() {
+  const p = [];
+  const add = (k, v) => { if (v) p.push(k + "=" + encodeURIComponent(v)); };
+  add("start", filters.start); add("end", filters.end);
+  add("device", filters.device); add("account", filters.account); add("status", filters.status);
+  return p.join("&");
+}
+// Append the active filters to a request path (endpoints ignore params they
+// don't declare, so it's safe to send the whole set everywhere).
+function withF(path) {
+  const q = filterQS();
+  return q ? path + (path.includes("?") ? "&" : "?") + q : path;
+}
+const fbOpt = (v, l, sel) => `<option value="${esc(v)}"${sel ? " selected" : ""}>${esc(l)}</option>`;
+function renderFilterBar() {
+  const opts = (pairs, cur) => pairs.map(([v, l]) => fbOpt(v, l, cur === v)).join("");
+  const frameOpts = fbOpt("", "All frames", !filters.device) +
+    allFrames.map((f) => fbOpt(f.id, `${frameCode(f.id)} · ${displayName(f.name)}`, filters.device === f.id)).join("");
+  const acctOpts = fbOpt("", "All accounts", !filters.account) +
+    allAccounts.map((a) => fbOpt(a.id, a.email || shortId(a.id), filters.account === a.id)).join("");
+  const custom = filters.range === "custom";
+  $("filterbar").innerHTML = `
+    <span class="fb-label">Range</span>
+    <select id="fb-range">${opts([["today", "Today"], ["7d", "Last 7 days"], ["30d", "Last 30 days"], ["all", "All time"], ["custom", "Custom range"]], filters.range)}</select>
+    <span class="fb-dates${custom ? "" : " hide"}" id="fb-dates">
+      <input type="date" id="fb-start" value="${esc(filters.cstart)}" aria-label="Start date" />–<input type="date" id="fb-end" value="${esc(filters.cend)}" aria-label="End date" /></span>
+    <span class="fb-label">Status</span>
+    <select id="fb-status">${opts([["active", "Active"], ["", "Any status"], ["online", "Online"], ["sleep", "Sleep"], ["offline", "Offline"], ["deactivated", "Deactivated"]], filters.status)}</select>
+    <span class="fb-label">Frame</span>
+    <select id="fb-frame">${frameOpts}</select>
+    <span class="fb-label">Account</span>
+    <select id="fb-account">${acctOpts}</select>
+    <button class="btn ghost sm fb-reset" id="fb-reset" type="button">Reset</button>`;
+  $("fb-range").addEventListener("change", (e) => { filters.range = e.target.value; renderFilterBar(); applyFiltersGlobal(); });
+  $("fb-status").addEventListener("change", (e) => { filters.status = e.target.value; applyFiltersGlobal(); });
+  $("fb-frame").addEventListener("change", (e) => { filters.device = e.target.value; applyFiltersGlobal(); });
+  $("fb-account").addEventListener("change", (e) => { filters.account = e.target.value; applyFiltersGlobal(); });
+  const s = $("fb-start"), en = $("fb-end");
+  if (s) s.addEventListener("change", (e) => { filters.cstart = e.target.value; if (filters.range === "custom") applyFiltersGlobal(); });
+  if (en) en.addEventListener("change", (e) => { filters.cend = e.target.value; if (filters.range === "custom") applyFiltersGlobal(); });
+  $("fb-reset").addEventListener("click", () => {
+    Object.assign(filters, { range: "30d", status: "active", device: "", account: "", cstart: "", cend: "" });
+    renderFilterBar(); applyFiltersGlobal();
+  });
+}
+function applyFiltersGlobal() { computeWindow(); loadTab(activeTab); }
+async function loadSelectors() {
+  try {
+    const [f, a] = await Promise.all([api("/frames"), api("/accounts")]);
+    allFrames = f.frames || []; allAccounts = a.accounts || [];
+  } catch (_) { /* dropdowns are best-effort */ }
+  renderFilterBar();
+}
 
 function applyFilters(sec) {
   const inp = sec.querySelector(".filter");
@@ -219,6 +299,7 @@ async function onFrameModalAction(e) {
     if (frame) await apiSend(`/frames/${encodeURIComponent(b.dataset.id)}/enable?enabled=${to}`, "POST");
     else await apiSend(`/accounts/${encodeURIComponent(b.dataset.id)}/suspend?suspended=${to}`, "POST");
     closeFrame();
+    await loadSelectors();
     await loadTab("frames");
   } catch (err) {
     if (err.message !== "403") { alert("Action failed: " + err.message); b.disabled = false; }
@@ -291,7 +372,7 @@ function costCard(c) {
   const note = real.available
     ? `Actual is ${scoped ? "the Ink generation key's" : "org-wide"} OpenAI billing, cached hourly. Estimate is from tracked calls.`
     : `Actual OpenAI $ needs an Admin key — ${esc(real.note || "set OPENAI_ADMIN_KEY")}. Estimate is from tracked calls.`;
-  return `<div class="card"><h3>Cost · 30 days</h3>
+  return `<div class="card"><h3>Cost · ${esc(rangeLabel())}</h3>
     <div class="coststats">
       ${cstat("Est. OpenAI", usd(c.total_usd))}
       ${cstat("Actual OpenAI", real.available ? usd(real.total_usd) : "—", real.available ? (scoped ? "Ink key" : "org-wide") : "")}
@@ -318,7 +399,7 @@ function renderOverview(d) {
       ${kpi("Images made", num(d.artwork.ready))}
       ${kpi("Updates ready", num(f.update_available), `fw ${esc(d.latest_fw || "—")}`, f.update_available ? "warn" : "")}
     </div>
-    <h3 class="section-title">Generation · last 30 days</h3>
+    <h3 class="section-title">Generation · ${esc(rangeLabel())}</h3>
     <div class="kpis">
       ${kpi("Success rate", rate, `${num(g.ok)}/${num(g.runs)} runs`, g.runs && g.failed ? "warn" : (g.runs ? "good" : ""))}
       ${kpi("Est. spend", usd(g.cost_usd), "images · text · search")}
@@ -332,7 +413,7 @@ function renderOverview(d) {
         <div class="chart-legend"><span>USD per day</span></div></div>
     </div>
     ${costCard(d.costs)}
-    <h3 class="section-title">Traffic · last 14 days</h3>
+    <h3 class="section-title">Traffic · ${esc(rangeLabel())}</h3>
     <div class="card"><h3>API calls / day</h3>${barChart(apiSeries, { errKey: "err" })}
       <div class="chart-legend"><span><i style="background:var(--ink)"></i>calls ${num(a.calls)}</span><span><i style="background:var(--danger)"></i>errors ${num(a.errors)}</span><span>avg ${a.avg_ms ? Math.round(a.avg_ms) + "ms" : "—"}</span></div></div>`;
 }
@@ -358,8 +439,8 @@ function renderFrames(d) {
       <td class="mono">${fr.account_id ? esc(shortId(fr.account_id)) + susp : "—"}</td></tr>`;
   }).join("");
   $("tab-frames").innerHTML = `<div class="card">
-    <h3 class="hrow">All frames <span class="filter-count-h">(${d.frames.length})</span> ${activationSelect()} ${stateSelect()} ${filterBox("Filter frames…")}</h3>
-    <p class="chart-legend" style="margin:0 0 10px">Click a row for full details + actions. Deactivated frames are hidden by default. (Battery, Wi-Fi, interests, schedule &amp; sleep are in the popup.)</p>
+    <h3 class="hrow">All frames <span class="filter-count-h">(${d.frames.length})</span> ${filterBox("Filter frames…")}</h3>
+    <p class="chart-legend" style="margin:0 0 10px">Click a row for full details + actions. Use the Status filter above to include deactivated frames. (Battery, Wi-Fi, interests, schedule &amp; sleep are in the popup.)</p>
     <div class="tbl-wrap"><table><thead><tr>
       <th>State</th><th>Name</th><th>Last seen</th><th>Firmware</th><th>Last artwork</th><th>Account</th>
     </tr></thead><tbody>${rows || `<tr><td colspan="6" class="empty">No frames yet.</td></tr>`}</tbody></table></div></div>`;
@@ -369,7 +450,7 @@ function renderFrames(d) {
 
 async function loadGenerations() {
   $("tab-generations").innerHTML = `<p class="loading">Loading…</p>`;
-  const d = await api("/generations?limit=300");
+  const d = await api(withF("/generations?limit=300"));
   const rows = d.runs.map((r) => `<tr data-ts="${tsOf(r.created_at)}" data-trigger="${esc(r.trigger)}" data-result="${r.ok ? "ok" : "fail"}" data-search="${esc([r.device_id, r.trigger, r.ok ? "ok" : "fail failed", r.provider, r.phase, r.error].join(" ").toLowerCase())}">
     <td>${relTime(r.created_at)}</td>
     <td class="mono">${esc(frameCode(r.device_id))}</td>
@@ -383,7 +464,7 @@ async function loadGenerations() {
     <td class="wrap-cell">${r.ok ? "" : `<b>${esc(r.phase || "?")}</b> ${esc(r.error || "")}`}</td></tr>`).join("");
   $("tab-generations").innerHTML = `<div class="card">
     <h3 class="hrow">Generation runs <span class="filter-count-h">(${d.runs.length})</span>
-      ${rangeSelect()} ${selectFacet("trigger", [["", "Any trigger"], ["auto", "Auto"], ["manual", "Manual"]])}
+      ${selectFacet("trigger", [["", "Any trigger"], ["auto", "Auto"], ["manual", "Manual"]])}
       ${selectFacet("result", [["", "Any result"], ["ok", "OK"], ["fail", "Failed"]])} ${filterBox("Filter runs…")}</h3>
     <div class="tbl-wrap"><table><thead><tr>
       <th>When</th><th>Device</th><th>Trigger</th><th>Result</th><th>Duration</th><th>Retries</th>
@@ -394,7 +475,7 @@ async function loadGenerations() {
 
 async function loadGallery() {
   $("tab-gallery").innerHTML = `<p class="loading">Loading…</p>`;
-  const d = await api("/gallery?limit=150");
+  const d = await api(withF("/gallery?limit=150"));
   galleryItems = d.items;
   const shots = d.items.map((it, i) => {
     const search = [it.device_name, it.device_id, it.date, it.caption, it.event_visual, it.image_prompt].join(" ").toLowerCase();
@@ -403,7 +484,7 @@ async function loadGallery() {
       <div class="cap"><div class="d">${esc(it.device_name || frameCode(it.device_id))} · ${esc(it.date)}</div>
         <div class="c">${esc(it.caption || "—")}</div></div></div>`;
   }).join("");
-  $("tab-gallery").innerHTML = `<div class="card"><h3 class="hrow">Gallery <span class="filter-count-h">(${d.items.length})</span> ${rangeSelect()} ${filterBox("Filter by device, event, prompt…")}</h3>
+  $("tab-gallery").innerHTML = `<div class="card"><h3 class="hrow">Gallery <span class="filter-count-h">(${d.items.length})</span> ${filterBox("Filter by device, event, prompt…")}</h3>
     ${shots ? `<div class="gallery">${shots}</div>` : `<p class="empty">No images yet.</p>`}</div>`;
   $("tab-gallery").querySelectorAll(".shot").forEach((el) =>
     el.addEventListener("click", () => openArt(Number(el.dataset.i))));
@@ -449,7 +530,7 @@ async function loadAccounts() {
     const n = d.accounts.filter((a) => a.device_count === 0).length;
     if (!confirm(`Delete ${n} empty account${n === 1 ? "" : "s"} (no frames paired)? This can't be undone.`)) return;
     purge.disabled = true;
-    try { await apiSend("/accounts/purge-empty", "POST"); await loadTab("accounts"); }
+    try { await apiSend("/accounts/purge-empty", "POST"); await loadSelectors(); await loadTab("accounts"); }
     catch (err) { if (err.message !== "403") { alert("Purge failed: " + err.message); purge.disabled = false; } }
   });
   setupFilters("tab-accounts");
@@ -463,6 +544,7 @@ async function onAccountAction(e) {
   try {
     if (b.dataset.act === "suspend") await apiSend(`/accounts/${encodeURIComponent(id)}/suspend?suspended=${b.dataset.to === "1"}`, "POST");
     else await apiSend(`/accounts/${encodeURIComponent(id)}`, "DELETE");
+    await loadSelectors();
     await loadAccounts();
   } catch (err) {
     if (err.message !== "403") { alert("Action failed: " + err.message); b.disabled = false; }
@@ -471,7 +553,7 @@ async function onAccountAction(e) {
 
 async function loadApi() {
   $("tab-api").innerHTML = `<p class="loading">Loading…</p>`;
-  const d = await api("/api-calls?limit=250");
+  const d = await api(withF("/api-calls?limit=250"));
   const byKind = d.stats.by_kind.map((k) => `${esc(k.kind)} ${num(k.calls)}`).join(" · ");
   const rows = d.calls.map((c) => `<tr data-ts="${tsOf(c.ts)}" data-kind="${esc(c.kind)}" data-search="${esc([c.method, c.path, c.kind, c.device_id, c.status].join(" ").toLowerCase())}">
     <td>${relTime(c.ts)}</td><td>${esc(c.method)}</td>
@@ -479,7 +561,7 @@ async function loadApi() {
     <td>${esc(c.kind)}</td><td class="mono">${esc(frameCode(c.device_id))}</td>
     <td><span class="pill ${c.status >= 400 ? "fail" : "ok"}">${c.status}</span></td>
     <td>${c.ms}ms</td></tr>`).join("");
-  $("tab-api").innerHTML = `<div class="card"><h3 class="hrow">Recent API calls ${rangeSelect()} ${selectFacet("kind", [["", "All kinds"], ["app", "App"], ["media", "Media"], ["firmware", "Firmware"]])} ${filterBox("Filter by path, device, status…")}</h3>
+  $("tab-api").innerHTML = `<div class="card"><h3 class="hrow">Recent API calls ${selectFacet("kind", [["", "All kinds"], ["app", "App"], ["media", "Media"], ["firmware", "Firmware"]])} ${filterBox("Filter by path, device, status…")}</h3>
     <div class="chart-legend" style="margin:0 0 10px">${esc(byKind || "no traffic yet")}</div>
     <div class="tbl-wrap"><table><thead><tr>
       <th>When</th><th>Method</th><th>Path</th><th>Kind</th><th>Device</th><th>Status</th><th>Latency</th>
@@ -492,8 +574,8 @@ let pendingFilter = "";   // set when jumping to a tab pre-filtered for one fram
 async function loadTab(tab) {
   activeTab = tab;
   try {
-    if (tab === "overview") renderOverview(await api("/overview"));
-    else if (tab === "frames") renderFrames(await api("/frames"));
+    if (tab === "overview") renderOverview(await api(withF("/overview")));
+    else if (tab === "frames") renderFrames(await api(withF("/frames")));
     else if (tab === "generations") await loadGenerations();
     else if (tab === "gallery") await loadGallery();
     else if (tab === "accounts") await loadAccounts();

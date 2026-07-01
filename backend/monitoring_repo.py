@@ -35,14 +35,37 @@ def record_generation_run(**f: object) -> None:
         )
 
 
-def list_generation_runs(limit: int = 100, device_id: str | None = None,
-                         only_failed: bool = False) -> list[dict]:
-    where, params = [], []
+# Cap on how many day-rows a chart series returns (a year of daily bars).
+_MAX_DAYS = 366
+
+
+def _date_conds(col: str, start: str | None, end: str | None) -> tuple[list, list]:
+    """Inclusive date-window conditions comparing the YYYY-MM-DD prefix of an ISO
+    timestamp column. Dates are UTC, matching how timestamps are stored."""
+    conds, params = [], []
+    if start:
+        conds.append(f"substr({col}, 1, 10) >= ?"); params.append(start)
+    if end:
+        conds.append(f"substr({col}, 1, 10) <= ?"); params.append(end)
+    return conds, params
+
+
+def _gen_conds(start, end, device_id, account_id) -> tuple[list, list]:
+    conds, params = _date_conds("created_at", start, end)
     if device_id:
-        where.append("device_id = ?"); params.append(device_id)
+        conds.append("device_id = ?"); params.append(device_id)
+    if account_id:
+        conds.append("account_id = ?"); params.append(account_id)
+    return conds, params
+
+
+def list_generation_runs(limit: int = 100, device_id: str | None = None,
+                         only_failed: bool = False, start: str | None = None,
+                         end: str | None = None, account_id: str | None = None) -> list[dict]:
+    conds, params = _gen_conds(start, end, device_id, account_id)
     if only_failed:
-        where.append("ok = 0")
-    clause = ("WHERE " + " AND ".join(where)) if where else ""
+        conds.append("ok = 0")
+    clause = ("WHERE " + " AND ".join(conds)) if conds else ""
     with get_connection() as conn:
         rows = conn.execute(
             f"SELECT * FROM generation_runs {clause} ORDER BY id DESC LIMIT ?",
@@ -51,21 +74,28 @@ def list_generation_runs(limit: int = 100, device_id: str | None = None,
         return [dict(r) for r in rows]
 
 
-def generation_stats(days: int = 30) -> dict:
+def generation_stats(start: str | None = None, end: str | None = None,
+                     device_id: str | None = None,
+                     account_id: str | None = None) -> dict:
+    """Totals + per-day series over the given date window (all-time if unset).
+    Both the totals and the series honor the window, so they never disagree."""
+    conds, params = _gen_conds(start, end, device_id, account_id)
+    where = ("WHERE " + " AND ".join(conds)) if conds else ""
     with get_connection() as conn:
         totals = conn.execute(
-            """SELECT COUNT(*) AS runs, SUM(ok) AS ok, SUM(cost_usd) AS cost,
-                      SUM(retries) AS retries, AVG(duration_ms) AS avg_ms,
-                      SUM(image_calls) AS images, SUM(text_calls) AS texts,
-                      SUM(search_calls) AS searches, SUM(text_tokens) AS tokens
-               FROM generation_runs"""
+            f"""SELECT COUNT(*) AS runs, SUM(ok) AS ok, SUM(cost_usd) AS cost,
+                       SUM(retries) AS retries, AVG(duration_ms) AS avg_ms,
+                       SUM(image_calls) AS images, SUM(text_calls) AS texts,
+                       SUM(search_calls) AS searches, SUM(text_tokens) AS tokens
+                FROM generation_runs {where}""",
+            params,
         ).fetchone()
         by_day = conn.execute(
-            """SELECT substr(created_at, 1, 10) AS day,
-                      COUNT(*) AS runs, SUM(ok) AS ok, SUM(cost_usd) AS cost
-               FROM generation_runs
-               GROUP BY day ORDER BY day DESC LIMIT ?""",
-            (days,),
+            f"""SELECT substr(created_at, 1, 10) AS day,
+                       COUNT(*) AS runs, SUM(ok) AS ok, SUM(cost_usd) AS cost
+                FROM generation_runs {where}
+                GROUP BY day ORDER BY day DESC LIMIT ?""",
+            params + [_MAX_DAYS],
         ).fetchall()
     return {"totals": dict(totals), "by_day": [dict(r) for r in by_day][::-1]}
 
@@ -91,30 +121,43 @@ def record_api_call(method: str, path: str, kind: str, device_id: str | None,
             )
 
 
-def list_api_calls(limit: int = 200) -> list[dict]:
+def list_api_calls(limit: int = 200, start: str | None = None,
+                   end: str | None = None, device_id: str | None = None) -> list[dict]:
+    conds, params = _date_conds("ts", start, end)
+    if device_id:
+        conds.append("device_id = ?"); params.append(device_id)
+    clause = ("WHERE " + " AND ".join(conds)) if conds else ""
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT * FROM api_calls ORDER BY id DESC LIMIT ?", (limit,)
+            f"SELECT * FROM api_calls {clause} ORDER BY id DESC LIMIT ?", params + [limit]
         ).fetchall()
         return [dict(r) for r in rows]
 
 
-def api_call_stats(days: int = 7) -> dict:
+def api_call_stats(start: str | None = None, end: str | None = None,
+                   device_id: str | None = None) -> dict:
+    conds, params = _date_conds("ts", start, end)
+    if device_id:
+        conds.append("device_id = ?"); params.append(device_id)
+    where = ("WHERE " + " AND ".join(conds)) if conds else ""
     with get_connection() as conn:
         totals = conn.execute(
-            """SELECT COUNT(*) AS calls,
-                      SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) AS errors,
-                      AVG(ms) AS avg_ms
-               FROM api_calls"""
+            f"""SELECT COUNT(*) AS calls,
+                       SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) AS errors,
+                       AVG(ms) AS avg_ms
+                FROM api_calls {where}""",
+            params,
         ).fetchone()
         by_day = conn.execute(
-            """SELECT substr(ts, 1, 10) AS day, COUNT(*) AS calls,
-                      SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) AS errors
-               FROM api_calls GROUP BY day ORDER BY day DESC LIMIT ?""",
-            (days,),
+            f"""SELECT substr(ts, 1, 10) AS day, COUNT(*) AS calls,
+                       SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) AS errors
+                FROM api_calls {where} GROUP BY day ORDER BY day DESC LIMIT ?""",
+            params + [_MAX_DAYS],
         ).fetchall()
         by_kind = conn.execute(
-            "SELECT kind, COUNT(*) AS calls FROM api_calls GROUP BY kind ORDER BY calls DESC"
+            f"""SELECT kind, COUNT(*) AS calls FROM api_calls {where}
+                GROUP BY kind ORDER BY calls DESC""",
+            params,
         ).fetchall()
     return {
         "totals": dict(totals),

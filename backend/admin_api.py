@@ -56,6 +56,24 @@ def _interests(device) -> dict:
     }
 
 
+def _filter_devices(devices, device_id=None, account_id=None, status=None):
+    """Narrow a device list by the global filters. `status` accepts the frame
+    lifecycle values used by the console: active | deactivated | online | sleep |
+    offline (the connectivity states imply enabled)."""
+    out = devices
+    if device_id:
+        out = [d for d in out if d.id == device_id]
+    if account_id:
+        out = [d for d in out if d.account_id == account_id]
+    if status == "active":
+        out = [d for d in out if d.enabled]
+    elif status == "deactivated":
+        out = [d for d in out if not d.enabled]
+    elif status in ("online", "sleep", "offline"):
+        out = [d for d in out if d.enabled and _state(d) == status]
+    return out
+
+
 def _frame(device, latest) -> dict:
     return {
         "id": device.id,
@@ -85,16 +103,20 @@ def _frame(device, latest) -> dict:
 
 
 @router.get("/overview")
-async def overview() -> dict:
-    devices = repositories.list_all_devices()
+async def overview(start: str | None = None, end: str | None = None,
+                   device: str | None = None, account: str | None = None) -> dict:
+    all_devices = repositories.list_all_devices()
+    # Fleet counts honor the frame/account filters (not date — they're live state).
+    devices = _filter_devices(all_devices, device_id=device, account_id=account)
     active = [d for d in devices if d.enabled]        # deactivated frames excluded from the live buckets
     states = [_state(d) for d in active]
     # "Active" = enabled and checked in within 48h (online frames poll ~1/min;
     # healthy sleepers wake daily) — a single health number instead of 3 buckets.
     active_48h = sum(1 for d in active
                      if (_age_seconds(d.last_seen) or 1e12) < 48 * 3600)
-    gen = monitoring_repo.generation_stats(days=30)
-    api = monitoring_repo.api_call_stats(days=14)
+    gen = monitoring_repo.generation_stats(start=start, end=end,
+                                            device_id=device, account_id=account)
+    api = monitoring_repo.api_call_stats(start=start, end=end, device_id=device)
     art = artwork_repo.counts()
     t = gen["totals"]
     runs = t.get("runs") or 0
@@ -129,7 +151,7 @@ async def overview() -> dict:
             "by_day": gen["by_day"],
         },
         "costs": {**_cost_breakdown(t),
-                  "openai_actual": await openai_costs.fetch(30),
+                  "openai_actual": await openai_costs.fetch(start=start, end=end),
                   "fly_monthly_usd": get_settings().fly_monthly_usd},
         "api": api,
     }
@@ -158,10 +180,13 @@ def _cost_breakdown(totals: dict) -> dict:
 
 
 @router.get("/frames")
-async def frames() -> dict:
+async def frames(device: str | None = None, account: str | None = None,
+                 status: str | None = None) -> dict:
     suspended = {a.id: a.suspended for a in repositories.list_accounts(limit=500)}
+    devices = _filter_devices(repositories.list_all_devices(),
+                              device_id=device, account_id=account, status=status)
     out = []
-    for d in repositories.list_all_devices():
+    for d in devices:
         fr = _frame(d, artwork_repo.latest_ready(d.id))
         fr["account_suspended"] = suspended.get(d.account_id) if d.account_id else None
         out.append(fr)
@@ -170,20 +195,32 @@ async def frames() -> dict:
 
 @router.get("/generations")
 async def generations(limit: int = 100, device: str | None = None,
-                      failed: bool = False) -> dict:
+                      failed: bool = False, start: str | None = None,
+                      end: str | None = None, account: str | None = None) -> dict:
     return {"runs": monitoring_repo.list_generation_runs(
-        limit=min(limit, 500), device_id=device, only_failed=failed)}
+        limit=min(limit, 500), device_id=device, only_failed=failed,
+        start=start, end=end, account_id=account)}
 
 
 @router.get("/gallery")
-async def gallery(limit: int = 120) -> dict:
-    devices = {d.id: d for d in repositories.list_all_devices()}
+async def gallery(limit: int = 120, start: str | None = None, end: str | None = None,
+                  device: str | None = None, account: str | None = None) -> dict:
+    all_devices = {d.id: d for d in repositories.list_all_devices()}
+    # Which device ids pass the frame/account filter (gallery has no status concept).
+    allowed = {d.id for d in _filter_devices(list(all_devices.values()),
+                                             device_id=device, account_id=account)}
     items = []
     for a in artwork_repo.list_all_ready(limit=min(limit, 500)):
+        if a.device_id not in allowed:
+            continue
+        if start and a.date < start:
+            continue
+        if end and a.date > end:
+            continue
         # Skip rows whose image file is gone — they'd render as a broken thumbnail.
         if not generation.archive_image_path(a.device_id, a.date).exists():
             continue
-        dev = devices.get(a.device_id)
+        dev = all_devices.get(a.device_id)
         items.append({
             "device_id": a.device_id,
             "device_name": (dev.name if dev else "") or "",
@@ -204,10 +241,12 @@ async def gallery(limit: int = 120) -> dict:
 
 
 @router.get("/api-calls")
-async def api_calls(limit: int = 200) -> dict:
+async def api_calls(limit: int = 200, start: str | None = None,
+                    end: str | None = None, device: str | None = None) -> dict:
     return {
-        "calls": monitoring_repo.list_api_calls(limit=min(limit, 1000)),
-        "stats": monitoring_repo.api_call_stats(days=14),
+        "calls": monitoring_repo.list_api_calls(limit=min(limit, 1000), start=start,
+                                                end=end, device_id=device),
+        "stats": monitoring_repo.api_call_stats(start=start, end=end, device_id=device),
     }
 
 
