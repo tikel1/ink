@@ -44,10 +44,9 @@ let currentScreen = null;
 // Toggle which screen is visible (no history side effects).
 function setScreen(name) {
   for (const s of SCREENS) $(`screen-${s}`).hidden = s !== name;
-  // Home and the Frame screen are fixed single viewports (no scroll). The Frame
-  // screen can temporarily unlock when its description is expanded via "Read
-  // more" (handled in setFrameExpanded).
-  const fixed = name === "home" || name === "frame";
+  // Only Home is a fixed single viewport (no scroll). The Frame screen scrolls
+  // normally so the preview image can be large and the content flows below.
+  const fixed = name === "home";
   $("app").classList.toggle("locked", fixed);
   // Also lock the <body> so the page itself can't scroll/rubber-band a few pixels
   // (overflow:hidden on #app alone doesn't stop body-level scroll).
@@ -838,30 +837,15 @@ function renderOtherEvents(events) {
 // The Frame screen is a fixed one viewport. The description is clamped to 4
 // lines; if it's longer, a "Read more" toggle expands it (and lets the screen
 // scroll while expanded so the full text is reachable).
-// The frame screen scrolls when EITHER the description is expanded (Read more) or
-// the "Also on this day" section is open; otherwise it's locked to one viewport
-// with the image flexed large. `.expanded` = full text (clamp lift); `.scroll` =
-// layout/scroll/touch (either open).
-let readMoreOpen = false;
-let alsoOpen = false;
-function applyFrameScroll() {
-  const open = readMoreOpen || alsoOpen;
-  $("screen-frame").classList.toggle("scroll", open);
-  $("app").classList.toggle("locked", !open);
-  document.body.classList.toggle("home-locked", !open);
-  if (!open) window.scrollTo(0, 0);
-}
+// The frame page scrolls normally, so Read-more and "Also on this day" just
+// expand their content in place. `.expanded` lifts the 4-line description clamp.
 function setFrameExpanded(on) {
-  readMoreOpen = on;
   $("screen-frame").classList.toggle("expanded", on);
   $("ev-more").textContent = on ? "Read less" : "Read more";
-  applyFrameScroll();
 }
 function setAlsoOpen(on) {
-  alsoOpen = on;
   $("also-list").hidden = !on;
   $("also-toggle").setAttribute("aria-expanded", on ? "true" : "false");
-  applyFrameScroll();
 }
 function updateReadMore() {
   const ev = $("ev-text"), btn = $("ev-more");
