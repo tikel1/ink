@@ -90,15 +90,28 @@
     .chart-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 
     /* Gallery */
-    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; align-items: start; }
     .shot { background: var(--card); border: 1.5px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
-    .shot img { width: 100%; display: block; background: #fff; aspect-ratio: 1 / 1; object-fit: contain; }
+    /* Match the tile aspect to the artwork's orientation so it fills edge-to-edge
+       (no letterbox, no crop) — the date/signature at the margins stay visible. */
+    .shot img { width: 100%; display: block; background: #fff; object-fit: contain; aspect-ratio: 800 / 480; }
+    .shot.portrait img { aspect-ratio: 480 / 800; }
+    .shot.landscape img { aspect-ratio: 800 / 480; }
     .shot .cap { padding: 8px 10px; }
     .shot .cap .d { font-size: 11px; color: var(--muted); }
     .shot .cap .c { font-size: 12px; color: var(--soft); margin-top: 2px;
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .empty { color: var(--muted); font-size: 14px; padding: 20px 0; text-align: center; }
     .loading { color: var(--muted); padding: 30px 0; text-align: center; }
+
+    /* Row action buttons (accounts) */
+    .rowbtn { padding: 5px 11px; border-radius: 8px; border: 1.5px solid var(--line);
+      background: var(--paper-2); color: var(--soft); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+    .rowbtn:hover { border-color: var(--ink); color: var(--ink); }
+    .rowbtn.danger { border-color: rgba(155,59,47,.4); color: var(--danger); }
+    .rowbtn.danger:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+    .rowbtn + .rowbtn { margin-left: 6px; }
+    .rowbtn:disabled { opacity: .5; cursor: default; }
   </style>
 </head>
 <body>
@@ -127,12 +140,14 @@
       <button data-tab="frames">Frames</button>
       <button data-tab="generations">Generations</button>
       <button data-tab="gallery">Gallery</button>
+      <button data-tab="accounts">Accounts</button>
       <button data-tab="api">API calls</button>
     </nav>
     <section id="tab-overview" class="tab"></section>
     <section id="tab-frames" class="tab" hidden></section>
     <section id="tab-generations" class="tab" hidden></section>
     <section id="tab-gallery" class="tab" hidden></section>
+    <section id="tab-accounts" class="tab" hidden></section>
     <section id="tab-api" class="tab" hidden></section>
   </div>
 

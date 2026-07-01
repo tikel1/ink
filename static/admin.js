@@ -53,6 +53,19 @@ async function api(path) {
   }
 }
 
+async function apiSend(path, method) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const res = await fetch(API + path, { method, headers: { "X-Admin-Token": token }, cache: "no-store", signal: ctrl.signal });
+    if (res.status === 403) { logout("Session expired — re-enter the token."); throw new Error("403"); }
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── auth ────────────────────────────────────────────────────────────────
 function logout(msg) {
   token = ""; sessionStorage.removeItem(TOKEN_KEY);
@@ -188,12 +201,59 @@ async function loadGenerations() {
 async function loadGallery() {
   $("tab-gallery").innerHTML = `<p class="loading">Loading…</p>`;
   const d = await api("/gallery?limit=150");
-  const shots = d.items.map((it) => `<div class="shot">
+  const shots = d.items.map((it) => `<div class="shot ${it.orientation === "portrait" ? "portrait" : "landscape"}">
     <img loading="lazy" src="${esc(BASE + it.image_url)}" alt="${esc(it.caption || "")}" />
     <div class="cap"><div class="d">${esc(it.device_name || shortId(it.device_id))} · ${esc(it.date)}</div>
       <div class="c">${esc(it.caption || "—")}</div></div></div>`).join("");
   $("tab-gallery").innerHTML = `<div class="card"><h3>Gallery (${d.items.length})</h3>
     ${shots ? `<div class="gallery">${shots}</div>` : `<p class="empty">No images yet.</p>`}</div>`;
+}
+
+const INACTIVE_DAYS = 30;
+function acctStatus(a) {
+  if (a.suspended) return "suspended";
+  const s = a.last_active ? (Date.now() - new Date(a.last_active).getTime()) / 86400000 : Infinity;
+  return s > INACTIVE_DAYS ? "inactive" : "active";
+}
+async function loadAccounts() {
+  $("tab-accounts").innerHTML = `<p class="loading">Loading…</p>`;
+  const d = await api("/accounts");
+  const rows = d.accounts.map((a) => {
+    const st = acctStatus(a);
+    const pill = st === "active" ? "online" : st === "suspended" ? "fail" : "sleep";
+    return `<tr>
+      <td>${esc(a.email || "—")}<div class="mono" style="color:var(--muted)">${esc(shortId(a.id))}</div></td>
+      <td><span class="pill ${pill}">${st}</span></td>
+      <td>${a.device_count}</td>
+      <td>${a.last_active ? relTime(a.last_active) : "never"}</td>
+      <td>${a.created_at ? dayLabel(a.created_at.slice(0, 10)) : "—"}</td>
+      <td>${a.has_own_key ? "own key" : "platform"}</td>
+      <td style="text-align:right">
+        <button class="rowbtn" data-act="suspend" data-id="${esc(a.id)}" data-to="${a.suspended ? "0" : "1"}">${a.suspended ? "Reactivate" : "Deactivate"}</button>
+        <button class="rowbtn danger" data-act="delete" data-id="${esc(a.id)}" data-label="${esc(a.email || shortId(a.id))}">Delete</button>
+      </td></tr>`;
+  }).join("");
+  $("tab-accounts").innerHTML = `<div class="card">
+    <h3>Accounts (${d.accounts.length})</h3>
+    <p class="chart-legend" style="margin:0 0 10px">Deactivate blocks the app + scheduler (reversible). Delete unbinds its frames and removes the account (permanent).</p>
+    <div class="tbl-wrap"><table><thead><tr>
+      <th>Account</th><th>Status</th><th>Frames</th><th>Last active</th><th>Created</th><th>Key</th><th></th>
+    </tr></thead><tbody>${rows || `<tr><td colspan="7" class="empty">No accounts.</td></tr>`}</tbody></table></div></div>`;
+  $("tab-accounts").querySelectorAll(".rowbtn").forEach((b) => b.addEventListener("click", onAccountAction));
+}
+async function onAccountAction(e) {
+  const b = e.currentTarget, id = b.dataset.id;
+  if (b.dataset.act === "delete") {
+    if (!confirm(`Delete account "${b.dataset.label}"?\n\nIts frames are unbound (become re-pairable) and the account is removed. This can't be undone.`)) return;
+  }
+  b.disabled = true;
+  try {
+    if (b.dataset.act === "suspend") await apiSend(`/accounts/${encodeURIComponent(id)}/suspend?suspended=${b.dataset.to === "1"}`, "POST");
+    else await apiSend(`/accounts/${encodeURIComponent(id)}`, "DELETE");
+    await loadAccounts();
+  } catch (err) {
+    if (err.message !== "403") { alert("Action failed: " + err.message); b.disabled = false; }
+  }
 }
 
 async function loadApi() {
@@ -221,6 +281,7 @@ async function loadTab(tab) {
     else if (tab === "frames") renderFrames(await api("/frames"));
     else if (tab === "generations") await loadGenerations();
     else if (tab === "gallery") await loadGallery();
+    else if (tab === "accounts") await loadAccounts();
     else if (tab === "api") await loadApi();
     stamp();
   } catch (e) {

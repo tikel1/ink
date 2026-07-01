@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from . import artwork_repo, auth, firmware_repo, monitoring_repo, repositories, storage
 
@@ -139,3 +139,44 @@ async def api_calls(limit: int = 200) -> dict:
         "calls": monitoring_repo.list_api_calls(limit=min(limit, 1000)),
         "stats": monitoring_repo.api_call_stats(days=14),
     }
+
+
+# --------------------------------------------------------------------------- #
+# Account management
+# --------------------------------------------------------------------------- #
+@router.get("/accounts")
+async def accounts() -> dict:
+    out = []
+    for a in repositories.list_accounts(limit=500):
+        devices = repositories.list_account_devices(a.id)
+        last = max((d.last_seen for d in devices if d.last_seen), default=None)
+        out.append({
+            "id": a.id,
+            "email": a.email,
+            "created_at": a.created_at,
+            "suspended": a.suspended,
+            "device_count": len(devices),
+            "last_active": last,
+            "has_own_key": a.use_own_key,
+        })
+    return {"accounts": out}
+
+
+@router.post("/accounts/{account_id}/suspend")
+async def set_suspended(account_id: str, suspended: bool = True) -> dict:
+    """Deactivate (suspend) or reactivate an account. Suspended accounts are
+    blocked from the app and skipped by the generation scheduler — reversible."""
+    if repositories.get_account(account_id) is None:
+        raise HTTPException(status_code=404, detail="account not found")
+    repositories.set_account_suspended(account_id, suspended)
+    return {"account_id": account_id, "suspended": suspended}
+
+
+@router.delete("/accounts/{account_id}")
+async def remove_account(account_id: str) -> dict:
+    """Permanently delete an account. Its frames are unbound (returned to
+    re-pairable), artwork rows survive; the account row is removed."""
+    if repositories.get_account(account_id) is None:
+        raise HTTPException(status_code=404, detail="account not found")
+    repositories.delete_account(account_id)
+    return {"deleted": account_id}
