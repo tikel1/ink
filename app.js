@@ -813,19 +813,55 @@ function setPlacard(m) {
   en.textContent = m.event_text_en || "—";
   const sig = currentDevice && currentDevice.signature;
   if (sig) { sign.textContent = `— ${sig}`; sign.hidden = false; } else sign.hidden = true;
+  renderOtherEvents(m.other_events);
+  setAlsoOpen(false);          // each item starts with its runner-ups collapsed
   updateReadMore();
+}
+
+// "Also on this day": the date-verified runner-up events the curator didn't pick.
+// Captions come from the model → render as text (never innerHTML).
+function renderOtherEvents(events) {
+  const sec = $("other-events"), ul = $("also-list");
+  const items = (Array.isArray(events) ? events : [])
+    .filter((e) => e && (e.caption || "").trim());
+  ul.innerHTML = "";
+  if (!items.length) { sec.hidden = true; return; }
+  for (const e of items) {
+    const li = document.createElement("li");
+    li.className = "also-item";
+    li.textContent = e.caption.trim();
+    ul.appendChild(li);
+  }
+  sec.hidden = false;
 }
 
 // The Frame screen is a fixed one viewport. The description is clamped to 4
 // lines; if it's longer, a "Read more" toggle expands it (and lets the screen
 // scroll while expanded so the full text is reachable).
+// The frame screen scrolls when EITHER the description is expanded (Read more) or
+// the "Also on this day" section is open; otherwise it's locked to one viewport
+// with the image flexed large. `.expanded` = full text (clamp lift); `.scroll` =
+// layout/scroll/touch (either open).
+let readMoreOpen = false;
+let alsoOpen = false;
+function applyFrameScroll() {
+  const open = readMoreOpen || alsoOpen;
+  $("screen-frame").classList.toggle("scroll", open);
+  $("app").classList.toggle("locked", !open);
+  document.body.classList.toggle("home-locked", !open);
+  if (!open) window.scrollTo(0, 0);
+}
 function setFrameExpanded(on) {
+  readMoreOpen = on;
   $("screen-frame").classList.toggle("expanded", on);
   $("ev-more").textContent = on ? "Read less" : "Read more";
-  // Expanded → allow the page to scroll; collapsed → fixed one viewport.
-  $("app").classList.toggle("locked", !on);
-  document.body.classList.toggle("home-locked", !on);
-  if (!on) window.scrollTo(0, 0);
+  applyFrameScroll();
+}
+function setAlsoOpen(on) {
+  alsoOpen = on;
+  $("also-list").hidden = !on;
+  $("also-toggle").setAttribute("aria-expanded", on ? "true" : "false");
+  applyFrameScroll();
 }
 function updateReadMore() {
   const ev = $("ev-text"), btn = $("ev-more");
@@ -926,6 +962,7 @@ function wireFrame() {
   // buildHomeCards. Here we only wire the carousel scroll → active dot/frame.
   $("home-carousel").addEventListener("scroll", onHomeScroll, { passive: true });
   $("ev-more").addEventListener("click", () => setFrameExpanded(!$("screen-frame").classList.contains("expanded")));
+  $("also-toggle").addEventListener("click", () => setAlsoOpen($("also-list").hidden));
   attachPullToRefresh("home", homeRefresh);
   attachPullToRefresh("frame", frameRefresh);
   $("gallery").addEventListener("scroll", onGalleryScroll, { passive: true });
