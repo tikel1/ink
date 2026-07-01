@@ -278,23 +278,27 @@ function kpi(label, value, sub, accent) {
 }
 function costCard(c) {
   c = c || {};
-  const est = (c.items || []).map((it) =>
-    `<tr><td>${esc(it.type)}</td><td class="mono">${num(it.calls)}</td><td style="color:var(--muted)">${esc(it.unit)}</td><td class="mono" style="text-align:right">${usd(it.usd)}</td></tr>`).join("");
   const real = c.openai_actual || {};
-  const realBlock = real.available
-    ? `<h4 class="cost-sub">Actual billed · OpenAI org · 30 days</h4>
-       <div class="tbl-wrap"><table><thead><tr><th>Line item</th><th style="text-align:right">Billed</th></tr></thead><tbody>
-       ${(real.by_line_item || []).map((li) => `<tr><td>${esc(li.name)}</td><td class="mono" style="text-align:right">${usd(li.usd)}</td></tr>`).join("") || `<tr><td colspan="2" class="empty">No charges in range.</td></tr>`}
-       <tr style="font-weight:700"><td>OpenAI total</td><td class="mono" style="text-align:right">${usd(real.total_usd)}</td></tr></tbody></table></div>
-       <p class="hint">Org-wide OpenAI billing (every project on the key's org), cached hourly.</p>`
-    : `<p class="hint">Actual OpenAI billing unavailable — ${esc(real.note || "not configured")}</p>`;
+  const cstat = (label, val, sub) =>
+    `<div class="cstat"><div class="cs-label">${esc(label)}</div><div class="cs-val">${val}</div>${sub ? `<div class="cs-sub">${sub}</div>` : ""}</div>`;
+  const brk = (c.items || []).map((it) =>
+    `<span>${esc(it.type.split(" (")[0])} <b>${usd(it.usd)}</b> <i>${num(it.calls)}</i></span>`).join("");
+  const lines = real.available && (real.by_line_item || []).length
+    ? `<details class="cost-lines"><summary>OpenAI line items</summary><dl>${real.by_line_item.map((li) =>
+        `<dt>${esc(li.name)}</dt><dd class="mono">${usd(li.usd)}</dd>`).join("")}</dl></details>`
+    : "";
+  const note = real.available
+    ? `Actual is org-wide OpenAI billing, cached hourly. Estimate assumes image generation is ~all the cost (text/search use Gemini free tier).`
+    : `Actual OpenAI $ needs an Admin key — ${esc(real.note || "set OPENAI_ADMIN_KEY")}. Estimate is from tracked calls.`;
   return `<div class="card"><h3>Cost · 30 days</h3>
-    <h4 class="cost-sub">Estimated by call type (from tracked calls)</h4>
-    <div class="tbl-wrap"><table><thead><tr><th>Call type</th><th>Calls</th><th>Rate</th><th style="text-align:right">Est. cost</th></tr></thead>
-    <tbody>${est}<tr style="font-weight:700"><td>Estimated total</td><td></td><td></td><td class="mono" style="text-align:right">${usd(c.total_usd)}</td></tr></tbody></table></div>
-    <p class="hint">Text &amp; web search usually run on Gemini's free tier, so image generation is essentially the whole cost.</p>
-    ${realBlock}
-    <p class="hint">Fly infra (fixed estimate): ${usd(c.fly_monthly_usd)}/mo.</p></div>`;
+    <div class="coststats">
+      ${cstat("Est. OpenAI", usd(c.total_usd))}
+      ${cstat("Actual OpenAI", real.available ? usd(real.total_usd) : "—")}
+      ${cstat("Fly infra", usd(c.fly_monthly_usd) + `<small>/mo</small>`)}
+    </div>
+    <div class="costbreak">${brk}</div>
+    ${lines}
+    <p class="hint">${note}</p></div>`;
 }
 
 function renderOverview(d) {
@@ -307,9 +311,7 @@ function renderOverview(d) {
   $("tab-overview").innerHTML = `
     <h3 class="section-title">Fleet</h3>
     <div class="kpis">
-      ${kpi("Online", num(f.online), `of ${num(f.active)} active`, f.online ? "good" : "")}
-      ${kpi("Asleep", num(f.sleep))}
-      ${kpi("Offline", num(f.offline), null, f.offline ? "bad" : "")}
+      ${kpi("Active frames", num(f.active_48h), "online or asleep · 48h", f.active_48h ? "good" : "")}
       ${kpi("Frames", num(f.total), `${num(f.active)} active${esc(deact)}`)}
       ${kpi("Accounts", num(d.accounts))}
       ${kpi("Images made", num(d.artwork.ready))}
