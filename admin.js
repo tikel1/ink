@@ -235,7 +235,8 @@ function renderFrames(d) {
       <td>${fr.last_art_date ? esc(dayLabel(fr.last_art_date)) : "—"}<div class="wrap-cell" style="font-size:11px">${esc((fr.last_art_caption || "").slice(0, 80))}</div></td>
       <td>${String(fr.wake_hour).padStart(2, "0")}:${String(fr.wake_minute).padStart(2, "0")} · ${esc(fr.schedule || "")}</td>
       <td>${fr.sleep_after_minutes ? fr.sleep_after_minutes + "m" : "always on"}</td>
-      <td class="mono">${esc(shortId(fr.account_id))}</td>
+      <td class="mono">${fr.account_id ? esc(shortId(fr.account_id)) : "—"}
+        ${fr.account_id ? `<div style="margin-top:5px"><button class="rowbtn ${fr.account_suspended ? "" : "danger"}" data-act="acct" data-id="${esc(fr.account_id)}" data-to="${fr.account_suspended ? "0" : "1"}">${fr.account_suspended ? "Reactivate" : "Deactivate"}</button></div>` : ""}</td>
       <td>${fr.ota_error ? `<span class="pill fail">${esc(fr.ota_error)}</span>` : "—"}</td></tr>`;
   }).join("");
   $("tab-frames").innerHTML = `<div class="card">
@@ -244,7 +245,19 @@ function renderFrames(d) {
       <th>State</th><th>Name</th><th>Interests</th><th>Battery</th><th>Wi-Fi</th><th>Firmware</th><th>Last seen</th>
       <th>Last art</th><th>Wake</th><th>Sleep</th><th>Account</th><th>OTA</th>
     </tr></thead><tbody>${rows || `<tr><td colspan="12" class="empty">No frames yet.</td></tr>`}</tbody></table></div></div>`;
+  $("tab-frames").querySelectorAll('.rowbtn[data-act="acct"]').forEach((b) => b.addEventListener("click", onFrameAcctAction));
   setupFilters("tab-frames");
+}
+async function onFrameAcctAction(e) {
+  const b = e.currentTarget, suspend = b.dataset.to === "1";
+  if (suspend && !confirm("Deactivate this frame's account?\n\nEvery frame on this account stops updating until you reactivate it.")) return;
+  b.disabled = true;
+  try {
+    await apiSend(`/accounts/${encodeURIComponent(b.dataset.id)}/suspend?suspended=${suspend}`, "POST");
+    await loadTab("frames");
+  } catch (err) {
+    if (err.message !== "403") { alert("Action failed: " + err.message); b.disabled = false; }
+  }
 }
 
 let genFailedOnly = false;
