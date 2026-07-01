@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     # OpenAI Admin API key (sk-admin-…, from Dashboard → Organization → Admin keys)
     # for the org Costs/Usage API. The regular generation key can't read billing.
     openai_admin_key: str = ""
+    # Scope the Costs view to just the frame-generation key (its api_key_id, e.g.
+    # key_…) instead of the whole org. Empty = org-wide. Find it by grouping the
+    # Costs API by api_key_id, or in Dashboard → project → API keys.
+    openai_cost_api_key_id: str = ""
 
     # Storage
     data_dir: Path = Path("./data")

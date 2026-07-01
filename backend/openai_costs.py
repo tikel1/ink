@@ -36,7 +36,10 @@ async def fetch(days: int = 30) -> dict:
 
     settings = get_settings()
     key = settings.openai_admin_key or settings.platform_openai_api_key
-    result = {"available": False, "total_usd": 0.0, "by_line_item": [], "days": days, "note": ""}
+    key_id = settings.openai_cost_api_key_id
+    scope = "key" if key_id else "org"
+    result = {"available": False, "total_usd": 0.0, "by_line_item": [],
+              "days": days, "scope": scope, "note": ""}
     if not key:
         result["note"] = "No OpenAI key configured."
         _cache.update(ts=now, data=result)
@@ -51,6 +54,8 @@ async def fetch(days: int = 30) -> dict:
             for _ in range(20):  # safety-bounded pagination
                 params = {"start_time": start, "bucket_width": "1d", "limit": 180,
                           "group_by[]": ["line_item"]}
+                if key_id:  # scope spend to just the frame-generation key
+                    params["api_key_ids[]"] = [key_id]
                 if page:
                     params["page"] = page
                 r = await client.get(_COSTS_URL, params=params,

@@ -287,13 +287,14 @@ function costCard(c) {
     ? `<details class="cost-lines"><summary>OpenAI line items</summary><dl>${real.by_line_item.map((li) =>
         `<dt>${esc(li.name)}</dt><dd class="mono">${usd(li.usd)}</dd>`).join("")}</dl></details>`
     : "";
+  const scoped = real.scope === "key";
   const note = real.available
-    ? `Actual is org-wide OpenAI billing, cached hourly. Estimate assumes image generation is ~all the cost (text/search use Gemini free tier).`
+    ? `Actual is ${scoped ? "the Ink generation key's" : "org-wide"} OpenAI billing, cached hourly. Estimate is from tracked calls.`
     : `Actual OpenAI $ needs an Admin key — ${esc(real.note || "set OPENAI_ADMIN_KEY")}. Estimate is from tracked calls.`;
   return `<div class="card"><h3>Cost · 30 days</h3>
     <div class="coststats">
       ${cstat("Est. OpenAI", usd(c.total_usd))}
-      ${cstat("Actual OpenAI", real.available ? usd(real.total_usd) : "—")}
+      ${cstat("Actual OpenAI", real.available ? usd(real.total_usd) : "—", real.available ? (scoped ? "Ink key" : "org-wide") : "")}
       ${cstat("Fly infra", usd(c.fly_monthly_usd) + `<small>/mo</small>`)}
     </div>
     <div class="costbreak">${brk}</div>
