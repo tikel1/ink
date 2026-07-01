@@ -764,19 +764,34 @@ async function loadGallery(id) {
   try { ({ items } = await api(`/devices/${id}/archive?limit=10`)); } catch {}
   frameItems = items || [];
   const g = $("gallery");
+  g.style.height = "";
   if (!frameItems.length) {
     g.innerHTML = slideCard(isPortraitItem(null), `<div class="art-empty">No artwork yet —<br>tap Generate to create today's work.</div>`);
     setPlacard(null); renderDots(0, 0); return;
   }
   g.innerHTML = frameItems.map((m) => slideCard(isPortraitItem(m), `<img alt="artwork" />`)).join("");
   g.querySelectorAll(".slide img").forEach((img, i) => {
-    img.onload = () => img.classList.add("loaded");
+    img.onload = () => { img.classList.add("loaded"); fitGalleryHeight(); };
     img.src = serverBase() + frameItems[i].image_url + `?t=${Date.now()}`;
     img.style.cursor = "zoom-in";
     img.addEventListener("click", () => openLightbox(frameItems[i]));
   });
   g.scrollLeft = 0;
   setPlacard(frameItems[0]); renderDots(0, frameItems.length);
+  fitGalleryHeight();
+}
+
+// The gallery is a swipeable carousel that can mix portrait (tall) and landscape
+// (short) works. A flex row takes the tallest slide's height and centers shorter
+// ones, leaving big gaps above/below a landscape image. Pin the gallery to the
+// ACTIVE slide's height so each orientation fits snugly (off-screen taller slides
+// are clipped by the gallery's overflow — they're not visible anyway).
+function fitGalleryHeight() {
+  const g = $("gallery");
+  if (!g || !frameItems.length) return;
+  const idx = Math.max(0, Math.min(frameItems.length - 1, Math.round(g.scrollLeft / (g.clientWidth || 1))));
+  const card = g.querySelectorAll(".art-card")[idx];
+  if (card) g.style.height = Math.ceil(card.getBoundingClientRect().height) + "px";
 }
 
 // --------------------------------------------------------------------------
@@ -867,7 +882,7 @@ function onGalleryScroll() {
   cancelAnimationFrame(galleryRAF);
   galleryRAF = requestAnimationFrame(() => {
     const i = Math.round(g.scrollLeft / g.clientWidth);
-    if (frameItems[i]) { setPlacard(frameItems[i]); renderDots(i, frameItems.length); }
+    if (frameItems[i]) { setPlacard(frameItems[i]); renderDots(i, frameItems.length); fitGalleryHeight(); }
   });
 }
 
