@@ -276,6 +276,26 @@ function kpi(label, value, sub, accent) {
   return `<div class="kpi${accent ? " " + accent : ""}"><div class="label">${esc(label)}</div>
     <div class="value">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
 }
+function costCard(c) {
+  c = c || {};
+  const est = (c.items || []).map((it) =>
+    `<tr><td>${esc(it.type)}</td><td class="mono">${num(it.calls)}</td><td style="color:var(--muted)">${esc(it.unit)}</td><td class="mono" style="text-align:right">${usd(it.usd)}</td></tr>`).join("");
+  const real = c.openai_actual || {};
+  const realBlock = real.available
+    ? `<h4 class="cost-sub">Actual billed · OpenAI org · 30 days</h4>
+       <div class="tbl-wrap"><table><thead><tr><th>Line item</th><th style="text-align:right">Billed</th></tr></thead><tbody>
+       ${(real.by_line_item || []).map((li) => `<tr><td>${esc(li.name)}</td><td class="mono" style="text-align:right">${usd(li.usd)}</td></tr>`).join("") || `<tr><td colspan="2" class="empty">No charges in range.</td></tr>`}
+       <tr style="font-weight:700"><td>OpenAI total</td><td class="mono" style="text-align:right">${usd(real.total_usd)}</td></tr></tbody></table></div>
+       <p class="hint">Org-wide OpenAI billing (every project on the key's org), cached hourly.</p>`
+    : `<p class="hint">Actual OpenAI billing unavailable — ${esc(real.note || "not configured")}</p>`;
+  return `<div class="card"><h3>Cost · 30 days</h3>
+    <h4 class="cost-sub">Estimated by call type (from tracked calls)</h4>
+    <div class="tbl-wrap"><table><thead><tr><th>Call type</th><th>Calls</th><th>Rate</th><th style="text-align:right">Est. cost</th></tr></thead>
+    <tbody>${est}<tr style="font-weight:700"><td>Estimated total</td><td></td><td></td><td class="mono" style="text-align:right">${usd(c.total_usd)}</td></tr></tbody></table></div>
+    <p class="hint">Text &amp; web search usually run on Gemini's free tier, so image generation is essentially the whole cost.</p>
+    ${realBlock}
+    <p class="hint">Fly infra (fixed estimate): ${usd(c.fly_monthly_usd)}/mo.</p></div>`;
+}
 
 function renderOverview(d) {
   const g = d.generation, f = d.frames, a = d.api.totals;
@@ -308,11 +328,7 @@ function renderOverview(d) {
       <div class="card"><h3>Estimated cost / day</h3>${barChart(costSeries)}
         <div class="chart-legend"><span>USD per day</span></div></div>
     </div>
-    <div class="card"><h3>Estimated cost by call type · 30 days</h3>
-      <div class="tbl-wrap"><table><thead><tr><th>Call type</th><th>Calls</th><th>Rate</th><th style="text-align:right">Est. cost</th></tr></thead>
-      <tbody>${(d.costs?.items || []).map((it) => `<tr><td>${esc(it.type)}</td><td class="mono">${num(it.calls)}</td><td style="color:var(--muted)">${esc(it.unit)}</td><td class="mono" style="text-align:right">${usd(it.usd)}</td></tr>`).join("")}
-        <tr style="font-weight:700"><td>Total</td><td></td><td></td><td class="mono" style="text-align:right">${usd(d.costs?.total_usd)}</td></tr></tbody></table></div>
-      <p class="hint">Estimated from tracked call counts. Text &amp; web search usually run on Gemini's free tier, so image generation is essentially the whole cost. Actual OpenAI/Fly billing isn't wired in yet.</p></div>
+    ${costCard(d.costs)}
     <h3 class="section-title">Traffic · last 14 days</h3>
     <div class="card"><h3>API calls / day</h3>${barChart(apiSeries, { errKey: "err" })}
       <div class="chart-legend"><span><i style="background:var(--ink)"></i>calls ${num(a.calls)}</span><span><i style="background:var(--danger)"></i>errors ${num(a.errors)}</span><span>avg ${a.avg_ms ? Math.round(a.avg_ms) + "ms" : "—"}</span></div></div>`;
