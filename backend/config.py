@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     # Fly has no per-app cost API, so the admin console shows this fixed monthly
     # infra estimate (machine + volume). Override via FLY_MONTHLY_USD.
     fly_monthly_usd: float = 5.0
+    # OpenAI Admin API key (sk-admin-…, from Dashboard → Organization → Admin keys)
+    # for the org Costs/Usage API. The regular generation key can't read billing.
+    openai_admin_key: str = ""
 
     # Storage
     data_dir: Path = Path("./data")

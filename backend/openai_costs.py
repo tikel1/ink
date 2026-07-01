@@ -26,10 +26,11 @@ async def fetch(days: int = 30) -> dict:
     if _cache["data"] is not None and now - _cache["ts"] < _TTL_SECONDS:
         return _cache["data"]
 
-    key = get_settings().platform_openai_api_key
+    settings = get_settings()
+    key = settings.openai_admin_key or settings.platform_openai_api_key
     result = {"available": False, "total_usd": 0.0, "by_line_item": [], "days": days, "note": ""}
     if not key:
-        result["note"] = "No platform OpenAI key configured."
+        result["note"] = "No OpenAI key configured."
         _cache.update(ts=now, data=result)
         return result
 
@@ -47,8 +48,8 @@ async def fetch(days: int = 30) -> dict:
                 r = await client.get(_COSTS_URL, params=params,
                                      headers={"Authorization": f"Bearer {key}"})
                 if r.status_code != 200:
-                    result["note"] = (f"OpenAI Costs API returned {r.status_code} — the key "
-                                      "needs organisation read access (an admin/unrestricted key).")
+                    result["note"] = (f"OpenAI Costs API returned {r.status_code} — set OPENAI_ADMIN_KEY "
+                                      "to an Admin key (Dashboard → Organization → Admin keys).")
                     _cache.update(ts=now, data=result)
                     return result
                 body = r.json()
