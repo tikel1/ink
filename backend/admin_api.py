@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
-from . import artwork_repo, auth, firmware_repo, generation, monitoring_repo, repositories, storage
+from . import artwork_repo, auth, costs, firmware_repo, generation, monitoring_repo, repositories, storage
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[auth.AdminDep])
 
@@ -121,7 +121,30 @@ async def overview() -> dict:
             "tokens": t.get("tokens") or 0,
             "by_day": gen["by_day"],
         },
+        "costs": _cost_breakdown(t),
         "api": api,
+    }
+
+
+def _cost_breakdown(totals: dict) -> dict:
+    """Estimated OpenAI spend split by call type, from the tracked call counts.
+    Text/search usually run on Gemini's free tier, so image generation dominates."""
+    images = totals.get("images") or 0
+    searches = totals.get("searches") or 0
+    text_calls = totals.get("texts") or 0
+    tokens = totals.get("tokens") or 0
+    image_usd = round(images * costs.IMAGE_COST_USD["medium"], 2)
+    search_usd = round(searches * costs.SEARCH_COST_USD, 2)
+    text_usd = round((tokens / 1000.0) * costs.TEXT_COST_PER_1K if tokens
+                     else text_calls * costs.TEXT_FALLBACK_PER_CALL, 2)
+    return {
+        "estimated": True,
+        "items": [
+            {"type": "Image generation", "calls": images, "unit": f"${costs.IMAGE_COST_USD['medium']:.2f}/image", "usd": image_usd},
+            {"type": "Web search", "calls": searches, "unit": f"${costs.SEARCH_COST_USD:.2f}/call", "usd": search_usd},
+            {"type": "Text (event pick · checker · narration)", "calls": text_calls, "unit": f"{tokens:,} tokens", "usd": text_usd},
+        ],
+        "total_usd": round(image_usd + search_usd + text_usd, 2),
     }
 
 
