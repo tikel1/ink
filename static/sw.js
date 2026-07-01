@@ -3,7 +3,7 @@
 // shows up on the next load, and fall back to the cache only when offline. (This
 // replaced cache-first, which kept serving stale CSS/JS until a version bump.)
 // API + media always hit the network directly.
-const CACHE = "ink-app-v101";
+const CACHE = "ink-app-v102";
 const SHELL = ["./", "index.html", "app.js", "styles.css", "jsqr.js", "walnut.jpg", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "icon-192-maskable.png", "icon-512-maskable.png", "apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
