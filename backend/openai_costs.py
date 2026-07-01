@@ -21,6 +21,14 @@ _TTL_SECONDS = 3600
 _cache: dict = {"ts": 0.0, "data": None}
 
 
+def _to_float(value) -> float:
+    """OpenAI money fields arrive as decimal strings; coerce safely to float."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 async def fetch(days: int = 30) -> dict:
     now = time.time()
     if _cache["data"] is not None and now - _cache["ts"] < _TTL_SECONDS:
@@ -42,7 +50,7 @@ async def fetch(days: int = 30) -> dict:
             page = None
             for _ in range(20):  # safety-bounded pagination
                 params = {"start_time": start, "bucket_width": "1d", "limit": 180,
-                          "group_by": ["line_item"]}
+                          "group_by[]": ["line_item"]}
                 if page:
                     params["page"] = page
                 r = await client.get(_COSTS_URL, params=params,
@@ -55,9 +63,11 @@ async def fetch(days: int = 30) -> dict:
                 body = r.json()
                 for bucket in body.get("data", []):
                     for item in bucket.get("results", []):
-                        amount = ((item.get("amount") or {}).get("value")) or 0.0
+                        # OpenAI returns amount.value as a decimal STRING (e.g. "0E-6176").
+                        amount = _to_float((item.get("amount") or {}).get("value"))
                         total += amount
-                        name = item.get("line_item") or "other"
+                        li = item.get("line_item")
+                        name = li if li else "other"
                         agg[name] = agg.get(name, 0.0) + amount
                 if body.get("has_more") and body.get("next_page"):
                     page = body["next_page"]
