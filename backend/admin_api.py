@@ -40,20 +40,25 @@ def _state(device) -> str:
     return "offline"
 
 
-def _frame(device, latest) -> dict:
+def _interests(device) -> dict:
+    """Split a device's interests into preset chips vs user custom text, list the
+    active holiday categories, and flag the lone-default ('israel') case."""
     tokens = [t.strip() for t in (device.interests or "").split(",") if t.strip()]
-    preset = [t for t in tokens if t.lower() in PRESET_INTERESTS]
-    custom = [t for t in tokens if t.lower() not in PRESET_INTERESTS]
-    holidays = [n for n, on in (("Jewish", device.holiday_jewish),
-                                ("Israeli", device.holiday_israeli),
-                                ("Global", device.holiday_global)) if on]
+    return {
+        "interests_preset": [t for t in tokens if t.lower() in PRESET_INTERESTS],
+        "interests_custom": [t for t in tokens if t.lower() not in PRESET_INTERESTS],
+        "interests_default": DEFAULT_INTEREST if tokens == [DEFAULT_INTEREST] else None,
+        "holidays": [n for n, on in (("Jewish", device.holiday_jewish),
+                                     ("Israeli", device.holiday_israeli),
+                                     ("Global", device.holiday_global)) if on],
+    }
+
+
+def _frame(device, latest) -> dict:
     return {
         "id": device.id,
         "name": device.name or "",
-        "interests_preset": preset,
-        "interests_custom": custom,
-        "interests_default": DEFAULT_INTEREST if tokens == [DEFAULT_INTEREST] else None,
-        "holidays": holidays,
+        **_interests(device),
         "account_id": device.account_id,
         "status": device.status,
         "state": _state(device),
@@ -137,15 +142,17 @@ async def generations(limit: int = 100, device: str | None = None,
 
 @router.get("/gallery")
 async def gallery(limit: int = 120) -> dict:
-    names = {d.id: (d.name or "") for d in repositories.list_all_devices()}
+    devices = {d.id: d for d in repositories.list_all_devices()}
     items = []
     for a in artwork_repo.list_all_ready(limit=min(limit, 500)):
         # Skip rows whose image file is gone — they'd render as a broken thumbnail.
         if not generation.archive_image_path(a.device_id, a.date).exists():
             continue
+        dev = devices.get(a.device_id)
         items.append({
             "device_id": a.device_id,
-            "device_name": names.get(a.device_id, ""),
+            "device_name": (dev.name if dev else "") or "",
+            **(_interests(dev) if dev else {}),
             "date": a.date,
             "image_url": storage.archive_url(a.device_id, a.date),
             "caption": a.event_caption or a.event_text_en,
@@ -188,6 +195,16 @@ async def accounts() -> dict:
             "has_own_key": a.use_own_key,
         })
     return {"accounts": out}
+
+
+@router.post("/frames/{device_id}/enable")
+async def set_frame_enabled(device_id: str, enabled: bool = True) -> dict:
+    """Enable/disable a single frame (device.enabled). A disabled frame is skipped
+    by the scheduler — deactivates just this frame, not its whole account."""
+    if repositories.get_device(device_id) is None:
+        raise HTTPException(status_code=404, detail="frame not found")
+    repositories.update_device_config(device_id, enabled=enabled)
+    return {"device_id": device_id, "enabled": enabled}
 
 
 @router.post("/accounts/{account_id}/suspend")

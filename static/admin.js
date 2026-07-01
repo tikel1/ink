@@ -133,6 +133,67 @@ function setupFilters(sectionId) {
 }
 const tsOf = (iso) => iso ? Date.parse(iso) || 0 : 0;
 
+// Interest chips shared by the frames table (capped), the frame popup, and the
+// gallery popup. Returns "" when there are none (callers supply their own dash).
+function interestChips(o, limit) {
+  const chips = [
+    ...(o.interests_preset || []).map((t) => [o.interests_default ? "default" : "preset", t]),
+    ...(o.interests_custom || []).map((t) => ["custom", t]),
+    ...(o.holidays || []).map((t) => ["holi", t]),
+  ];
+  if (!chips.length) return "";
+  const shown = limit ? chips.slice(0, limit) : chips;
+  let html = shown.map(([c, t]) => `<span class="ichip ${c}">${esc(t)}</span>`).join("");
+  if (limit && chips.length > limit) html += `<span class="ichip more">+${chips.length - limit}</span>`;
+  return html;
+}
+
+// ── frame detail popup ────────────────────────────────────────────────────
+let framesData = [];
+function openFrame(id) {
+  const fr = framesData.find((f) => f.id === id); if (!fr) return;
+  $("frame-title").textContent = fr.name || shortId(fr.id);
+  const row = (k, v) => (v == null || v === "") ? "" : `<dt>${esc(k)}</dt><dd>${v}</dd>`;
+  $("frame-detail").innerHTML =
+    row("State", statePill(fr.state) + (fr.enabled === false ? ` <span class="pill fail">disabled</span>` : "")) +
+    row("Frame ID", `<span class="mono">${esc(fr.id)}</span>`) +
+    row("Account", fr.account_id ? `<span class="mono">${esc(fr.account_id)}</span>${fr.account_suspended ? ` <span class="pill fail">suspended</span>` : ""}` : "unpaired") +
+    row("Battery", fr.battery != null ? fr.battery.toFixed(2) + " V" : "—") +
+    row("Wi-Fi", wifiLabel(fr.wifi_rssi)) +
+    row("Firmware", esc(fr.fw_version || "—") + (fr.update_available ? ` → ${esc(fr.latest_fw)} available` : "")) +
+    row("Orientation", esc(fr.orientation || "—")) +
+    row("Update time", `${String(fr.wake_hour).padStart(2, "0")}:${String(fr.wake_minute).padStart(2, "0")} · ${esc(fr.schedule || "")}`) +
+    row("Sleep", fr.sleep_after_minutes ? fr.sleep_after_minutes + " min" : "always on") +
+    row("Interests", interestChips(fr)) +
+    row("Last artwork", fr.last_art_date ? `${esc(fr.last_art_date)} — ${esc(fr.last_art_caption || "")}` : "none") +
+    row("Last seen", fr.last_seen ? relTime(fr.last_seen) : "never") +
+    row("Created", fr.created_at ? fr.created_at.slice(0, 10) : "—") +
+    row("OTA error", fr.ota_error ? `<span class="pill fail">${esc(fr.ota_error)}</span>` : "");
+  const frameBtn = `<button class="rowbtn ${fr.enabled === false ? "" : "danger"}" data-fa="frame" data-id="${esc(fr.id)}" data-to="${fr.enabled === false ? "1" : "0"}">${fr.enabled === false ? "Activate frame" : "Deactivate frame"}</button>`;
+  const acctBtn = fr.account_id ? `<button class="rowbtn ${fr.account_suspended ? "" : "danger"}" data-fa="acct" data-id="${esc(fr.account_id)}" data-to="${fr.account_suspended ? "0" : "1"}">${fr.account_suspended ? "Reactivate account" : "Deactivate account"}</button>` : "";
+  $("frame-actions").innerHTML = frameBtn + acctBtn;
+  $("frame-actions").querySelectorAll("[data-fa]").forEach((b) => b.addEventListener("click", onFrameModalAction));
+  $("frame-modal").hidden = false;
+}
+const closeFrame = () => { $("frame-modal").hidden = true; };
+async function onFrameModalAction(e) {
+  const b = e.currentTarget, to = b.dataset.to === "1", frame = b.dataset.fa === "frame";
+  if (!to) {  // deactivating — confirm
+    const msg = frame ? "Deactivate this frame? It stops updating until reactivated."
+      : "Deactivate this account? Every frame on it stops updating until reactivated.";
+    if (!confirm(msg)) return;
+  }
+  b.disabled = true;
+  try {
+    if (frame) await apiSend(`/frames/${encodeURIComponent(b.dataset.id)}/enable?enabled=${to}`, "POST");
+    else await apiSend(`/accounts/${encodeURIComponent(b.dataset.id)}/suspend?suspended=${to}`, "POST");
+    closeFrame();
+    await loadTab("frames");
+  } catch (err) {
+    if (err.message !== "403") { alert("Action failed: " + err.message); b.disabled = false; }
+  }
+}
+
 // ── gallery preview lightbox ──────────────────────────────────────────────
 let galleryItems = [];
 function openArt(i) {
@@ -149,6 +210,7 @@ function openArt(i) {
     row("Iconic visual", it.event_visual) +
     row("Weather", it.weather_summary) +
     row("Orientation", it.orientation) +
+    row("Interests", interestChips(it)) +
     row("Image prompt", it.image_prompt, true);
   $("art-modal").hidden = false;
 }
@@ -214,50 +276,37 @@ function renderOverview(d) {
 function statePill(s) { return `<span class="pill ${s}">${s}</span>`; }
 
 function renderFrames(d) {
+  framesData = d.frames;
   const rows = d.frames.map((fr) => {
-    const bat = fr.state === "online" || fr.battery ? (fr.battery != null ? fr.battery.toFixed(2) + "V" : "—") : "—";
+    const bat = fr.battery != null ? fr.battery.toFixed(2) + "V" : "—";
     const upd = fr.update_available ? ` <span class="pill manual">upd</span>` : "";
-    const preset = fr.interests_preset || [], custom = fr.interests_custom || [], holis = fr.holidays || [];
-    const iChips = [
-      ...preset.map((t) => `<span class="ichip ${fr.interests_default ? "default" : "preset"}">${esc(t)}</span>`),
-      ...custom.map((t) => `<span class="ichip custom">${esc(t)}</span>`),
-      ...holis.map((h) => `<span class="ichip holi">${esc(h)}</span>`),
-    ].join("") || `<span style="color:var(--muted)">—</span>`;
+    const off = fr.enabled === false ? ` <span class="pill fail">off</span>` : "";
+    const susp = fr.account_suspended ? ` <span class="pill fail">susp</span>` : "";
     const s = [fr.name, fr.id, fr.state, fr.fw_version, fr.account_id, fr.last_art_caption, fr.ota_error,
-      ...preset, ...custom].join(" ").toLowerCase();
+      ...(fr.interests_preset || []), ...(fr.interests_custom || [])].join(" ").toLowerCase();
     return `<tr data-search="${esc(s)}" data-state="${esc(fr.state)}">
-      <td>${statePill(fr.state)}</td>
-      <td>${esc(fr.name || shortId(fr.id))}<div class="mono" style="color:var(--muted)">${esc(shortId(fr.id))}</div></td>
-      <td class="chips-cell">${iChips}</td>
+      <td>${statePill(fr.state)}${off}</td>
+      <td><button class="linkname" data-fid="${esc(fr.id)}">${esc(fr.name || shortId(fr.id))}</button>
+        <div class="mono" style="color:var(--muted)">${esc(shortId(fr.id))}</div></td>
+      <td class="chips-cell">${interestChips(fr, 3) || `<span style="color:var(--muted)">—</span>`}</td>
       <td>${bat}</td><td>${esc(wifiLabel(fr.wifi_rssi))}</td>
       <td>${esc(fr.fw_version || "—")}${upd}</td>
       <td>${relTime(fr.last_seen)}</td>
       <td>${fr.last_art_date ? esc(dayLabel(fr.last_art_date)) : "—"}<div class="wrap-cell" style="font-size:11px">${esc((fr.last_art_caption || "").slice(0, 80))}</div></td>
       <td>${String(fr.wake_hour).padStart(2, "0")}:${String(fr.wake_minute).padStart(2, "0")} · ${esc(fr.schedule || "")}</td>
       <td>${fr.sleep_after_minutes ? fr.sleep_after_minutes + "m" : "always on"}</td>
-      <td class="mono">${fr.account_id ? esc(shortId(fr.account_id)) : "—"}
-        ${fr.account_id ? `<div style="margin-top:5px"><button class="rowbtn ${fr.account_suspended ? "" : "danger"}" data-act="acct" data-id="${esc(fr.account_id)}" data-to="${fr.account_suspended ? "0" : "1"}">${fr.account_suspended ? "Reactivate" : "Deactivate"}</button></div>` : ""}</td>
+      <td class="mono">${fr.account_id ? esc(shortId(fr.account_id)) + susp : "—"}</td>
       <td>${fr.ota_error ? `<span class="pill fail">${esc(fr.ota_error)}</span>` : "—"}</td></tr>`;
   }).join("");
   $("tab-frames").innerHTML = `<div class="card">
     <h3 class="hrow">All frames (${d.frames.length}) ${statusFacets()} ${filterBox("Filter frames…")}</h3>
+    <p class="chart-legend" style="margin:0 0 10px">Click a frame name for full details + actions (deactivate frame or account).</p>
     <div class="tbl-wrap"><table><thead><tr>
       <th>State</th><th>Name</th><th>Interests</th><th>Battery</th><th>Wi-Fi</th><th>Firmware</th><th>Last seen</th>
-      <th>Last art</th><th>Wake</th><th>Sleep</th><th>Account</th><th>OTA</th>
+      <th>Last art</th><th>Update</th><th>Sleep</th><th>Account</th><th>OTA</th>
     </tr></thead><tbody>${rows || `<tr><td colspan="12" class="empty">No frames yet.</td></tr>`}</tbody></table></div></div>`;
-  $("tab-frames").querySelectorAll('.rowbtn[data-act="acct"]').forEach((b) => b.addEventListener("click", onFrameAcctAction));
+  $("tab-frames").querySelectorAll(".linkname").forEach((b) => b.addEventListener("click", () => openFrame(b.dataset.fid)));
   setupFilters("tab-frames");
-}
-async function onFrameAcctAction(e) {
-  const b = e.currentTarget, suspend = b.dataset.to === "1";
-  if (suspend && !confirm("Deactivate this frame's account?\n\nEvery frame on this account stops updating until you reactivate it.")) return;
-  b.disabled = true;
-  try {
-    await apiSend(`/accounts/${encodeURIComponent(b.dataset.id)}/suspend?suspended=${suspend}`, "POST");
-    await loadTab("frames");
-  } catch (err) {
-    if (err.message !== "403") { alert("Action failed: " + err.message); b.disabled = false; }
-  }
 }
 
 let genFailedOnly = false;
@@ -399,7 +448,9 @@ $("logout-btn").addEventListener("click", () => logout(""));
 $("refresh-btn").addEventListener("click", () => loadTab(activeTab));
 $("art-close").addEventListener("click", closeArt);
 $("art-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeArt(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeArt(); });
+$("frame-close").addEventListener("click", closeFrame);
+$("frame-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeFrame(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeArt(); closeFrame(); } });
 document.querySelectorAll("#tabs button").forEach((b) =>
   b.addEventListener("click", () => {
     document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("active", x === b));
