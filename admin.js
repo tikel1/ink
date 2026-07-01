@@ -37,7 +37,7 @@ const wifiLabel = (r) => (r == null || r === 0) ? "—"
 
 async function api(path) {
   const res = await fetch(API + path, { headers: { "X-Admin-Token": token }, cache: "no-store" });
-  if (res.status === 403) { logout("Token rejected."); throw new Error("403"); }
+  if (res.status === 403) throw new Error("403");
   if (!res.ok) throw new Error("HTTP " + res.status);
   return res.json();
 }
@@ -56,8 +56,13 @@ async function unlock(candidate) {
     $("login").hidden = true; $("console").hidden = false;
     renderOverview(data); stamp();
   } catch (e) {
-    if (e.message !== "403") $("login-err").textContent = "Couldn't reach the server.";
     token = "";
+    console.error("admin unlock failed:", e, "API base:", API);
+    $("login-err").textContent =
+      e.message === "403" ? "Token rejected — check the ADMIN_TOKEN."
+      : e.message && e.message.startsWith("HTTP")
+        ? `API returned ${e.message} at ${API} — wrong URL? Open it from the backend, or add ?api=<backend>.`
+        : `Couldn't reach the API at ${API} (${e.message}).`;
   }
 }
 function stamp() { $("refreshed").textContent = "updated " + new Date().toLocaleTimeString(); }
@@ -208,14 +213,16 @@ async function loadTab(tab) {
     else if (tab === "api") await loadApi();
     stamp();
   } catch (e) {
-    if (e.message !== "403") $("tab-" + tab).innerHTML = `<p class="empty">Failed to load: ${esc(e.message)}</p>`;
+    if (e.message === "403") logout("Session expired — re-enter the token.");
+    else $("tab-" + tab).innerHTML = `<p class="empty">Failed to load: ${esc(e.message)}</p>`;
   }
 }
 
 // ── wiring ──────────────────────────────────────────────────────────────
 $("login-form").addEventListener("submit", (e) => {
-  e.preventDefault(); $("login-err").textContent = "";
+  e.preventDefault();
   const v = $("token").value.trim();
+  $("login-err").textContent = v ? "Checking…" : "Enter the admin token.";
   if (v) unlock(v);
 });
 $("logout-btn").addEventListener("click", () => logout(""));
