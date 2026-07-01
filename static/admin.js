@@ -91,6 +91,46 @@ async function unlock(candidate) {
 }
 function stamp() { $("refreshed").textContent = "updated " + new Date().toLocaleTimeString(); }
 
+// A per-section text filter: show only rows/cards whose data-search contains the query.
+const filterBox = (ph) => `<input class="filter" placeholder="${ph}" /> <span class="filter-count"></span>`;
+function wireFilter(sectionId) {
+  const sec = $(sectionId), inp = sec.querySelector(".filter");
+  if (!inp) return;
+  const items = [...sec.querySelectorAll("[data-search]")];
+  const count = sec.querySelector(".filter-count");
+  const apply = () => {
+    const q = inp.value.trim().toLowerCase();
+    let n = 0;
+    items.forEach((el) => {
+      const show = !q || el.dataset.search.includes(q);
+      el.style.display = show ? "" : "none";
+      if (show) n++;
+    });
+    if (count) count.textContent = q ? `${n} of ${items.length}` : "";
+  };
+  inp.addEventListener("input", apply);
+}
+
+// ── gallery preview lightbox ──────────────────────────────────────────────
+let galleryItems = [];
+function openArt(i) {
+  const it = galleryItems[i]; if (!it) return;
+  $("art-title").textContent = `${it.device_name || shortId(it.device_id)} · ${it.date}`;
+  $("art-img").src = BASE + it.image_url;
+  const row = (label, val, pre) => !val ? "" :
+    `<dt>${esc(label)}</dt><dd>${pre ? `<pre>${esc(val)}</pre>` : esc(val)}</dd>`;
+  $("art-detail").innerHTML =
+    row("Event", it.event_caption) +
+    row("Final description", it.event_text_en) +
+    row("Hebrew", it.event_text_he) +
+    row("Iconic visual", it.event_visual) +
+    row("Weather", it.weather_summary) +
+    row("Orientation", it.orientation) +
+    row("Image prompt", it.image_prompt, true);
+  $("art-modal").hidden = false;
+}
+const closeArt = () => { $("art-modal").hidden = true; };
+
 // ── charts (inline SVG, no libs) ──────────────────────────────────────────
 function barChart(series, { errKey } = {}) {
   if (!series || !series.length) return `<p class="empty">No data yet.</p>`;
@@ -154,7 +194,8 @@ function renderFrames(d) {
   const rows = d.frames.map((fr) => {
     const bat = fr.state === "online" || fr.battery ? (fr.battery != null ? fr.battery.toFixed(2) + "V" : "—") : "—";
     const upd = fr.update_available ? ` <span class="pill manual">upd</span>` : "";
-    return `<tr>
+    const s = [fr.name, fr.id, fr.state, fr.fw_version, fr.account_id, fr.last_art_caption, fr.ota_error].join(" ").toLowerCase();
+    return `<tr data-search="${esc(s)}">
       <td>${statePill(fr.state)}</td>
       <td>${esc(fr.name || shortId(fr.id))}<div class="mono" style="color:var(--muted)">${esc(shortId(fr.id))}</div></td>
       <td>${bat}</td><td>${esc(wifiLabel(fr.wifi_rssi))}</td>
@@ -166,18 +207,19 @@ function renderFrames(d) {
       <td class="mono">${esc(shortId(fr.account_id))}</td>
       <td>${fr.ota_error ? `<span class="pill fail">${esc(fr.ota_error)}</span>` : "—"}</td></tr>`;
   }).join("");
-  $("tab-frames").innerHTML = `<div class="card"><h3>All frames (${d.frames.length})</h3>
+  $("tab-frames").innerHTML = `<div class="card"><h3 class="hrow">All frames (${d.frames.length}) ${filterBox("Filter frames…")}</h3>
     <div class="tbl-wrap"><table><thead><tr>
       <th>State</th><th>Name</th><th>Battery</th><th>Wi-Fi</th><th>Firmware</th><th>Last seen</th>
       <th>Last art</th><th>Wake</th><th>Sleep</th><th>Account</th><th>OTA</th>
     </tr></thead><tbody>${rows || `<tr><td colspan="11" class="empty">No frames yet.</td></tr>`}</tbody></table></div></div>`;
+  wireFilter("tab-frames");
 }
 
 let genFailedOnly = false;
 async function loadGenerations() {
   $("tab-generations").innerHTML = `<p class="loading">Loading…</p>`;
   const d = await api("/generations?limit=200" + (genFailedOnly ? "&failed=true" : ""));
-  const rows = d.runs.map((r) => `<tr>
+  const rows = d.runs.map((r) => `<tr data-search="${esc([r.device_id, r.trigger, r.ok ? "ok" : "fail failed", r.provider, r.phase, r.error].join(" ").toLowerCase())}">
     <td>${relTime(r.created_at)}</td>
     <td class="mono">${esc(shortId(r.device_id))}</td>
     <td><span class="pill ${r.trigger}">${esc(r.trigger)}</span></td>
@@ -189,24 +231,33 @@ async function loadGenerations() {
     <td>${esc(r.provider || "—")}</td>
     <td class="wrap-cell">${r.ok ? "" : `<b>${esc(r.phase || "?")}</b> ${esc(r.error || "")}`}</td></tr>`).join("");
   $("tab-generations").innerHTML = `<div class="card">
-    <h3 style="display:flex;align-items:center;gap:12px">Generation runs (${d.runs.length})
-      <label style="font-size:12px;font-weight:400;color:var(--soft)"><input type="checkbox" id="gen-failed" ${genFailedOnly ? "checked" : ""}/> failures only</label></h3>
+    <h3 class="hrow">Generation runs (${d.runs.length})
+      <label style="font-size:12px;font-weight:400;color:var(--soft)"><input type="checkbox" id="gen-failed" ${genFailedOnly ? "checked" : ""}/> failures only</label>
+      ${filterBox("Filter runs…")}</h3>
     <div class="tbl-wrap"><table><thead><tr>
       <th>When</th><th>Device</th><th>Trigger</th><th>Result</th><th>Duration</th><th>Retries</th>
       <th>Cost</th><th>Calls</th><th>Provider</th><th>Error</th>
     </tr></thead><tbody>${rows || `<tr><td colspan="10" class="empty">No generation runs recorded yet.</td></tr>`}</tbody></table></div></div>`;
   $("gen-failed").addEventListener("change", (e) => { genFailedOnly = e.target.checked; loadGenerations(); });
+  wireFilter("tab-generations");
 }
 
 async function loadGallery() {
   $("tab-gallery").innerHTML = `<p class="loading">Loading…</p>`;
   const d = await api("/gallery?limit=150");
-  const shots = d.items.map((it) => `<div class="shot ${it.orientation === "portrait" ? "portrait" : "landscape"}">
-    <img loading="lazy" src="${esc(BASE + it.image_url)}" alt="${esc(it.caption || "")}" />
-    <div class="cap"><div class="d">${esc(it.device_name || shortId(it.device_id))} · ${esc(it.date)}</div>
-      <div class="c">${esc(it.caption || "—")}</div></div></div>`).join("");
-  $("tab-gallery").innerHTML = `<div class="card"><h3>Gallery (${d.items.length})</h3>
+  galleryItems = d.items;
+  const shots = d.items.map((it, i) => {
+    const search = [it.device_name, it.device_id, it.date, it.caption, it.event_visual, it.image_prompt].join(" ").toLowerCase();
+    return `<div class="shot ${it.orientation === "portrait" ? "portrait" : "landscape"}" data-i="${i}" data-search="${esc(search)}">
+      <img loading="lazy" src="${esc(BASE + it.image_url)}" alt="${esc(it.caption || "")}" />
+      <div class="cap"><div class="d">${esc(it.device_name || shortId(it.device_id))} · ${esc(it.date)}</div>
+        <div class="c">${esc(it.caption || "—")}</div></div></div>`;
+  }).join("");
+  $("tab-gallery").innerHTML = `<div class="card"><h3 class="hrow">Gallery (${d.items.length}) ${filterBox("Filter by device, event, prompt…")}</h3>
     ${shots ? `<div class="gallery">${shots}</div>` : `<p class="empty">No images yet.</p>`}</div>`;
+  $("tab-gallery").querySelectorAll(".shot").forEach((el) =>
+    el.addEventListener("click", () => openArt(Number(el.dataset.i))));
+  wireFilter("tab-gallery");
 }
 
 const INACTIVE_DAYS = 30;
@@ -221,7 +272,7 @@ async function loadAccounts() {
   const rows = d.accounts.map((a) => {
     const st = acctStatus(a);
     const pill = st === "active" ? "online" : st === "suspended" ? "fail" : "sleep";
-    return `<tr>
+    return `<tr data-search="${esc([a.email, a.id, st].join(" ").toLowerCase())}">
       <td>${esc(a.email || "—")}<div class="mono" style="color:var(--muted)">${esc(shortId(a.id))}</div></td>
       <td><span class="pill ${pill}">${st}</span></td>
       <td>${a.device_count}</td>
@@ -234,12 +285,13 @@ async function loadAccounts() {
       </td></tr>`;
   }).join("");
   $("tab-accounts").innerHTML = `<div class="card">
-    <h3>Accounts (${d.accounts.length})</h3>
+    <h3 class="hrow">Accounts (${d.accounts.length}) ${filterBox("Filter accounts…")}</h3>
     <p class="chart-legend" style="margin:0 0 10px">Deactivate blocks the app + scheduler (reversible). Delete unbinds its frames and removes the account (permanent).</p>
     <div class="tbl-wrap"><table><thead><tr>
       <th>Account</th><th>Status</th><th>Frames</th><th>Last active</th><th>Created</th><th>Key</th><th></th>
     </tr></thead><tbody>${rows || `<tr><td colspan="7" class="empty">No accounts.</td></tr>`}</tbody></table></div></div>`;
   $("tab-accounts").querySelectorAll(".rowbtn").forEach((b) => b.addEventListener("click", onAccountAction));
+  wireFilter("tab-accounts");
 }
 async function onAccountAction(e) {
   const b = e.currentTarget, id = b.dataset.id;
@@ -260,17 +312,18 @@ async function loadApi() {
   $("tab-api").innerHTML = `<p class="loading">Loading…</p>`;
   const d = await api("/api-calls?limit=250");
   const byKind = d.stats.by_kind.map((k) => `${esc(k.kind)} ${num(k.calls)}`).join(" · ");
-  const rows = d.calls.map((c) => `<tr>
+  const rows = d.calls.map((c) => `<tr data-search="${esc([c.method, c.path, c.kind, c.device_id, c.status].join(" ").toLowerCase())}">
     <td>${relTime(c.ts)}</td><td>${esc(c.method)}</td>
     <td class="mono wrap-cell">${esc(c.path)}</td>
     <td>${esc(c.kind)}</td><td class="mono">${esc(shortId(c.device_id))}</td>
     <td><span class="pill ${c.status >= 400 ? "fail" : "ok"}">${c.status}</span></td>
     <td>${c.ms}ms</td></tr>`).join("");
-  $("tab-api").innerHTML = `<div class="card"><h3>Recent API calls</h3>
+  $("tab-api").innerHTML = `<div class="card"><h3 class="hrow">Recent API calls ${filterBox("Filter by path, device, status…")}</h3>
     <div class="chart-legend" style="margin:0 0 10px">${esc(byKind || "no traffic yet")}</div>
     <div class="tbl-wrap"><table><thead><tr>
       <th>When</th><th>Method</th><th>Path</th><th>Kind</th><th>Device</th><th>Status</th><th>Latency</th>
     </tr></thead><tbody>${rows || `<tr><td colspan="7" class="empty">No API calls logged yet.</td></tr>`}</tbody></table></div></div>`;
+  wireFilter("tab-api");
 }
 
 // ── tab routing ────────────────────────────────────────────────────────────
@@ -299,6 +352,9 @@ $("login-form").addEventListener("submit", (e) => {
 });
 $("logout-btn").addEventListener("click", () => logout(""));
 $("refresh-btn").addEventListener("click", () => loadTab(activeTab));
+$("art-close").addEventListener("click", closeArt);
+$("art-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeArt(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeArt(); });
 document.querySelectorAll("#tabs button").forEach((b) =>
   b.addEventListener("click", () => {
     document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("active", x === b));

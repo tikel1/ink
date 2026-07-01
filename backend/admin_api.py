@@ -126,7 +126,12 @@ async def gallery(limit: int = 120) -> dict:
             "date": a.date,
             "image_url": storage.archive_url(a.device_id, a.date),
             "caption": a.event_caption or a.event_text_en,
-            "visual": a.event_visual,
+            "event_caption": a.event_caption,
+            "event_visual": a.event_visual,
+            "event_text_en": a.event_text_en,
+            "event_text_he": a.event_text_he,
+            "weather_summary": a.weather_summary,
+            "image_prompt": a.image_prompt,
             "orientation": a.orientation,
             "created_at": a.created_at,
         })
