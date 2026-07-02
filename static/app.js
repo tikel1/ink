@@ -969,11 +969,22 @@ function setPlacard(m) {
 // Captions come from the model → render as text (never innerHTML). Each event
 // carries its interest category; predefined ones get their icon, anything custom
 // (or legacy rows without a category) gets a generic spark.
+// Stroked line icons (currentColor) so they sit in the beige/ink scheme like the
+// rest of the app's icons — emoji can't be recolored. Static strings, not user data.
+const _alsoSvg = (inner) =>
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
 const ALSO_ICONS = {
-  israel: "🇮🇱", science: "🔬", history: "🏛️", sports: "🏆",
-  astronomy: "🔭", art: "🎨", music: "🎵", cinema: "🎬",
+  israel: _alsoSvg('<path d="M12 3.5 4.6 16.5h14.8z"/><path d="M12 20.5 4.6 7.5h14.8z"/>'),
+  science: _alsoSvg('<path d="M10 3h4M11 3v5.2L5.6 17a2.4 2.4 0 0 0 2.1 3.6h8.6a2.4 2.4 0 0 0 2.1-3.6L13 8.2V3"/><path d="M8.2 14.5h7.6"/>'),
+  history: _alsoSvg('<path d="M4 9l8-5.5L20 9"/><path d="M5 9h14M6 9v8M10 9v8M14 9v8M18 9v8M4 17h16M3.5 20.5h17"/>'),
+  sports: _alsoSvg('<path d="M8 4h8v5a4 4 0 0 1-8 0V4z"/><path d="M8 5H5a3 3 0 0 0 3.2 4M16 5h3A3 3 0 0 1 15.8 9M12 13v4M9 20h6M12 17v3"/>'),
+  astronomy: _alsoSvg('<circle cx="12" cy="12" r="4.5"/><path d="M3.6 15.2C2.5 13.9 8 10 13.6 7.6c5.2-2.2 8-2.3 6.8-.8"/>'),
+  art: _alsoSvg('<path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-.8 2-1.9 0-1.3-1.2-1.6-1.2-2.6 0-.9.8-1.5 1.9-1.5H17a4 4 0 0 0 4-4C21 6.6 17 3 12 3z"/><circle cx="7.6" cy="10.4" r=".4"/><circle cx="10.6" cy="7" r=".4"/><circle cx="14.6" cy="7.4" r=".4"/>'),
+  music: _alsoSvg('<path d="M9 17.5V5l10-2v12.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/>'),
+  cinema: _alsoSvg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7.5 4v16M16.5 4v16M3 9h4.5M3 15h4.5M16.5 9H21M16.5 15H21"/>'),
 };
-const ALSO_ICON_GENERIC = "✨";
+const ALSO_ICON_GENERIC =
+  _alsoSvg('<path d="M12 4.5l1.7 5 5 1.7-5 1.7-1.7 5-1.7-5-5-1.7 5-1.7z"/>');
 function renderOtherEvents(events) {
   const sec = $("other-events"), ul = $("also-list");
   const items = (Array.isArray(events) ? events : [])
@@ -986,7 +997,8 @@ function renderOtherEvents(events) {
     const ico = document.createElement("span");
     ico.className = "also-ico";
     ico.setAttribute("aria-hidden", "true");
-    ico.textContent = ALSO_ICONS[(e.category || "").trim().toLowerCase()] || ALSO_ICON_GENERIC;
+    // Static SVG strings from ALSO_ICONS only — never user/model data.
+    ico.innerHTML = ALSO_ICONS[(e.category || "").trim().toLowerCase()] || ALSO_ICON_GENERIC;
     const text = document.createElement("span");
     text.className = "also-text";
     text.textContent = e.caption.trim();
