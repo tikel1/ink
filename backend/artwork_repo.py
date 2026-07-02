@@ -24,6 +24,10 @@ class DailyArtwork:
     status: str
     created_at: str
     orientation: Optional[str] = None
+    image_prompt: Optional[str] = None
+    event_caption: Optional[str] = None
+    event_visual: Optional[str] = None
+    other_events: Optional[str] = None   # JSON list of runner-up events
 
     @staticmethod
     def from_row(row: sqlite3.Row) -> "DailyArtwork":
@@ -35,8 +39,9 @@ def upsert(artwork: DailyArtwork) -> None:
         conn.execute(
             """INSERT INTO daily_artwork
                (device_id, date, image_path, archive_path, event_text_en,
-                event_text_he, weather_summary, orientation, status, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                event_text_he, weather_summary, orientation, image_prompt,
+                event_caption, event_visual, other_events, status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(device_id, date) DO UPDATE SET
                  image_path = excluded.image_path,
                  archive_path = excluded.archive_path,
@@ -44,12 +49,17 @@ def upsert(artwork: DailyArtwork) -> None:
                  event_text_he = excluded.event_text_he,
                  weather_summary = excluded.weather_summary,
                  orientation = excluded.orientation,
+                 image_prompt = excluded.image_prompt,
+                 event_caption = excluded.event_caption,
+                 event_visual = excluded.event_visual,
+                 other_events = excluded.other_events,
                  status = excluded.status""",
             (
                 artwork.device_id, artwork.date, artwork.image_path,
                 artwork.archive_path, artwork.event_text_en, artwork.event_text_he,
-                artwork.weather_summary, artwork.orientation, artwork.status,
-                artwork.created_at,
+                artwork.weather_summary, artwork.orientation, artwork.image_prompt,
+                artwork.event_caption, artwork.event_visual, artwork.other_events,
+                artwork.status, artwork.created_at,
             ),
         )
 
@@ -81,6 +91,40 @@ def list_archive(device_id: str, limit: int = 30) -> list[DailyArtwork]:
             (device_id, READY, limit),
         ).fetchall()
         return [DailyArtwork.from_row(r) for r in rows]
+
+
+def list_all_ready(limit: int = 200) -> list[DailyArtwork]:
+    """Every ready artwork across all devices, newest first (admin gallery)."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            """SELECT * FROM daily_artwork WHERE status = ?
+               ORDER BY created_at DESC LIMIT ?""",
+            (READY, limit),
+        ).fetchall()
+        return [DailyArtwork.from_row(r) for r in rows]
+
+
+def count_by_day(days: int = 30) -> list[dict]:
+    """Ready-artwork counts per calendar day (usage graph)."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            """SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n
+               FROM daily_artwork WHERE status = ?
+               GROUP BY day ORDER BY day DESC LIMIT ?""",
+            (READY, days),
+        ).fetchall()
+        return [dict(r) for r in rows][::-1]
+
+
+def counts() -> dict:
+    with get_connection() as conn:
+        row = conn.execute(
+            """SELECT COUNT(*) AS total,
+                      SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS ready
+               FROM daily_artwork""",
+            (READY,),
+        ).fetchone()
+        return dict(row)
 
 
 def make_now() -> str:

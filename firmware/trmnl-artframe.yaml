@@ -7,12 +7,12 @@
 # Behavior:
 #   • No WiFi saved  -> shows "Join WiFi: Ink Frame" + hosts an onboarding hotspot.
 #   • WiFi, unpaired -> shows a QR + 6-digit code; scan/enter it in the Ink app.
-#   • Paired:
-#       - On USB power -> stays ON, refreshes the art periodically.
-#       - On battery   -> sleeps; press KEY1 to wake + refresh, then sleeps again
-#                         after `idle_minutes` of no interaction.
-#   Buttons: KEY1 = sleep / wake (press to sleep when on, press to wake when
-#   asleep), KEY2 = refresh, KEY3 = wake · hold 15s: factory reset.
+#   • Paired: the frame auto-detects whether it's plugged in or on battery and the
+#     backend sends the matching sleep timeout (X-Sleep). 0 = stay ON and refresh
+#     periodically; >0 = sleep after that many minutes, then KEY1/KEY3 wakes it.
+#   Buttons: KEY1 = tap to sleep / wake, KEY2 = refresh, KEY3 = wake.
+#   Factory reset (full wipe + re-onboard): hold KEY1 + KEY3 together for 15s.
+#   Firmware updates are pulled over the air on an 'ota' command from the app.
 #
 # Set `backend_base` before flashing. `timezone` is for the clock; the daily
 # generation hour is set per frame in the app.
@@ -26,7 +26,7 @@ substitutions:
   # edit this one file — no reflash. Falls back to backend_base if unreachable.
   config_url: "https://tikel1.github.io/ink/server.txt"
   app_url: "https://tikel1.github.io/ink/"   # QR on the setup screen points here
-  fw_label: "ink-1.0"                         # firmware version reported to the app
+  fw_label: "1.1.6"                           # firmware version reported to the app (match the published manifest)
   timezone: "Asia/Jerusalem"
   idle_minutes: "10"               # battery: sleep after this much idle time
   powered_voltage: "4.15"          # >= this reads as "on USB power" (calibrate)
@@ -68,7 +68,7 @@ external_components:
   - source:
       type: local
       path: components
-    components: [captive_portal]
+    components: [captive_portal, http_request]
 
 wifi:
   power_save_mode: light
@@ -88,7 +88,23 @@ api:
   reboot_timeout: 0s
 
 ota:
+  # esphome: local/network OTA for development flashing.
   - platform: esphome
+  # http_request: production OTA. On an 'ota' app command the frame pulls the
+  # binary from the backend and flashes itself (a browser can't push to it, and a
+  # cloud backend can't reach the frame's LAN). MD5 is verified against md5_url.
+  - platform: http_request
+    on_error:
+      then:
+        - lambda: 'ESP_LOGW("ink", "OTA failed (code %d) — keeping current firmware", x);'
+        # Report the failure so the app can show it (success needs no ping — the
+        # frame reboots into the new image and reports the new version).
+        - http_request.get:
+            url: !lambda |-
+              char u[170];
+              snprintf(u, sizeof(u), "%s/media/ota-result/%s?code=%d",
+                       id(g_backend).c_str(), get_mac_address().c_str(), (int) x);
+              return std::string(u);
 
 logger:
   level: INFO
@@ -128,9 +144,12 @@ globals:
   - id: g_power
     type: std::string
     initial_value: '"usb"'
+  # Minutes of uptime before sleeping; 0 = never (stay awake). The backend resolves
+  # the user's per-power-state policy (plugged vs battery) into this single value.
+  # Default 0 so a frame stays awake until the backend tells it otherwise.
   - id: g_sleep_min
     type: int
-    initial_value: "10"
+    initial_value: "0"
   # Daily wake time as SECONDS since local midnight (minute precision). The
   # backend sends seconds; a legacy bare hour (<=23) is upscaled to seconds.
   - id: g_wake_secs
@@ -151,6 +170,32 @@ globals:
   - id: g_asleep
     type: bool
     initial_value: "false"
+  # Set by the .ver poll when the app queues an 'ota' / 'reset' command; acted on
+  # by sibling actions AFTER the poll's HTTP call returns (never re-entrantly
+  # inside the response callback). One-shot — cleared as soon as they fire.
+  - id: g_do_ota
+    type: bool
+    initial_value: "false"
+  - id: g_do_reset
+    type: bool
+    initial_value: "false"
+  # True while an OTA is in progress — draws the "Updating…" screen so the panel
+  # shows what's happening instead of a frozen image during the flash.
+  - id: g_updating
+    type: bool
+    initial_value: "false"
+  # True while the backend is generating this frame's daily image (X-Gen: pending
+  # on the .ver poll). Blocks sleep so a frame that just woke doesn't nod off
+  # mid-generation before the new image lands. A hard max-awake cap overrides it.
+  - id: g_gen_pending
+    type: bool
+    initial_value: "false"
+  # MD5 of the latest published firmware, delivered in the .ver poll header
+  # (X-OTA-Md5). Passed straight to the OTA flash action so we don't fetch a
+  # separate md5 URL during OTA (that fetch proved unreliable on this client).
+  - id: g_ota_md5
+    type: std::string
+    initial_value: '""'
   # Persisted across reboots/sleep (flash). Once the frame has shown art it is a
   # set-up frame, so reboots/wakes keep the retained artwork instead of flashing
   # the QR pairing screen. Cleared by factory reset.
@@ -173,20 +218,25 @@ button:
 
 binary_sensor:
   # KEY1 = sleep / wake. While asleep a press wakes the frame (ext1 wake pin);
-  # while awake a press puts it to sleep. Blocked until g_booted so a press
-  # during boot can't sleep before OTA/WiFi is up.
+  # while awake a short TAP puts it to sleep. We use on_click (50ms–1.5s) rather
+  # than on_press so that holding KEY1 — as part of the KEY1+KEY3 reset combo —
+  # does NOT sleep the frame. Blocked until g_booted so a tap during boot can't
+  # sleep before OTA/WiFi is up.
   - platform: gpio
     name: "KEY1 sleep/wake"
     id: key1_btn
     internal: true
     pin: { number: GPIO2, mode: INPUT_PULLUP, inverted: true }
-    on_press:
-      - if:
-          condition:
-            lambda: "return id(g_booted);"
-          then:
-            - logger.log: "KEY1 — entering sleep"
-            - script.execute: go_to_sleep
+    on_click:
+      min_length: 50ms
+      max_length: 1500ms
+      then:
+        - if:
+            condition:
+              lambda: "return id(g_booted);"
+            then:
+              - logger.log: "KEY1 tap — entering sleep"
+              - script.execute: go_to_sleep
 
   # KEY2 = refresh (re-fetch + redraw the current artwork).
   - platform: gpio
@@ -197,18 +247,26 @@ binary_sensor:
       - logger.log: "KEY2 refresh"
       - component.update: online_artwork
 
-  # KEY3 = wake (a press wakes from sleep via ext1); hold 15s to factory-reset.
+  # KEY3 = wake (a press wakes from sleep via ext1). Factory reset is the
+  # KEY1+KEY3 combo below, so KEY3 alone has no awake action.
   - platform: gpio
-    name: "KEY3 wake / factory reset"
+    name: "KEY3 wake"
     id: key3_btn
     internal: true
     pin: { number: GPIO5, mode: INPUT_PULLUP, inverted: true }
-    on_multi_click:
-      - timing:
-          - ON for at least 15s
-        then:
-          - logger.log: "KEY3 held 15s — factory reset"
-          - button.press: factory_reset_button
+
+  # Factory reset = hold KEY1 + KEY3 together for 15s (accident-resistant vs a
+  # single long-hold). This template is ON only while BOTH are pressed; the
+  # delayed_on filter requires that to hold continuously for 15s before it fires.
+  - platform: template
+    id: combo_reset
+    internal: true
+    lambda: "return id(key1_btn).state && id(key3_btn).state;"
+    filters:
+      - delayed_on: 15s
+    on_press:
+      - logger.log: "KEY1+KEY3 held 15s — factory reset"
+      - button.press: factory_reset_button
 
 sensor:
   - platform: adc
@@ -219,6 +277,12 @@ sensor:
     attenuation: 12db
     filters:
       - multiply: 1.1
+  # ESPHome manages Wi-Fi itself, so the raw Arduino WiFi.RSSI() returns 0.
+  # This sensor reads the real signal strength the app reports.
+  - platform: wifi_signal
+    id: wifi_rssi_sensor
+    update_interval: 60s
+    internal: true
 
 # Fraunces — the same display serif as the Ink app, for a consistent look.
 font:
@@ -249,65 +313,110 @@ interval:
   # without a reflash (and within minutes, not the 15-min reboot timeout).
   - interval: 300s
     then:
-      - script.execute: resolve_server
-  - interval: 60s
-    then:
-      - http_request.get:
-          # Piggyback telemetry on the poll so the app can show battery / Wi-Fi /
-          # firmware (the backend reads these query params on the .ver check-in).
-          url: !lambda |-
-            char q[72];
-            snprintf(q, sizeof(q), ".ver?bat=%.2f&rssi=%d&fw=${fw_label}",
-                     id(batt).state, (int) WiFi.RSSI());
-            return id(g_backend) + "/media/current/" + get_mac_address() + q;
-          collect_headers: ["x-ver", "x-power", "x-sleep", "x-wake", "x-wake-secs", "x-orient", "x-cmd"]
-          on_response:
-            then:
-              - lambda: |-
-                  if (response->status_code != 200) return;
-                  // Power/sleep config (every poll).
-                  std::string p = response->get_response_header("x-power");
-                  if (!p.empty()) id(g_power) = p;
-                  std::string sm = response->get_response_header("x-sleep");
-                  if (!sm.empty()) id(g_sleep_min) = atoi(sm.c_str());
-                  // Prefer minute-precise seconds; fall back to the legacy hour.
-                  std::string ws = response->get_response_header("x-wake-secs");
-                  if (!ws.empty()) { id(g_wake_secs) = atoi(ws.c_str()); }
-                  else { std::string wh = response->get_response_header("x-wake");
-                         if (!wh.empty()) id(g_wake_secs) = atoi(wh.c_str()) * 3600; }
-                  std::string ori = response->get_response_header("x-orient");
-                  if (!ori.empty()) id(g_portrait) = (ori == "portrait");
-                  // Decide whether to redraw — from a version change and/or an
-                  // app 'refresh' command — but redraw at most ONCE per poll so a
-                  // freshly generated image (new version + queued refresh) doesn't
-                  // flash the e-ink twice.
-                  bool do_refresh = false;
-                  std::string v = response->get_response_header("x-ver");
-                  if (!v.empty()) {
-                    if (id(last_ver).empty()) { id(last_ver) = v; }
-                    else if (v != id(last_ver)) { id(last_ver) = v; do_refresh = true; }
-                  }
-                  std::string cmd = response->get_response_header("x-cmd");
-                  if (cmd == "sleep") {
-                    ESP_LOGI("ink", "app command: sleep");
-                    id(go_to_sleep)->execute();
-                    return;                       // don't also redraw when sleeping
-                  }
-                  if (cmd == "refresh") do_refresh = true;
-                  if (do_refresh) {
-                    ESP_LOGI("ink", "refreshing artwork");
-                    id(online_artwork)->update();
-                  }
-                  ESP_LOGI("ink", "poll: power=%s sleep_min=%d uptime=%us cmd=%s",
-                           id(g_power).c_str(), id(g_sleep_min),
-                           (unsigned)(millis() / 1000UL), cmd.c_str());
-      # On battery: after the awake window, sleep until the next update hour.
-      # Sleep rules: plugged in (usb) -> always awake; on battery -> sleep after
-      # g_sleep_min minutes of uptime (applies whether paired or still pairing).
       - if:
           condition:
-            lambda: 'return id(g_power) == "battery" &&
-                            millis() > (uint32_t) id(g_sleep_min) * 60000UL;'
+            wifi.connected:
+          then:
+            - script.execute: resolve_server
+  - interval: 60s
+    then:
+      # Only poll once Wi-Fi is up — avoids the boot-time "Not connected to
+      # network" error when the interval fires before the first connection.
+      - if:
+          condition:
+            wifi.connected:
+          then:
+            - http_request.get:
+                # Piggyback telemetry on the poll so the app can show battery /
+                # Wi-Fi / firmware (backend reads these query params on .ver).
+                url: !lambda |-
+                  float rssi = id(wifi_rssi_sensor).state;
+                  int rssi_i = isnan(rssi) ? 0 : (int) rssi;
+                  float bv = id(batt).state;
+                  if (isnan(bv)) bv = 0.0f;
+                  char q[72];
+                  snprintf(q, sizeof(q), ".ver?bat=%.2f&rssi=%d&fw=${fw_label}", bv, rssi_i);
+                  return id(g_backend) + "/media/current/" + get_mac_address() + q;
+                collect_headers: ["x-ver", "x-power", "x-sleep", "x-wake", "x-wake-secs", "x-orient", "x-ota-md5", "x-cmd", "x-gen"]
+                on_response:
+                  then:
+                    - lambda: |-
+                        if (response->status_code != 200) return;
+                        // Power/sleep config (every poll).
+                        std::string p = response->get_response_header("x-power");
+                        if (!p.empty()) id(g_power) = p;
+                        std::string sm = response->get_response_header("x-sleep");
+                        if (!sm.empty()) id(g_sleep_min) = atoi(sm.c_str());
+                        // Prefer minute-precise seconds; fall back to the legacy hour.
+                        std::string ws = response->get_response_header("x-wake-secs");
+                        if (!ws.empty()) { id(g_wake_secs) = atoi(ws.c_str()); }
+                        else { std::string wh = response->get_response_header("x-wake");
+                               if (!wh.empty()) id(g_wake_secs) = atoi(wh.c_str()) * 3600; }
+                        std::string ori = response->get_response_header("x-orient");
+                        if (!ori.empty()) id(g_portrait) = (ori == "portrait");
+                        std::string m5 = response->get_response_header("x-ota-md5");
+                        if (!m5.empty()) id(g_ota_md5) = m5;
+                        // Generation in progress? Stay awake until the image lands.
+                        id(g_gen_pending) = (response->get_response_header("x-gen") == "pending");
+                        // Decide whether to redraw — from a version change and/or an
+                        // app 'refresh' command — but redraw at most ONCE per poll so a
+                        // freshly generated image (new version + queued refresh) doesn't
+                        // flash the e-ink twice.
+                        bool do_refresh = false;
+                        std::string v = response->get_response_header("x-ver");
+                        if (!v.empty()) {
+                          if (id(last_ver).empty()) { id(last_ver) = v; }
+                          else if (v != id(last_ver)) { id(last_ver) = v; do_refresh = true; }
+                        }
+                        std::string cmd = response->get_response_header("x-cmd");
+                        if (cmd == "sleep") {
+                          ESP_LOGI("ink", "app command: sleep");
+                          id(go_to_sleep)->execute();
+                          return;                       // don't also redraw when sleeping
+                        }
+                        // OTA / reset run AFTER this HTTP call returns (sibling actions
+                        // below) so we never start a second request inside this callback.
+                        if (cmd == "ota")   { ESP_LOGI("ink", "app command: OTA");   id(g_do_ota)   = true; }
+                        if (cmd == "reset") { ESP_LOGI("ink", "app command: reset"); id(g_do_reset) = true; }
+                        if (cmd == "refresh") do_refresh = true;
+                        if (do_refresh) {
+                          ESP_LOGI("ink", "refreshing artwork");
+                          id(online_artwork)->update();
+                        }
+                        ESP_LOGI("ink", "poll: power=%s sleep_min=%d uptime=%us cmd=%s",
+                                 id(g_power).c_str(), id(g_sleep_min),
+                                 (unsigned)(millis() / 1000UL), cmd.c_str());
+      # Factory reset (full wipe + re-onboard) requested from the app.
+      - if:
+          condition:
+            lambda: "return id(g_do_reset);"
+          then:
+            - lambda: "id(g_do_reset) = false;"
+            - button.press: factory_reset_button
+      # OTA: pull + flash the latest firmware from the backend (reboots on success).
+      - if:
+          condition:
+            lambda: "return id(g_do_ota);"
+          then:
+            - lambda: "id(g_do_ota) = false;"
+            - script.execute: do_ota
+      # Sleep after the awake window, until the next update time. The backend sends
+      # the timeout (X-Sleep -> g_sleep_min) already resolved from the auto-detected
+      # power state and the user's per-state policy: 0 = never sleep (e.g. plugged +
+      # "always on"); >0 = sleep after that many minutes of uptime (plugged "sleep
+      # after N", or on battery). Applies whether paired or still pairing.
+      - if:
+          condition:
+            lambda: |-
+              if (id(g_sleep_min) <= 0) return false;        // plugged "always on" -> never sleep
+              uint32_t up = millis();
+              uint32_t base = (uint32_t) id(g_sleep_min) * 60000UL;
+              const uint32_t MIN_AWAKE = 300000UL;           // 5 min floor: never sleep before an image can land
+              const uint32_t GEN_GRACE = 300000UL;           // wait up to +5 min for a pending generation
+              if (up < MIN_AWAKE) return false;              // detached min-awake window
+              if (up < base) return false;                   // honor the user's sleep timer
+              if (id(g_gen_pending) && up < base + GEN_GRACE) return false;  // still generating -> wait (capped)
+              return true;                                   // sleep (also the fallback if a gen got stuck)
           then:
             - script.execute: go_to_sleep
 
@@ -329,10 +438,22 @@ online_image:
           if (w > 0) {
             id(image_loaded) = true;
             if (!id(g_paired_once)) id(g_paired_once) = true;  // set-up frame now
+            id(g_gen_pending) = false;                          // the awaited image arrived
             id(my_display)->update();
           } else {
             ESP_LOGW("ink", "image fetch failed — keeping the previous frame");
           }
+      # Confirm delivery: tell the backend we fetched + rendered the new image,
+      # closing the wake->generate->refresh handshake (the frame is then free to
+      # fall back to its sleep timer). Only on a successful decode.
+      - if:
+          condition:
+            and:
+              - wifi.connected:
+              - lambda: "return id(online_artwork).get_width() > 0;"
+          then:
+            - http_request.get:
+                url: !lambda 'return id(g_backend) + "/media/refreshed/" + get_mac_address();'
 
 spi:
   clk_pin: GPIO7
@@ -350,6 +471,13 @@ display:
     model: 7.50inv2
     update_interval: never
     lambda: |-
+      // OTA in progress: a dedicated branded portrait "Updating…" screen (drawn
+      // before the flash starts). Takes priority over art/onboarding.
+      if (id(g_updating)) {
+        it.fill(Color::WHITE);
+        it.image(0, 0, id(updating_img), Color::BLACK, Color::WHITE);
+        return;
+      }
       if (id(image_loaded) && id(online_artwork).get_width() > 0) {
         it.image(0, 0, id(online_artwork), Color::BLACK, Color::WHITE);
       } else {
@@ -392,6 +520,12 @@ image:
     id: onboarding_img
     type: BINARY
     resize: 800x480
+  # Branded portrait "Updating…" screen shown during an OTA (panel-oriented, same
+  # style as the onboarding/pairing splashes).
+  - file: updating.png
+    id: updating_img
+    type: BINARY
+    resize: 800x480
 
 script:
   - id: boot_sequence
@@ -414,6 +548,14 @@ script:
       - lambda: "id(g_booted) = true;"  # OTA/WiFi reachable — manual sleep now allowed
       - script.execute: resolve_server  # learn the current backend URL (server.txt)
       - delay: 3s                        # give the resolve a moment to land
+      # Explicit wake report: tell the backend we're awake the instant we boot, so
+      # the app flips to Online without waiting for the 60s heartbeat. A dedicated
+      # endpoint (not .ver) so it can't consume a queued one-shot command.
+      - http_request.get:
+          url: !lambda 'return id(g_backend) + "/media/awake/" + get_mac_address();'
+          on_error:
+            then:
+              - lambda: 'ESP_LOGW("ink", "wake ping FAILED (network)");'
       - wait_until:
           condition:
             lambda: "return id(sntp_time).now().is_valid();"
@@ -447,8 +589,40 @@ script:
                     ESP_LOGI("ink", "backend resolved: %s", u.c_str());
                   }
 
+  # Pull + flash the latest firmware from the backend. ESPHome verifies the
+  # downloaded image against md5_url before swapping the partition, then reboots.
+  # On failure the ota on_error handler logs and the current firmware stays put.
+  - id: do_ota
+    then:
+      # Safety backstop (the app gates too): never flash on low battery off USB —
+      # a power loss mid-write wastes the cycle. ~3.75V ≈ 50%. The dual-partition +
+      # MD5 scheme means an interrupted flash can't brick it, but we still refuse.
+      - if:
+          condition:
+            lambda: 'return id(g_power) != "usb" && id(batt).state > 0.0f && id(batt).state < 3.75f;'
+          then:
+            - lambda: 'ESP_LOGW("ink", "OTA refused: low battery (%.2fV), not on USB", id(batt).state);'
+          else:
+            - if:
+                condition:
+                  lambda: 'return id(g_ota_md5).length() != 32;'
+                then:
+                  - lambda: 'ESP_LOGW("ink", "OTA refused: no/invalid md5 from server (len=%u)", (unsigned) id(g_ota_md5).length());'
+                else:
+                  # Show the branded "Updating…" screen first, then pull + flash.
+                  - lambda: 'id(g_updating) = true;'
+                  - component.update: my_display
+                  - lambda: 'ESP_LOGI("ink", "OTA: pulling %s (md5 %s)", (id(g_backend) + "/firmware/ink-frame.bin").c_str(), id(g_ota_md5).c_str());'
+                  # md5 comes from the .ver header (reliable), not a separate fetch.
+                  - ota.http_request.flash:
+                      md5: !lambda 'return id(g_ota_md5);'
+                      url: !lambda 'return id(g_backend) + "/firmware/ink-frame.bin";'
+                  # Only reached if the flash FAILED (success reboots) — clear the
+                  # screen flag so the next redraw restores the artwork.
+                  - lambda: 'id(g_updating) = false;'
+
   # Sleep until the next daily update hour (timer = guaranteed wake); KEY1 or KEY3
-  # also wake it any time. Used by the battery idle timer and by a KEY1 press.
+  # also wake it any time. Used by the battery idle timer and by a KEY1 tap.
   - id: go_to_sleep
     then:
       - lambda: 'ESP_LOGI("ink", "go_to_sleep: START (backend=%s)", id(g_backend).c_str());'

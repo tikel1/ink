@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # low|medium|high — "medium" (~$0.05/image) is the quality/cost sweet spot
     # for the framed art; "low" looked too soft, "high" (~$0.21) is overkill.
     openai_image_quality: str = "medium"
+    # "responses" (HA-style: chat model rewrites the brief into concrete art
+    # direction, guarded + validated, auto-fallback to direct) | "direct".
+    openai_image_flow: str = "responses"
     # Smart-but-cheap text model for event selection + fact-checking.
     openai_text_model: str = "gpt-5.4-mini"
     # Gemini (free tier) for text + grounded web search. When set, the pipeline
@@ -43,6 +46,17 @@ class Settings(BaseSettings):
 
     # Token guarding admin endpoints (e.g. flipping an account to own-key-required).
     admin_token: str = ""
+
+    # Fly has no per-app cost API, so the admin console shows this fixed monthly
+    # infra estimate (machine + volume). Override via FLY_MONTHLY_USD.
+    fly_monthly_usd: float = 5.0
+    # OpenAI Admin API key (sk-admin-…, from Dashboard → Organization → Admin keys)
+    # for the org Costs/Usage API. The regular generation key can't read billing.
+    openai_admin_key: str = ""
+    # Scope the Costs view to just the frame-generation key (its api_key_id, e.g.
+    # key_…) instead of the whole org. Empty = org-wide. Find it by grouping the
+    # Costs API by api_key_id, or in Dashboard → project → API keys.
+    openai_cost_api_key_id: str = ""
 
     # Storage
     data_dir: Path = Path("./data")
@@ -71,8 +85,14 @@ class Settings(BaseSettings):
     def archive_dir(self) -> Path:
         return self.data_dir / "archive"
 
+    @property
+    def firmware_dir(self) -> Path:
+        """Hosts the OTA firmware binary + manifest the frames pull from."""
+        return self.data_dir / "firmware"
+
     def ensure_dirs(self) -> None:
-        for directory in (self.data_dir, self.images_dir, self.archive_dir):
+        for directory in (self.data_dir, self.images_dir, self.archive_dir,
+                          self.firmware_dir):
             directory.mkdir(parents=True, exist_ok=True)
 
 

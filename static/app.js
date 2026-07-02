@@ -38,16 +38,15 @@ let resolvedTz = null;     // tz from the latest geocode (used when auto-tz is o
 // --------------------------------------------------------------------------
 // Navigation
 // --------------------------------------------------------------------------
-const SCREENS = ["welcome", "home", "connect", "frame", "artwork", "settings", "account"];
+const SCREENS = ["welcome", "setup", "home", "connect", "frame", "artwork", "settings", "account"];
 let currentScreen = null;
 
 // Toggle which screen is visible (no history side effects).
 function setScreen(name) {
   for (const s of SCREENS) $(`screen-${s}`).hidden = s !== name;
-  // Home and the Frame screen are fixed single viewports (no scroll). The Frame
-  // screen can temporarily unlock when its description is expanded via "Read
-  // more" (handled in setFrameExpanded).
-  const fixed = name === "home" || name === "frame";
+  // Only Home is a fixed single viewport (no scroll). The Frame screen scrolls
+  // normally so the preview image can be large and the content flows below.
+  const fixed = name === "home";
   $("app").classList.toggle("locked", fixed);
   // Also lock the <body> so the page itself can't scroll/rubber-band a few pixels
   // (overflow:hidden on #app alone doesn't stop body-level scroll).
@@ -112,7 +111,6 @@ function relTime(iso) {
   if (d < DAY) return `${Math.round(d / HOUR)}h ago`;
   return `${Math.round(d / DAY)}d ago`;
 }
-function batteryPct(v) { return v == null ? null : Math.round(Math.max(0, Math.min(1, (v - 3.3) / 0.9)) * 100); }
 // Status shown as "<State> · <when>": State = Online / Sleep / Offline, when =
 // "now" (just checked in) or "Xm/Xh/Xd ago".
 //
@@ -135,10 +133,14 @@ function frameState(d) {
   if (seen < 26 * HOUR) return { label: "Sleep", cls: "s-sleep", sub: statusWhen(d.last_seen) };
   return { label: "Offline", cls: "s-off", sub: statusWhen(d.last_seen) };
 }
+// Wi-Fi signal as 4 bars + a word (no dBm). Returns HTML — set via innerHTML.
 function wifiLabel(r) {
   if (r == null || r === 0) return "—";   // real RSSI is always negative; 0 = no reading yet
-  const q = r >= -60 ? "Strong" : r >= -70 ? "Good" : r >= -80 ? "Weak" : "Poor";
-  return `${q} (${r} dBm)`;
+  const level = r >= -60 ? 4 : r >= -70 ? 3 : r >= -80 ? 2 : 1;
+  const word = ["", "Poor", "Weak", "Good", "Strong"][level];
+  let bars = "";
+  for (let i = 1; i <= 4; i++) bars += `<i class="${i <= level ? "on" : ""}"></i>`;
+  return `<span class="wifi-bars" aria-hidden="true">${bars}</span>${word}`;
 }
 const shortId = (id) => (id || "").slice(-4).toUpperCase();
 const defaultName = (id) => `Ink Frame · ${shortId(id)}`;
@@ -147,9 +149,9 @@ const displayName = (d) => (d && d.name) ? d.name : defaultName(d && d.id);
 function flash(id, text, isErr) { const el = $(id); if (!el) return; el.textContent = text; el.hidden = false; el.className = isErr ? "error" : "ok"; }
 function showError(id, e) { flash(id, e.message, true); }
 let toastTimer = null;
-function toast(text) {
+function toast(text, ms = 2600) {
   const el = $("toast"); el.textContent = text; el.classList.add("show");
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), ms);
 }
 
 // Confirm a save on the button itself: "✓ Saved" with a subtle animation,
@@ -179,14 +181,16 @@ function loadArtwork(imgEl, skelEl, id, onMissing) {
 // Welcome
 // --------------------------------------------------------------------------
 function wireWelcome() {
-  $("server-url").value = serverBase();
-  $("server-save").addEventListener("click", () => { setServer($("server-url").value); localStorage.setItem(SERVER_MANUAL_KEY, "1"); toast("Saved — now tap Get started"); });
+  $("server-save").addEventListener("click", () => { setServer($("server-url").value); localStorage.setItem(SERVER_MANUAL_KEY, "1"); toast("Server saved"); });
   $("start-btn").addEventListener("click", async () => {
     if (!confirm("Create a NEW Ink account?\n\nIf you've set up a frame before, tap Cancel and use “I already have an account” to restore it — a new account won't show your existing frame.")) return;
     try { const { token: t } = await api("/account", { method: "POST", auth: false }); localStorage.setItem(TOKEN_KEY, t); toast("New account created"); await showHome(); }
-    catch (e) { showError("welcome-error", e); $("server-details").open = true; }
+    catch (e) { showError("welcome-error", e); }
   });
-  $("restore-open").addEventListener("click", () => { $("restore-details").open = true; $("restore-token").focus(); });
+  // Gear on the welcome screen (no account yet): a small settings screen with the
+  // server address — same pattern as the in-app settings screens.
+  $("welcome-settings-btn").addEventListener("click", showSetup);
+  $("setup-back").addEventListener("click", () => go("welcome"));
   $("restore-btn").addEventListener("click", async () => {
     const t = $("restore-token").value.trim(); if (!t) return;
     localStorage.setItem(TOKEN_KEY, t);
@@ -195,24 +199,236 @@ function wireWelcome() {
   });
 }
 
+// Pre-sign-in settings (welcome gear): server address + app version.
+function showSetup() {
+  $("server-url").value = serverBase();
+  $("setup-version").textContent = APP_VERSION;
+  go("setup");
+}
+
 // --------------------------------------------------------------------------
 // Home — the primary frame as a hung work of art
 // --------------------------------------------------------------------------
 async function showHome(preferId) {
   go("home");
   try { ({ devices } = await api("/devices")); }
-  catch (e) { if (e.status === 401) { localStorage.removeItem(TOKEN_KEY); return go("welcome"); } devices = []; }
+  catch (e) { if (e.status === 401 || e.status === 403) { localStorage.removeItem(TOKEN_KEY); return go("welcome"); } devices = []; }
 
   $("screen-home").classList.toggle("is-empty", !devices.length);
   if (!devices.length) { $("home-empty").hidden = false; $("home-frame").hidden = true; maybeShowInstallBanner(); return; }
   $("home-empty").hidden = true; $("home-frame").hidden = false;
 
-  const dev = devices.find((d) => d.id === preferId) || devices[0];
-  renderHomeFrame(dev);
-  renderFrameSwitch(dev.id);
+  buildHomeCards(preferId);
   startHomeAutoRefresh();
   maybeShowInstallBanner();
   checkFirmwareUpdates();   // re-evaluated on every app launch / home entry
+}
+
+// Build one card per frame into the carousel; focus the preferred (or first) one.
+function buildHomeCards(preferId) {
+  const track = $("home-carousel");
+  if (track._resetReorder) track._resetReorder();   // never rebuild under a live drag
+  track.innerHTML = "";
+  const tpl = $("home-card-tpl");
+  for (const d of devices) {
+    const card = tpl.content.firstElementChild.cloneNode(true);
+    fillHomeCard(card, d);
+    card.querySelector(".home-art-btn").addEventListener("click", () => openFrame(card.dataset.id));
+    card.querySelector(".home-more").addEventListener("click", () => openFrame(card.dataset.id));
+    track.appendChild(card);
+  }
+  attachReorder(track);   // long-press drag-to-reorder (no-op for a single frame)
+
+  const multi = devices.length >= 2;
+  $("home-dots").hidden = !multi;
+  // Teach the gesture once: the hint shows until the user has actually swiped,
+  // then fades for good (persisted) — a permanent caption is noise.
+  const hintSeen = localStorage.getItem("ink.swipeHintSeen");
+  $("home-swipe-hint").hidden = !multi || !!hintSeen;
+
+  let idx = devices.findIndex((d) => d.id === preferId);
+  if (idx < 0) idx = 0;
+  const dev = devices[idx];
+  currentId = dev.id; currentDevice = dev;
+  renderHomeDots(idx);
+  // Jump (no animation) to the focused card once layout is ready.
+  requestAnimationFrame(() => {
+    const card = track.children[idx];
+    if (card) { const prev = track.style.scrollBehavior; track.style.scrollBehavior = "auto"; track.scrollLeft = card.offsetLeft; track.style.scrollBehavior = prev; }
+  });
+  maybeNudgeCarousel();
+}
+
+// Teach the swipe with a physical nudge: the carousel briefly peeks the next
+// card and springs back. Shown only while the user hasn't yet swiped themselves
+// (which retires it for good), at most once per app session and 3 times ever —
+// visible enough to register, rare enough not to annoy.
+const NUDGE_MAX = 3, NUDGE_PX = 56, NUDGE_DELAY = 900, NUDGE_HOLD = 450;
+let nudgedThisSession = false;
+function maybeNudgeCarousel() {
+  if (devices.length < 2 || nudgedThisSession) return;
+  if (localStorage.getItem("ink.swipeHintSeen")) return;
+  const shown = parseInt(localStorage.getItem("ink.swipeNudges") || "0", 10);
+  if (shown >= NUDGE_MAX) return;
+  nudgedThisSession = true;
+  setTimeout(() => {
+    const track = $("home-carousel");
+    if (!track || currentScreen !== "home" || track.classList.contains("reordering")) return;
+    localStorage.setItem("ink.swipeNudges", String(shown + 1));
+    // Suspend snap so the browser doesn't fight the mid-card position.
+    const prevSnap = track.style.scrollSnapType;
+    track.style.scrollSnapType = "none";
+    const base = track.scrollLeft;
+    track.scrollTo({ left: base + NUDGE_PX, behavior: "smooth" });
+    setTimeout(() => {
+      track.scrollTo({ left: base, behavior: "smooth" });
+      setTimeout(() => { track.style.scrollSnapType = prevSnap; }, NUDGE_HOLD);
+    }, NUDGE_HOLD);
+  }, NUDGE_DELAY);
+}
+
+function fillHomeCard(card, d) {
+  card.dataset.id = d.id;
+  card.classList.toggle("is-portrait", d.orientation === "portrait");
+  card.querySelector(".home-frame-name").textContent = displayName(d);
+  const asleep = frameState(d).cls === "s-sleep";
+  card.querySelector(".home-sleep-moon").hidden = !asleep;
+  const cap = card.querySelector(".home-explain");
+  cap.textContent = "Loading today's work…";
+  loadArtwork(card.querySelector(".home-art-img"), card.querySelector(".home-skeleton"), d.id, () => {
+    cap.textContent = "No artwork yet — open the frame and tap Generate.";
+  });
+  loadExplain(d.id, card);
+}
+
+function renderHomeDots(active) {
+  const el = $("home-dots");
+  if (!el || devices.length < 2) { if (el) el.innerHTML = ""; return; }
+  el.innerHTML = Array.from({ length: devices.length }, (_, i) =>
+    `<span class="dot-i${i === active ? " on" : ""}"></span>`).join("");
+}
+
+function activeHomeIndex() {
+  const g = $("home-carousel");
+  if (!g || !g.clientWidth) return 0;
+  return Math.max(0, Math.min(devices.length - 1, Math.round(g.scrollLeft / g.clientWidth)));
+}
+function activeHomeCard() {
+  const g = $("home-carousel");
+  return g ? g.children[activeHomeIndex()] : null;
+}
+
+let homeScrollRAF = null;
+function onHomeScroll() {
+  cancelAnimationFrame(homeScrollRAF);
+  homeScrollRAF = requestAnimationFrame(() => {
+    const i = activeHomeIndex();
+    const d = devices[i];
+    if (d && d.id !== currentId) {
+      currentId = d.id; currentDevice = d;
+      // First real swipe → the user knows the gesture; retire the hint.
+      const hint = $("home-swipe-hint");
+      if (hint && !hint.hidden && !hint.classList.contains("seen")) {
+        hint.classList.add("seen");
+        localStorage.setItem("ink.swipeHintSeen", "1");
+      }
+    }
+    renderHomeDots(i);
+  });
+}
+
+// Drag-to-reorder on the home carousel. A normal horizontal swipe navigates
+// (native scroll-snap); HOLDING a card ~400ms enters reorder mode, then dragging
+// left/right swaps it past neighbors. Wired once on the persistent track element;
+// reads the live `devices` array + current cards each gesture.
+const REORDER_HOLD_MS = 400;
+const REORDER_SLOP = 10;       // movement before the hold fires => it's a swipe
+function attachReorder(track) {
+  if (track._reorderWired) return;
+  track._reorderWired = true;
+  let timer = null, dragging = false, card = null, idx = 0, startX = 0, startY = 0;
+  let suppressClickUntil = 0;   // swallow the synthetic click that follows a drag
+  const cardW = () => track.clientWidth || 1;
+  const cancelHold = () => { if (timer) { clearTimeout(timer); timer = null; } };
+
+  // touchend's preventDefault can't reliably stop the browser's synthetic click
+  // (the touchstart is passive), so swallow clicks at capture for a beat after a
+  // drop — otherwise every completed drag "clicks" the card open.
+  track.addEventListener("click", (e) => {
+    if (Date.now() < suppressClickUntil) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+
+  // Let buildHomeCards abort a gesture before it replaces the cards — a drag
+  // holding a detached node would corrupt the swap indexes.
+  track._resetReorder = () => {
+    cancelHold(); dragging = false;
+    if (card) card.classList.remove("dragging");
+    card = null; track.classList.remove("reordering");
+  };
+
+  const swap = (a, b) => {
+    const t = devices[a]; devices[a] = devices[b]; devices[b] = t;
+    const nodes = track.children;
+    if (a < b) track.insertBefore(nodes[a], nodes[b].nextSibling);
+    else track.insertBefore(nodes[a], nodes[b]);
+  };
+
+  const enter = () => {
+    if (devices.length < 2 || !card) return;
+    dragging = true;
+    track.classList.add("reordering");
+    card.classList.add("dragging");
+    try { navigator.vibrate && navigator.vibrate(12); } catch { /* ignore */ }
+  };
+
+  track.addEventListener("touchstart", (e) => {
+    if (dragging || e.touches.length !== 1 || devices.length < 2) { if (!dragging) card = null; return; }
+    card = e.target.closest(".home-card");
+    if (!card) return;
+    idx = Array.prototype.indexOf.call(track.children, card);
+    startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+    dragging = false; cancelHold();
+    timer = setTimeout(enter, REORDER_HOLD_MS);
+  }, { passive: true });
+
+  track.addEventListener("touchmove", (e) => {
+    if (!card) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if (!dragging) {
+      if (Math.abs(dx) > REORDER_SLOP || Math.abs(dy) > REORDER_SLOP) { cancelHold(); card = null; }
+      return;   // let native scroll handle the swipe
+    }
+    e.preventDefault();   // own the gesture while reordering
+    const w = cardW();
+    card.style.transform = `translateX(${dx}px) scale(1.04)`;
+    if (dx > w * 0.55 && idx < track.children.length - 1) {
+      swap(idx, idx + 1); idx += 1; startX += w; card.style.transform = `translateX(${dx - w}px) scale(1.04)`; renderHomeDots(idx);
+    } else if (dx < -w * 0.55 && idx > 0) {
+      swap(idx, idx - 1); idx -= 1; startX -= w; card.style.transform = `translateX(${dx + w}px) scale(1.04)`; renderHomeDots(idx);
+    }
+  }, { passive: false });
+
+  const end = (e) => {
+    cancelHold();
+    if (!dragging || !card) { card = null; return; }
+    if (e && e.cancelable) e.preventDefault();
+    suppressClickUntil = Date.now() + 400;   // the capture-phase listener eats the click-through
+    const dropped = card, dropIdx = idx;
+    dropped.style.transition = "transform .18s var(--ease)";
+    dropped.style.transform = "";
+    dropped.classList.remove("dragging");
+    track.classList.remove("reordering");
+    requestAnimationFrame(() => { track.scrollLeft = dropIdx * cardW(); });
+    setTimeout(() => { dropped.style.transition = ""; }, 220);
+    renderHomeDots(dropIdx);
+    currentId = devices[dropIdx].id; currentDevice = devices[dropIdx];
+    dragging = false; card = null;
+    api("/devices/reorder", { method: "POST", body: { order: devices.map((d) => d.id) } })
+      .catch(() => toast("Couldn't save the new order"));
+  };
+  track.addEventListener("touchend", end);
+  track.addEventListener("touchcancel", end);
 }
 
 // Keep the home image current without a manual button: re-pull silently (preload
@@ -220,22 +436,32 @@ async function showHome(preferId) {
 // / tab-visibility. Guarantees the home always shows the real, latest artwork.
 async function refreshHomeArt() {
   if (!currentId || currentScreen !== "home") return;
+  const card = activeHomeCard();
+  if (!card) return;
   const url = artworkUrl(currentId);
   const probe = new Image();
-  probe.onload = () => { const el = $("home-art-img"); if (el) { el.src = url; el.classList.add("loaded"); } };
+  probe.onload = () => { const el = card.querySelector(".home-art-img"); if (el) { el.src = url; el.classList.add("loaded"); } };
+  probe.onerror = () => { /* keep the last good image */ };
   probe.src = url;
-  loadExplain(currentId);
-  // Also refresh the frame's STATUS so the Asleep moon + hint update on their
-  // own (no manual reload) — picks up the backend 'sleeping' flag, and falls
-  // back to the last-seen timeout if the sleep ping didn't land.
+  loadExplain(currentId, card);
+  // Refresh EVERY card's status (moon, name) — not just the active one — so
+  // swiping to a neighbor never shows stale state. Merge the fetch into the
+  // existing devices[] BY ID (never replace the array wholesale: a drag-reorder
+  // may have changed the local order, and the DOM cards are built from it).
   try {
     const r = await api("/devices");
-    const d = r && r.devices && r.devices.find((x) => x.id === currentId);
-    if (d) {
-      currentDevice = d;
-      const asleep = frameState(d).cls === "s-sleep";
-      const m = $("home-sleep-moon");
-      if (m) m.hidden = !asleep;
+    const track = $("home-carousel");
+    for (const d of (r && r.devices) || []) {
+      const i = devices.findIndex((x) => x.id === d.id);
+      if (i >= 0) devices[i] = d;
+      if (d.id === currentId) currentDevice = d;
+      const cardEl = track && track.querySelector(`.home-card[data-id="${d.id}"]`);
+      if (cardEl) {
+        const m = cardEl.querySelector(".home-sleep-moon");
+        if (m) m.hidden = frameState(d).cls !== "s-sleep";
+        const nm = cardEl.querySelector(".home-frame-name");
+        if (nm) nm.textContent = displayName(d);
+      }
     }
   } catch { /* keep the last-known status */ }
 }
@@ -267,6 +493,48 @@ function renderFrameStatus(d) {
   const st = frameState(d);
   $("fr-dot").className = `dot ${st.cls}`;
   $("fr-status").textContent = st.sub ? `${st.label} · ${st.sub}` : st.label;
+  // The frame that had art waiting is back online → it can now fetch it; clear.
+  if (wakePendingId && d.id === wakePendingId && st.cls === "s-on") hideWakeToast();
+  renderMorningStatus(d, st);
+}
+
+// Was today's daily update supposed to run, and did it? Surfaces a friendly banner
+// when the frame missed its morning update (it was offline at wake time), or an
+// "updating now" hint while it's catching up. Uses last_auto_gen (the date the
+// daily update last ran) + the wake time + reachability.
+function two(n) { return String(n).padStart(2, "0"); }
+// "Now" as a Date carrying the FRAME's local wall-clock — wake_hour and
+// last_auto_gen live in the device's timezone, so comparing them against the
+// phone's clock is wrong whenever the two differ (banner a day/hours off).
+function deviceNow(tz) {
+  try { return new Date(new Date().toLocaleString("en-US", { timeZone: tz || "UTC" })); }
+  catch { return new Date(); }   // unknown tz string → fall back to phone time
+}
+function scheduledToday(d, now) {
+  if ((d.schedule || "daily") === "daily") return true;
+  const days = (d.schedule_days || "").toLowerCase();
+  if (!days.trim()) return true;
+  const wd = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][now.getDay()];
+  return days.split(",").map((s) => s.trim()).includes(wd);
+}
+function renderMorningStatus(d, st) {
+  const el = $("frame-alert");
+  if (!el) return;
+  const now = deviceNow(d.tz);
+  const wakeH = d.wake_hour ?? 6, wakeM = d.wake_minute ?? 0;
+  const wake = new Date(now); wake.setHours(wakeH, wakeM, 0, 0);
+  const todayISO = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}`;
+  const ranToday = d.last_auto_gen === todayISO;
+  // No banner if: today's time hasn't arrived, not a scheduled day, or it already ran.
+  if (now < wake || !scheduledToday(d, now) || ranToday) { el.hidden = true; return; }
+  const when = `${two(wakeH)}:${two(wakeM)}`;
+  if (st && st.label === "Online") {
+    el.className = "frame-alert info"; el.hidden = false;
+    el.textContent = "Creating today's artwork now…";
+  } else {
+    el.className = "frame-alert"; el.hidden = false;
+    el.textContent = `Couldn't update this morning — your frame was offline at ${when}. It'll update the next time it wakes.`;
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -279,14 +547,12 @@ let updateDismissed = false;     // session-only: a Close hides the toast until 
 let otaTargetId = null;          // the frame the toast's Update button targets
 const OTA_MIN_BATTERY = 50;      // %; below this we require USB power (flash safety)
 
-// OTA can only succeed when the frame is awake/polling AND safely powered: on USB,
-// or on a battery with enough charge to survive the write. Mirrors the firmware
-// backstop so the app never offers an update that would be refused or risky.
+// OTA can only succeed when the frame is awake/polling. The frame can't sense its
+// own power, so the firmware's own low-voltage backstop guards the write; the app
+// only needs to confirm the frame is reachable.
 function otaBlockReason(d) {
   if (!d || !d.update_available) return "no-update";
   if (frameState(d).cls !== "s-on") return "offline";
-  const bat = batteryPct(d.battery);
-  if (d.power_source !== "usb" && bat != null && bat < OTA_MIN_BATTERY) return "battery";
   return null;   // good to go
 }
 
@@ -307,7 +573,6 @@ function showUpdateToast(d) {
     : "Firmware update available";
   const reason = otaBlockReason(d);
   const sub = reason === "offline" ? "Wake the frame to update"
-            : reason === "battery" ? `Plug in to update (battery ${batteryPct(d.battery)}%)`
             : `Version ${d.fw_version || "?"} → ${d.latest_fw || "?"}`;
   $("fw-toast-sub").textContent = sub;
   const btn = $("fw-toast-update");
@@ -317,6 +582,57 @@ function showUpdateToast(d) {
 }
 function hideUpdateToast() { $("fw-toast").hidden = true; }
 
+// Has a newer app (PWA) build been published? Ask the service worker to re-check
+// its script; a new worker showing up (updatefound / waiting / installing) means
+// fresh assets are ready and the user should Refresh to load them.
+async function checkAppUpdate() {
+  if (!("serviceWorker" in navigator)) return false;
+  const reg = await navigator.serviceWorker.getRegistration();
+  if (!reg) return false;
+  let found = false;
+  const onFound = () => { found = true; };
+  reg.addEventListener("updatefound", onFound);
+  try { await reg.update(); } catch (_) {}
+  await new Promise((r) => setTimeout(r, 1500));   // let an install begin
+  reg.removeEventListener("updatefound", onFound);
+  return found || !!reg.waiting || !!reg.installing;
+}
+
+// "Check for updates": checks BOTH the frame firmware and the app, shows the
+// relevant toast(s), and reports "Up to date" on the button when there's nothing.
+// Never navigates away — the user reloads only via the app toast's Refresh.
+async function checkForUpdates(btn) {
+  if (btn.dataset.busy) return;
+  btn.dataset.busy = "1";
+  const orig = btn.dataset.label || btn.textContent;
+  btn.dataset.label = orig;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin-sm" aria-hidden="true"></span>Checking…';
+  let frameUpdate = false, appUpdate = false;
+  try {
+    updateDismissed = false;                              // an explicit check re-surfaces the toast
+    try { const r = await api("/devices"); devices = r.devices || r; } catch (_) {}
+    frameUpdate = !!checkFirmwareUpdates();               // shows the firmware toast if any frame is behind
+    appUpdate = await checkAppUpdate();
+    if (appUpdate) $("app-toast").hidden = false;         // similar toast, CTA "Refresh"
+  } finally {
+    btn.disabled = false;
+    delete btn.dataset.busy;
+    if (frameUpdate || appUpdate) {
+      btn.textContent = orig;                             // a toast is showing the action
+    } else {
+      btn.innerHTML = '<span class="saved-ico" aria-hidden="true">' + SAVED_CHECK + '</span>Up to date';
+      btn.classList.add("btn-saved");
+      setTimeout(() => { btn.classList.remove("btn-saved"); btn.textContent = orig; }, 2600);
+    }
+  }
+}
+
+// Tracks an in-flight OTA so it can be resolved either by the poll loop OR when
+// the app regains focus (the phone usually backgrounds the app while the user
+// watches the frame, which pauses JS timers — so focus is the reliable signal).
+let otaWatch = null;   // { deviceId, fromVer } | null
+
 // Start the OTA for a frame: re-validate gating, confirm, queue the 'ota' command.
 async function startFrameOta(deviceId) {
   const d = (devices || []).find((x) => x.id === deviceId) || currentDevice;
@@ -324,20 +640,52 @@ async function startFrameOta(deviceId) {
   if (reason === "offline") return toast("Wake the frame first — it must be online to update");
   if (reason === "battery") return toast("Plug the frame into power before updating");
   if (reason) return;
-  if (!confirm(`Update ${displayName(d)} to ${d.latest_fw || "the latest version"}?\n\nThe frame downloads the new firmware and restarts — about a minute. Keep it powered.`)) return;
+  const target = d.latest_fw || "the latest version";
+  if (!confirm(`Update ${displayName(d)} to ${target}?\n\nThe frame downloads the new firmware and restarts — about a minute. Keep it powered.`)) return;
   otaInFlight = true;
+  otaWatch = { deviceId, fromVer: d.fw_version };
   $("fw-toast-update").disabled = true; $("fw-toast-update").textContent = "Updating…";
   try {
     await api(`/devices/${deviceId}/command`, { method: "POST", body: { cmd: "ota" } });
     toast("Updating… the frame will download and restart.");
-  } catch (e) { otaInFlight = false; return toast(e.message); }
-  // The frame reboots onto the new version and re-checks in; clear the lock after
-  // a grace period and re-evaluate from fresh telemetry.
-  setTimeout(async () => {
-    otaInFlight = false;
-    try { ({ devices } = await api("/devices")); } catch {}
-    checkFirmwareUpdates();
-  }, 90000);
+  } catch (e) { otaInFlight = false; otaWatch = null; renderFrameStatus(currentDevice); return toast(`Couldn't start update: ${e.message}`); }
+  pollOtaResult(deviceId);
+}
+
+// Conclude an OTA: clear state, dismiss the update toast, show the outcome.
+function finishOta(msg, ms) {
+  otaInFlight = false; otaWatch = null;
+  hideUpdateToast();                       // the update is over -> drop the toast
+  toast(msg, ms);
+  api("/devices").then((r) => { devices = r.devices || r; checkFirmwareUpdates(); }).catch(() => {});
+}
+
+// Given a fresh device record, resolve the in-flight OTA if it's done. Used by
+// both the poll loop and the focus handler. Returns true once resolved.
+function resolveOtaFrom(d) {
+  if (!otaWatch || !d || d.id !== otaWatch.deviceId) return false;
+  if (d.ota_error && d.ota_error !== "0") {
+    finishOta(`Update failed (error ${d.ota_error}) — the frame kept its current version.`, 5000);
+    return true;
+  }
+  if (d.fw_version && d.fw_version !== otaWatch.fromVer && !d.update_available) {
+    finishOta(`✓ Frame updated to ${d.fw_version}`, 6000);
+    return true;
+  }
+  return false;
+}
+
+// Poll the device for the OTA outcome (a backstop to the focus handler).
+async function pollOtaResult(deviceId) {
+  const DEADLINE = Date.now() + 180000;   // ~3 min: download + flash + reboot + re-checkin
+  const tick = async () => {
+    if (!otaWatch || otaWatch.deviceId !== deviceId) return;   // already resolved elsewhere
+    let d; try { d = await api(`/devices/${deviceId}`); } catch { d = null; }
+    if (resolveOtaFrom(d)) return;
+    if (Date.now() < DEADLINE) { setTimeout(tick, 6000); return; }
+    finishOta("Update didn't complete — try “Check for updates” in Frame settings.", 5000);
+  };
+  setTimeout(tick, 8000);   // give the frame a beat to pick up the command
 }
 async function pollFrameStatus() {
   renderFrameStatus(currentDevice);              // age the relative time first
@@ -354,105 +702,90 @@ function startFrameStatusPoll() {
 }
 function stopFrameStatusPoll() { if (frameStatusTimer) { clearInterval(frameStatusTimer); frameStatusTimer = null; } }
 
-// Refresh from home: with a frame connected, re-pull the latest artwork and tell
-// the frame to re-fetch + redraw. With no frame yet (empty state), re-check the
-// device list so a freshly paired frame shows up.
+// Pull-to-refresh re-syncs the APP's view only — it never commands the physical
+// frame (that's the dedicated Refresh button's job).
+//   • Home: re-pull the latest artwork (or re-check devices in the empty state).
+//   • Frame: reload the gallery from the backend.
 async function homeRefresh() {
   if (!currentId) { await showHome(); return; }
   refreshHomeArt();
-  await sendCommand("refresh", "Refreshing the frame…");
+}
+async function frameRefresh() {
+  if (!currentId) return;
+  await loadGallery(currentId);
 }
 
-// Pull-to-refresh. Home is one locked viewport, so we own the gesture entirely
-// (touch-action:none covers the children too). The page UI never moves — only
-// the spinner descends; releasing past the threshold refreshes, a short pull
-// springs back.
-const PULL_START = 5, PULL_THRESHOLD = 64, PULL_MAX = 130, PULL_REST = 38;
-function wirePullToRefresh() {
-  const screen = $("screen-home");
+// Pull-to-refresh, shared by the home + frame screens via one absolute spinner.
+// Touch-events implementation (the mobile-reliable best practice): engage only
+// at scroll-top on a downward-dominant drag (so a horizontal gallery swipe is
+// never hijacked), move the pill with resistance, preventDefault to own the
+// gesture, and on release past the threshold play a pop then spring back.
+const PULL_SLOP = 8, PULL_RESIST = 0.5, PULL_THRESHOLD = 56, PULL_MAX = 110, PULL_REST = 38;
+function attachPullToRefresh(screenName, onRefresh) {
+  const screen = $("screen-" + screenName);
   const sp = $("pull-spinner");
-  let startY = null, active = false, dist = 0, busy = false;
+  let startY = null, startX = 0, pulling = false, dist = 0, busy = false;
+  const atTop = () => (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
 
   const render = (d) => {
     const p = Math.min(1, d / PULL_THRESHOLD);
     sp.style.transition = "";
     sp.style.opacity = String(p);
-    sp.style.transform = `translateY(${d * 0.42}px) scale(${0.7 + p * 0.3}) rotate(${d * 2.6}deg)`;
+    sp.style.transform = `translateY(${d}px) scale(${0.7 + p * 0.3}) rotate(${d * 2.4}deg)`;
   };
-  const ease = () => { sp.style.transition = "opacity .25s var(--ease), transform .25s var(--ease)"; };
-  const springBack = () => { ease(); sp.style.opacity = ""; sp.style.transform = ""; };
+  const springBack = () => {
+    sp.style.transition = "opacity .25s var(--ease), transform .25s var(--ease)";
+    sp.style.opacity = ""; sp.style.transform = "";
+  };
 
-  screen.addEventListener("pointerdown", (e) => {
-    if (busy || currentScreen !== "home") return;   // works in the empty state too
-    startY = e.clientY; active = false; dist = 0;
-  });
-  screen.addEventListener("pointermove", (e) => {
-    if (startY == null || busy) return;
-    const dy = e.clientY - startY;
-    if (dy < PULL_START) { if (active) { active = false; dist = 0; springBack(); } return; }
-    active = true; dist = Math.min(dy, PULL_MAX);
+  screen.addEventListener("touchstart", (e) => {
+    if (busy || currentScreen !== screenName || !atTop() || e.touches.length !== 1) { startY = null; return; }
+    startY = e.touches[0].clientY; startX = e.touches[0].clientX; pulling = false; dist = 0;
+  }, { passive: true });
+
+  screen.addEventListener("touchmove", (e) => {
+    if (startY == null || busy || e.touches.length !== 1) return;
+    const dy = e.touches[0].clientY - startY;
+    const dx = e.touches[0].clientX - startX;
+    if (!pulling) {
+      if (dy < PULL_SLOP) return;                  // not a downward pull yet
+      if (Math.abs(dx) > dy) { startY = null; return; }   // horizontal → leave it to the browser (gallery)
+      pulling = true;
+    }
+    dist = Math.min(dy * PULL_RESIST, PULL_MAX);    // follow the finger with resistance + cap
     render(dist);
-    if (e.cancelable) e.preventDefault();
+    if (e.cancelable) e.preventDefault();           // own the vertical gesture
   }, { passive: false });
 
-  const end = async () => {
+  const end = () => {
     if (startY == null) return;
-    const trigger = active && dist >= PULL_THRESHOLD;
-    startY = null; active = false; dist = 0;
-    if (!trigger) { springBack(); return; }
-    busy = true;
-    ease();
-    sp.classList.add("spin");
+    const trigger = pulling && dist >= PULL_THRESHOLD;
+    startY = null; pulling = false;
+    if (!trigger) { dist = 0; springBack(); return; }
+    // Committed: pop at the rest position, then spring back — independent of how
+    // long the (background) refresh takes.
+    dist = 0; busy = true;
+    sp.style.transition = "";
     sp.style.opacity = "1"; sp.style.transform = `translateY(${PULL_REST}px) scale(1)`;
-    try { await homeRefresh(); }
-    finally {
-      sp.classList.remove("spin");
-      springBack();
-      setTimeout(() => { busy = false; }, 200);
-    }
+    sp.classList.add("engaged");
+    onRefresh();
+    setTimeout(() => { sp.classList.remove("engaged"); springBack(); busy = false; }, 560);
   };
-  screen.addEventListener("pointerup", end);
-  screen.addEventListener("pointercancel", end);
+  screen.addEventListener("touchend", end);
+  screen.addEventListener("touchcancel", end);
 }
 
-function renderHomeFrame(d) {
-  currentId = d.id; currentDevice = d;
-  $("home-frame").classList.toggle("is-portrait", d.orientation === "portrait");
-  $("home-frame-name").textContent = displayName(d);
-  // Sleep indicator: a small moon beside the frame name when it's asleep.
-  const asleep = frameState(d).cls === "s-sleep";
-  $("home-sleep-moon").hidden = !asleep;
-  $("home-explain").textContent = "Loading today's work…";
-  loadArtwork($("home-art-img"), $("home-skeleton"), d.id, () => {
-    $("home-explain").textContent = "No artwork yet — open the frame and tap Generate.";
-  });
-  loadExplain(d.id);
-}
-
-async function loadExplain(id) {
+// Fill a card's caption from the latest artwork, and match the card's orientation
+// to the ACTUAL artwork on screen (not the device's current setting, which may have
+// changed after this image was made).
+async function loadExplain(id, card) {
+  const cap = card.querySelector(".home-explain");
   try {
     const { items } = await api(`/devices/${id}/archive?limit=1`);
     const m = items && items[0];
-    $("home-explain").textContent = (m && m.event_text_en) ? m.event_text_en : "Today's work hasn't been created yet.";
-    // The frame's orientation should match the ACTUAL artwork on screen, not the
-    // device's current setting (which may have changed after this image was made).
-    if (m && m.orientation) {
-      $("home-frame").classList.toggle("is-portrait", m.orientation === "portrait");
-    }
-  } catch { $("home-explain").textContent = "—"; }
-}
-
-function renderFrameSwitch(activeId) {
-  const el = $("frame-switch");
-  if (devices.length < 2) { el.hidden = true; el.innerHTML = ""; return; }
-  el.hidden = false; el.innerHTML = "";
-  for (const d of devices) {
-    const b = document.createElement("button");
-    b.textContent = displayName(d);
-    if (d.id === activeId) b.className = "active";
-    b.addEventListener("click", () => { renderHomeFrame(d); renderFrameSwitch(d.id); });
-    el.appendChild(b);
-  }
+    cap.textContent = (m && m.event_text_en) ? m.event_text_en : "Today's work hasn't been created yet.";
+    if (m && m.orientation) card.classList.toggle("is-portrait", m.orientation === "portrait");
+  } catch { cap.textContent = "—"; }
 }
 
 // --------------------------------------------------------------------------
@@ -460,18 +793,47 @@ function renderFrameSwitch(activeId) {
 // --------------------------------------------------------------------------
 function wireConnect() {
   $("empty-connect-btn").addEventListener("click", () => go("connect"));
+  $("add-frame-btn").addEventListener("click", () => go("connect"));   // "+" beside the gear
   $("connect-back").addEventListener("click", () => { stopScan(); showHome(); });
   $("pair-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     try {
       const dev = await api("/devices/pair", { method: "POST", body: { pairing_code: $("pair-code").value.trim() } });
-      const nm = $("pair-name").value.trim();
-      if (nm) { try { await api(`/devices/${dev.id}/config`, { method: "PUT", body: { name: nm } }); } catch {} }
-      $("pair-code").value = ""; $("pair-name").value = "";
-      await openFrame(dev.id);
-      toast("Paired! Tap Generate to make your first artwork");
+      $("pair-code").value = "";
+      await finishPair(dev);
     } catch (e2) { showError("pair-error", e2); }
   });
+  // "Name your frame" modal: Save / Enter / backdrop all accept the current value.
+  $("name-modal-save").addEventListener("click", () => resolveFrameName());
+  $("name-modal-input").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); resolveFrameName(); } });
+  $("name-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) resolveFrameName(); });
+}
+
+// Onboarding: right after a successful pair (QR or manual code), ask what to call
+// the frame — prefilled "My Ink" — then land on the frame ready to Generate.
+const DEFAULT_FRAME_NAME = "My Ink";
+let _nameResolve = null;
+function askFrameName() {
+  return new Promise((resolve) => {
+    _nameResolve = resolve;
+    const input = $("name-modal-input");
+    input.value = DEFAULT_FRAME_NAME;
+    $("name-modal").hidden = false;
+    input.focus(); input.select();
+  });
+}
+function resolveFrameName() {
+  if (!_nameResolve) return;
+  const name = $("name-modal-input").value.trim() || DEFAULT_FRAME_NAME;
+  $("name-modal").hidden = true;
+  const r = _nameResolve; _nameResolve = null;
+  r(name);
+}
+async function finishPair(dev) {
+  const name = await askFrameName();
+  try { await api(`/devices/${dev.id}/config`, { method: "PUT", body: { name } }); } catch {}
+  await openFrame(dev.id);
+  toast("Paired! Tap Generate to make your first artwork");
 }
 
 // --------------------------------------------------------------------------
@@ -490,6 +852,14 @@ async function openFrame(id) {
     updateRefreshState();
   } catch (e) { toast(e.message); }
   await loadGallery(id);
+  // A generation may already be running for this frame (started before the user
+  // left the screen, or before an app reload). Reflect it on the button instead
+  // of offering a fresh Generate — the backend refuses a second run anyway.
+  try {
+    const s = await api(`/devices/${id}/generation`);
+    if (s.state === "running") watchGeneration(id);
+    else if (genWatching !== id) setBusy(false);   // stale busy UI from a previous visit
+  } catch {}
 }
 
 function friendlyDate(iso) {
@@ -514,19 +884,34 @@ async function loadGallery(id) {
   try { ({ items } = await api(`/devices/${id}/archive?limit=10`)); } catch {}
   frameItems = items || [];
   const g = $("gallery");
+  g.style.height = "";
   if (!frameItems.length) {
     g.innerHTML = slideCard(isPortraitItem(null), `<div class="art-empty">No artwork yet —<br>tap Generate to create today's work.</div>`);
     setPlacard(null); renderDots(0, 0); return;
   }
   g.innerHTML = frameItems.map((m) => slideCard(isPortraitItem(m), `<img alt="artwork" />`)).join("");
   g.querySelectorAll(".slide img").forEach((img, i) => {
-    img.onload = () => img.classList.add("loaded");
+    img.onload = () => { img.classList.add("loaded"); fitGalleryHeight(); };
     img.src = serverBase() + frameItems[i].image_url + `?t=${Date.now()}`;
     img.style.cursor = "zoom-in";
     img.addEventListener("click", () => openLightbox(frameItems[i]));
   });
   g.scrollLeft = 0;
   setPlacard(frameItems[0]); renderDots(0, frameItems.length);
+  fitGalleryHeight();
+}
+
+// The gallery is a swipeable carousel that can mix portrait (tall) and landscape
+// (short) works. A flex row takes the tallest slide's height and centers shorter
+// ones, leaving big gaps above/below a landscape image. Pin the gallery to the
+// ACTIVE slide's height so each orientation fits snugly (off-screen taller slides
+// are clipped by the gallery's overflow — they're not visible anyway).
+function fitGalleryHeight() {
+  const g = $("gallery");
+  if (!g || !frameItems.length) return;
+  const idx = Math.max(0, Math.min(frameItems.length - 1, Math.round(g.scrollLeft / (g.clientWidth || 1))));
+  const card = g.querySelectorAll(".art-card")[idx];
+  if (card) g.style.height = Math.ceil(card.getBoundingClientRect().height) + "px";
 }
 
 // --------------------------------------------------------------------------
@@ -535,10 +920,23 @@ async function loadGallery(id) {
 function openLightbox(item) {
   if (!item) return;
   const lb = $("lightbox"), img = $("lb-img");
-  lb.classList.toggle("is-portrait", isPortraitItem(item));
   img.classList.remove("loaded");
   img.onload = () => img.classList.add("loaded");
-  img.src = serverBase() + item.image_url + `?t=${Date.now()}`;
+  // Prefer the full-detail original (1024x1536 grayscale, saved upright — no
+  // rotation needed). Fall back to the rotated panel PNG when the original was
+  // pruned or predates this feature.
+  const showPanel = () => {
+    img.onerror = null;
+    lb.classList.toggle("is-portrait", isPortraitItem(item));
+    img.src = serverBase() + item.image_url + `?t=${Date.now()}`;
+  };
+  if (item.image_full_url) {
+    lb.classList.remove("is-portrait");   // original is already upright
+    img.onerror = showPanel;
+    img.src = serverBase() + item.image_full_url + `?t=${Date.now()}`;
+  } else {
+    showPanel();
+  }
   lb.hidden = false;
   // Push a history entry so the back button / Android back closes the lightbox.
   history.pushState({ screen: currentScreen, lightbox: 1 }, "");
@@ -562,19 +960,66 @@ function setPlacard(m) {
   en.textContent = m.event_text_en || "—";
   const sig = currentDevice && currentDevice.signature;
   if (sig) { sign.textContent = `— ${sig}`; sign.hidden = false; } else sign.hidden = true;
+  renderOtherEvents(m.other_events);
+  setAlsoOpen(false);          // each item starts with its runner-ups collapsed
   updateReadMore();
+}
+
+// "Also on this day": the date-verified runner-up events the curator didn't pick.
+// Captions come from the model → render as text (never innerHTML). Each event
+// carries its interest category; predefined ones get their icon, anything custom
+// (or legacy rows without a category) gets a generic spark.
+// Stroked line icons (currentColor) so they sit in the beige/ink scheme like the
+// rest of the app's icons — emoji can't be recolored. Static strings, not user data.
+const _alsoSvg = (inner) =>
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+const ALSO_ICONS = {
+  israel: _alsoSvg('<path d="M12 3.5 4.6 16.5h14.8z"/><path d="M12 20.5 4.6 7.5h14.8z"/>'),
+  science: _alsoSvg('<path d="M10 3h4M11 3v5.2L5.6 17a2.4 2.4 0 0 0 2.1 3.6h8.6a2.4 2.4 0 0 0 2.1-3.6L13 8.2V3"/><path d="M8.2 14.5h7.6"/>'),
+  history: _alsoSvg('<path d="M4 9l8-5.5L20 9"/><path d="M5 9h14M6 9v8M10 9v8M14 9v8M18 9v8M4 17h16M3.5 20.5h17"/>'),
+  sports: _alsoSvg('<path d="M8 4h8v5a4 4 0 0 1-8 0V4z"/><path d="M8 5H5a3 3 0 0 0 3.2 4M16 5h3A3 3 0 0 1 15.8 9M12 13v4M9 20h6M12 17v3"/>'),
+  astronomy: _alsoSvg('<circle cx="12" cy="12" r="4.5"/><path d="M3.6 15.2C2.5 13.9 8 10 13.6 7.6c5.2-2.2 8-2.3 6.8-.8"/>'),
+  art: _alsoSvg('<path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-.8 2-1.9 0-1.3-1.2-1.6-1.2-2.6 0-.9.8-1.5 1.9-1.5H17a4 4 0 0 0 4-4C21 6.6 17 3 12 3z"/><circle cx="7.6" cy="10.4" r=".4"/><circle cx="10.6" cy="7" r=".4"/><circle cx="14.6" cy="7.4" r=".4"/>'),
+  music: _alsoSvg('<path d="M9 17.5V5l10-2v12.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/>'),
+  cinema: _alsoSvg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7.5 4v16M16.5 4v16M3 9h4.5M3 15h4.5M16.5 9H21M16.5 15H21"/>'),
+};
+const ALSO_ICON_GENERIC =
+  _alsoSvg('<path d="M12 4.5l1.7 5 5 1.7-5 1.7-1.7 5-1.7-5-5-1.7 5-1.7z"/>');
+function renderOtherEvents(events) {
+  const sec = $("other-events"), ul = $("also-list");
+  const items = (Array.isArray(events) ? events : [])
+    .filter((e) => e && (e.caption || "").trim());
+  ul.innerHTML = "";
+  if (!items.length) { sec.hidden = true; return; }
+  for (const e of items) {
+    const li = document.createElement("li");
+    li.className = "also-item";
+    const ico = document.createElement("span");
+    ico.className = "also-ico";
+    ico.setAttribute("aria-hidden", "true");
+    // Static SVG strings from ALSO_ICONS only — never user/model data.
+    ico.innerHTML = ALSO_ICONS[(e.category || "").trim().toLowerCase()] || ALSO_ICON_GENERIC;
+    const text = document.createElement("span");
+    text.className = "also-text";
+    text.textContent = e.caption.trim();
+    li.append(ico, text);
+    ul.appendChild(li);
+  }
+  sec.hidden = false;
 }
 
 // The Frame screen is a fixed one viewport. The description is clamped to 4
 // lines; if it's longer, a "Read more" toggle expands it (and lets the screen
 // scroll while expanded so the full text is reachable).
+// The frame page scrolls normally, so Read-more and "Also on this day" just
+// expand their content in place. `.expanded` lifts the 4-line description clamp.
 function setFrameExpanded(on) {
   $("screen-frame").classList.toggle("expanded", on);
   $("ev-more").textContent = on ? "Read less" : "Read more";
-  // Expanded → allow the page to scroll; collapsed → fixed one viewport.
-  $("app").classList.toggle("locked", !on);
-  document.body.classList.toggle("home-locked", !on);
-  if (!on) window.scrollTo(0, 0);
+}
+function setAlsoOpen(on) {
+  $("also-list").hidden = !on;
+  $("also-toggle").setAttribute("aria-expanded", on ? "true" : "false");
 }
 function updateReadMore() {
   const ev = $("ev-text"), btn = $("ev-more");
@@ -596,26 +1041,84 @@ function onGalleryScroll() {
   cancelAnimationFrame(galleryRAF);
   galleryRAF = requestAnimationFrame(() => {
     const i = Math.round(g.scrollLeft / g.clientWidth);
-    if (frameItems[i]) { setPlacard(frameItems[i]); renderDots(i, frameItems.length); }
+    if (frameItems[i]) { setPlacard(frameItems[i]); renderDots(i, frameItems.length); fitGalleryHeight(); }
   });
 }
 
+// The Generate button mirrors the backend's REAL pipeline phase, polled from
+// /generation (the job's `detail` carries the phase). Image generation dominates,
+// so "Painting…" naturally holds the longest; the early stages are genuinely
+// quick. Falls back to "Working…" if an older backend reports no phase.
+const GEN_LABELS = {
+  discover: "Discovering…",   // weather + holidays
+  research: "Researching…",   // the day's historical moment
+  compose: "Composing…",      // building the prompt
+  paint: "Painting…",         // image generation (the long phase)
+  finish: "Finishing…",       // dither + upload
+};
+function genLabel(text) {
+  $("regen-btn").innerHTML = `<span class="spin-sm" aria-hidden="true"></span><span class="gen-step">${text}</span>`;
+}
 function setBusy(on) {
   const b = $("regen-btn");
   b.disabled = on;
-  b.innerHTML = on ? '<span class="spin-sm" aria-hidden="true"></span>Generating…' : "Generate";
   b.classList.toggle("busy", on);
   $("gallery").classList.toggle("busy", on);
+  if (on) genLabel("Starting…");
+  else b.textContent = "Generate";
 }
 async function pollGeneration(id) {
-  for (let i = 0; i < 48; i++) {
-    await sleep(2500);
+  let last = "";
+  for (let i = 0; i < 130; i++) {
+    await sleep(1000);   // poll briskly so quick early phases are caught
     let s; try { s = await api(`/devices/${id}/generation`); } catch { continue; }
-    if (s.state === "done") { if (id === currentId) await loadGallery(id); toast("New artwork ready"); return; }
+    if (s.state === "done") {
+      if (id === currentId) await loadGallery(id);   // show it in the app immediately
+      await afterGenerated(id);                       // then reflect the physical frame updating
+      return;
+    }
     if (s.state === "error") { toast(s.detail || "Couldn't create the artwork"); return; }
+    const label = GEN_LABELS[s.detail] || "Working…";   // s.detail = the live phase
+    if (label !== last) { genLabel(label); last = label; }
   }
   toast("Still working — check back shortly");
 }
+
+// After the backend finishes creating the art, the PHYSICAL frame still has to
+// fetch + redraw it — it picks up the queued refresh on its next poll (≤60s). So:
+//  • awake  → show "Updating frame…" until it checks in again (carrying the redraw);
+//  • asleep → it won't update until woken, so say so;
+//  • offline→ likewise.
+async function afterGenerated(id) {
+  const d = currentDevice || {};
+  const st = frameState(d);
+  if (st.cls === "s-sleep") { showWakeToast(id, "Wake the frame (KEY1) to show it."); return; }
+  if (st.cls === "s-off")   { showWakeToast(id, "Reconnect the frame to show it."); return; }
+  const base = d.last_seen ? new Date(d.last_seen).getTime() : 0;
+  genLabel("Updating frame…");
+  for (let i = 0; i < 40; i++) {
+    await sleep(2000);
+    if (id !== currentId) return;                        // user navigated away
+    let dev; try { dev = await api(`/devices/${id}`); } catch { continue; }
+    currentDevice = dev; syncDeviceCache(dev); renderFrameStatus(dev); updateRefreshState();
+    const st2 = frameState(dev);
+    if (st2.cls === "s-sleep") { showWakeToast(id, "Wake the frame (KEY1) to show the new art."); return; }
+    if ((dev.last_seen ? new Date(dev.last_seen).getTime() : 0) > base) { toast("Frame updated"); return; }
+  }
+  toast("Artwork ready — the frame will show it shortly");
+}
+
+// Persistent "artwork waiting" banner (mirrors the update toast) for when a new
+// work was generated but the frame can't fetch it yet (asleep/offline). There's
+// no remote wake, so it's informational; it auto-clears when the frame is back
+// (renderFrameStatus) or on close.
+let wakePendingId = null;
+function showWakeToast(deviceId, sub) {
+  wakePendingId = deviceId;
+  $("wake-toast-sub").textContent = sub;
+  $("wake-toast").hidden = false;
+}
+function hideWakeToast() { $("wake-toast").hidden = true; wakePendingId = null; }
 
 // Refresh re-pulls the app view AND tells the physical frame to re-fetch+redraw.
 // Sleep tells the frame to go to sleep. Both reach the frame on its next poll
@@ -632,7 +1135,7 @@ function updateRefreshState() {
   $("sleep-btn").title = asleep ? "Frame is already asleep" : "Sleep the frame";
   const hint = $("refresh-hint");
   if (asleep) {
-    hint.textContent = "💤 Frame is asleep — press KEY1 on it to wake it";
+    hint.textContent = "💤 Frame is asleep — wake it (KEY1) to update the display";
     hint.hidden = false;
   } else if (offline) {
     hint.textContent = "⚠ Frame is offline — check it's powered and on Wi‑Fi";
@@ -649,10 +1152,13 @@ function wireFrame() {
   $("frame-back").addEventListener("click", () => showHome(currentId));
   $("goto-artwork").addEventListener("click", openArtwork);
   $("goto-settings").addEventListener("click", openSettings);
-  $("home-art-btn").addEventListener("click", () => openFrame(currentId));
-  $("home-more").addEventListener("click", () => openFrame(currentId));
+  // Home cards are built dynamically; per-card Open buttons are wired in
+  // buildHomeCards. Here we only wire the carousel scroll → active dot/frame.
+  $("home-carousel").addEventListener("scroll", onHomeScroll, { passive: true });
   $("ev-more").addEventListener("click", () => setFrameExpanded(!$("screen-frame").classList.contains("expanded")));
-  wirePullToRefresh();
+  $("also-toggle").addEventListener("click", () => setAlsoOpen($("also-list").hidden));
+  attachPullToRefresh("home", homeRefresh);
+  attachPullToRefresh("frame", frameRefresh);
   $("gallery").addEventListener("scroll", onGalleryScroll, { passive: true });
   $("refresh-btn").addEventListener("click", async () => {
     const btn = $("refresh-btn"); btn.classList.add("busy");
@@ -665,10 +1171,25 @@ function wireFrame() {
   });
   $("regen-btn").addEventListener("click", async () => {
     const id = currentId; setBusy(true);
-    try { await api(`/devices/${id}/regenerate`, { method: "POST" }); await pollGeneration(id); }
-    catch (e) { toast(e.message); }
-    setBusy(false);
+    try { await api(`/devices/${id}/regenerate`, { method: "POST" }); }
+    catch (e) {
+      // 409 = a generation is already running (e.g. started before a reload) —
+      // don't error out, just attach to it. Anything else is a real failure.
+      if (e.status !== 409) { toast(e.message); setBusy(false); return; }
+    }
+    watchGeneration(id);
   });
+}
+
+// Follow a running generation for a device — singleton per device, so a click
+// and a screen re-entry never spawn two poll loops for the same job.
+let genWatching = null;
+async function watchGeneration(id) {
+  if (genWatching === id) { setBusy(true); return; }   // already following — just re-show busy
+  genWatching = id;
+  setBusy(true);
+  try { await pollGeneration(id); }
+  finally { genWatching = null; setBusy(false); }
 }
 
 // --------------------------------------------------------------------------
@@ -683,6 +1204,88 @@ function renderInterestChips() {
   }
 }
 
+// ── Date format ────────────────────────────────────────────────────────────
+// Token vocabulary + formatter MUST match artframe/constants.py format_date so the
+// preview here equals what's drawn on the frame. Presets are previewed live on
+// today's date; "Custom…" reveals a free-text field + a token reference.
+const DATE_PRESETS = [
+  "ddd MMM D",        // Tue Jun 30
+  "dddd, MMMM Do",    // Tuesday, June 30th
+  "dddd MMMM Do",     // Tuesday June 30th
+  "MMMM Do",          // June 30th
+  "MMM D",            // Jun 30
+  "Do MMMM YYYY",     // 30th June 2026
+  "DD/MM/YYYY",       // 30/06/2026
+  "MM/DD/YYYY",       // 06/30/2026
+];
+const DATE_TOKENS = [
+  ["dddd", "Weekday"], ["ddd", "Weekday, short"],
+  ["MMMM", "Month"], ["MMM", "Month, short"], ["MM", "Month, 2-digit"],
+  ["Do", "Day + ordinal"], ["D", "Day"], ["DD", "Day, 2-digit"],
+  ["YYYY", "Year"], ["YY", "Year, 2-digit"],
+];
+const DATE_TOKEN_RE = /dddd|ddd|MMMM|MMM|MM|YYYY|YY|DD|Do|D/g;
+const DATE_LEGACY = { weekday: "ddd, MMM DD", month_day: "MMMM DD", abbr_year: "MMM DD, YYYY", dmy: "DD/MM/YYYY", mdy: "MM/DD/YYYY" };
+function dateOrdinal(n) {
+  const s = (n % 100 >= 10 && n % 100 <= 20) ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th");
+  return `${n}${s}`;
+}
+function formatDate(d, fmt) {
+  fmt = DATE_LEGACY[fmt] || fmt || DATE_LEGACY.weekday;
+  const en = (opt) => d.toLocaleDateString("en-US", opt);   // English to match server strftime
+  const map = {
+    dddd: en({ weekday: "long" }), ddd: en({ weekday: "short" }),
+    MMMM: en({ month: "long" }), MMM: en({ month: "short" }), MM: String(d.getMonth() + 1).padStart(2, "0"),
+    Do: dateOrdinal(d.getDate()), D: String(d.getDate()), DD: String(d.getDate()).padStart(2, "0"),
+    YYYY: String(d.getFullYear()), YY: String(d.getFullYear() % 100).padStart(2, "0"),
+  };
+  return fmt.replace(DATE_TOKEN_RE, (t) => map[t]);
+}
+function buildDateOptions() {
+  const sel = $("date-format"); if (!sel) return;
+  const today = new Date();
+  sel.innerHTML = "";
+  for (const fmt of DATE_PRESETS) {
+    const o = document.createElement("option");
+    o.value = fmt; o.textContent = formatDate(today, fmt);
+    sel.appendChild(o);
+  }
+  const c = document.createElement("option");
+  c.value = "custom"; c.textContent = "Custom…";
+  sel.appendChild(c);
+  const dl = $("date-token-list");
+  if (dl && !dl.childElementCount) {
+    for (const [tok, desc] of DATE_TOKENS) {
+      const dt = document.createElement("dt"); dt.textContent = tok;
+      const dd = document.createElement("dd"); dd.textContent = `${desc} → ${formatDate(today, tok)}`;
+      dl.append(dt, dd);
+    }
+  }
+}
+const currentDateFormat = () =>
+  $("date-format").value === "custom" ? ($("date-custom").value.trim() || "ddd MMM D") : $("date-format").value;
+function setDateFormat(fmt) {
+  buildDateOptions();
+  if (DATE_PRESETS.includes(fmt)) {
+    $("date-format").value = fmt;
+  } else {                                  // legacy enum key or a custom string
+    $("date-format").value = "custom";
+    $("date-custom").value = DATE_LEGACY[fmt] || fmt || "";
+  }
+}
+function updateDatePreview() {
+  $("date-preview").textContent = formatDate(new Date(), currentDateFormat());
+}
+function refreshDateUI() {
+  const showDate = $("show_date").checked;
+  const custom = $("date-format").value === "custom";
+  $("date-format-row").hidden = !showDate;
+  $("date-custom-wrap").hidden = !(showDate && custom);   // preview lives inside, custom-only
+  if (!(showDate && custom)) closeDateHelp();
+}
+const openDateHelp = () => { $("date-help-modal").hidden = false; };
+const closeDateHelp = () => { $("date-help-modal").hidden = true; };
+
 function openArtwork() {
   if (!currentDevice) return;
   const d = currentDevice;
@@ -692,10 +1295,14 @@ function openArtwork() {
   $("manual-coords").checked = false; $("coords-row").hidden = true;
   hideSuggest();
   setLocEdit(!d.city_name);  // unset → start in edit mode; otherwise show static text
-  $("show_weather").checked = d.show_weather !== false;
+  $("use_weather").checked = d.use_weather !== false;
+  $("loc-weather-body").hidden = d.use_weather === false;
+  $("use_event").checked = d.use_event !== false;
+  $("interests-body").hidden = d.use_event === false;
   $("show_date").checked = d.show_date !== false;
-  $("date-format").value = d.date_format || "weekday";
-  $("date-format-row").hidden = d.show_date === false;
+  setDateFormat(d.date_format || "weekday");
+  updateDatePreview();
+  refreshDateUI();
   setRadio("unit", d.temp_unit || "c");
   setRadio("orient", d.orientation || "landscape");
   $("language").value = d.language || "en";
@@ -722,8 +1329,9 @@ function artworkBody() {
     city_name: $("city-name").value.trim(),
     lat: parseFloat($("lat").value), lon: parseFloat($("lon").value),
     temp_unit: getRadio("unit"), orientation: getRadio("orient"),
-    show_weather: $("show_weather").checked, show_date: $("show_date").checked,
-    date_format: $("date-format").value,
+    show_date: $("show_date").checked,
+    use_weather: $("use_weather").checked, use_event: $("use_event").checked,
+    date_format: currentDateFormat(),
     interests: [...chips, ...other].join(", "),
     signature: $("signature").value.trim() || "Ink.", language: $("language").value,
     holiday_jewish: $("h-jewish").checked, holiday_israeli: $("h-israeli").checked, holiday_global: $("h-global").checked,
@@ -737,7 +1345,22 @@ function wireArtwork() {
   renderInterestChips();
   $("artwork-back").addEventListener("click", () => go("frame"));
   $("manual-coords").addEventListener("change", (e) => { $("coords-row").hidden = !e.target.checked; });
-  $("show_date").addEventListener("change", (e) => { $("date-format-row").hidden = !e.target.checked; });
+  $("show_date").addEventListener("change", refreshDateUI);
+  $("date-format").addEventListener("change", () => {
+    refreshDateUI(); updateDatePreview();
+    if ($("date-format").value === "custom") $("date-custom").focus();
+  });
+  $("date-custom").addEventListener("input", updateDatePreview);
+  // Mount the modal at body level so it overlays the viewport rather than being
+  // trapped inside the (display:none) artwork screen subtree.
+  document.body.appendChild($("date-help-modal"));
+  // "?" opens the format-codes modal; close via X, backdrop click, or Esc.
+  $("date-help-btn").addEventListener("click", (e) => { e.preventDefault(); openDateHelp(); });
+  $("date-help-close").addEventListener("click", closeDateHelp);
+  $("date-help-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeDateHelp(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDateHelp(); });
+  $("use_weather").addEventListener("change", (e) => { $("loc-weather-body").hidden = !e.target.checked; });
+  $("use_event").addEventListener("change", (e) => { $("interests-body").hidden = !e.target.checked; });
   $("city-edit").addEventListener("click", () => { setLocEdit(true); $("city-name").focus(); $("city-name").select(); });
   $("city-find").addEventListener("click", geocode);
   $("city-accept").addEventListener("click", acceptLocation);
@@ -906,18 +1529,17 @@ function openSettings() {
   $("day-chips").hidden = (d.schedule || "daily") === "daily";
   const pad2 = (n) => String(n).padStart(2, "0");
   $("wake").value = `${pad2(d.wake_hour || 0)}:${pad2(d.wake_minute || 0)}`;
-  setRadio("power", d.power_source || "usb");
-  $("sleep-after").value = d.sleep_after_minutes || 10;
-  $("sleep-row").hidden = (d.power_source || "usb") !== "battery";
+  // Power: a single choice — stay always on, or sleep after N minutes of uptime.
+  // (0 = always on.) The frame can't sense its own power, so there's no plugged/
+  // battery distinction or battery %.
+  const sleepMin = d.sleep_after_minutes || 0;           // 0 = always on
+  setRadio("sleepmode", sleepMin > 0 ? "sleep" : "always_on");
+  $("sleep-after").value = sleepMin > 0 ? sleepMin : 30;
+  $("sleep-after-row").hidden = !(sleepMin > 0);
   $("auto-tz").checked = d.auto_timezone !== false;
   $("tz-row").hidden = d.auto_timezone !== false; $("tz").value = d.tz || "";
   $("spec-conn").textContent = d.last_seen ? relTime(d.last_seen) : "never";
-  $("spec-wifi").textContent = wifiLabel(d.wifi_rssi);
-  // On USB there's no battery to read (the BAT-pad ADC reads ~0V), so show the
-  // power source instead of a misleading "0%". On battery, show the charge level.
-  const onUsb = (d.power_source || "usb") !== "battery";
-  const bat = batteryPct(d.battery);
-  $("spec-batt").textContent = onUsb ? "Plugged in" : (bat != null ? `${bat}%` : "—");
+  $("spec-wifi").innerHTML = wifiLabel(d.wifi_rssi);
   $("spec-fw").textContent = d.fw_version || "—"; $("spec-id").textContent = d.id;
   setSettingsDirty(false);   // freshly loaded → nothing to save yet
   go("settings");
@@ -941,8 +1563,8 @@ function wireSettings() {
   // Conditional rows follow their controls.
   document.querySelectorAll('input[name="sched"]').forEach((r) =>
     r.addEventListener("change", () => { $("day-chips").hidden = getRadio("sched") === "daily"; }));
-  document.querySelectorAll('input[name="power"]').forEach((r) =>
-    r.addEventListener("change", () => { $("sleep-row").hidden = getRadio("power") !== "battery"; }));
+  document.querySelectorAll('input[name="sleepmode"]').forEach((r) =>
+    r.addEventListener("change", () => { $("sleep-after-row").hidden = getRadio("sleepmode") !== "sleep"; }));
   $("auto-tz").addEventListener("change", (e) => { $("tz-row").hidden = e.target.checked; });
 
   // One global save: send only what actually changed.
@@ -959,10 +1581,11 @@ function wireSettings() {
     const [wh, wm] = ($("wake").value || "").split(":").map((n) => parseInt(n, 10));
     const m = isNaN(wm) ? 0 : wm;
     if (!isNaN(wh) && (wh !== d.wake_hour || m !== d.wake_minute)) { body.wake_hour = wh; body.wake_minute = m; }
-    const power = getRadio("power");
-    if (power !== d.power_source) body.power_source = power;
-    const s = parseInt($("sleep-after").value, 10);
-    if (!isNaN(s) && s !== d.sleep_after_minutes) body.sleep_after_minutes = s;
+    // Sleep policy: "always on" stores 0; "sleep after" stores the minutes.
+    const sleepMin = getRadio("sleepmode") === "sleep"
+      ? Math.max(1, parseInt($("sleep-after").value, 10) || 30)
+      : 0;
+    if (sleepMin !== (d.sleep_after_minutes || 0)) body.sleep_after_minutes = sleepMin;
     const auto = $("auto-tz").checked;
     if (auto !== (d.auto_timezone !== false)) body.auto_timezone = auto;
     const tz = $("tz").value.trim();
@@ -986,22 +1609,11 @@ function wireSettings() {
       toast("Couldn't disconnect — frame is still connected");
     } finally { btn.disabled = false; }
   });
-  $("check-fw-btn").addEventListener("click", async () => {
-    const btn = $("check-fw-btn"); btn.disabled = true;
-    const hint = $("fw-status-hint"); hint.textContent = "Checking…";
-    try {
-      const d = await api(`/devices/${currentId}`);
-      currentDevice = d; syncDeviceCache(d);
-      $("spec-fw").textContent = d.fw_version || "—";
-      if (d.update_available) {
-        updateDismissed = false;             // user explicitly asked → allow the toast again
-        hint.textContent = `Update available: ${d.fw_version || "?"} → ${d.latest_fw || "?"}`;
-        showUpdateToast(d);
-      } else {
-        hint.textContent = `Up to date (${d.fw_version || "—"})`;
-      }
-    } catch (e) { hint.textContent = "Couldn't check — " + e.message; }
-    finally { btn.disabled = false; }
+  // Same behavior as the app-settings "Check for updates" button: animates,
+  // stays on screen, toasts per source (frame firmware / app), else "Up to date".
+  $("check-fw-btn").addEventListener("click", (e) => {
+    const hint = $("fw-status-hint"); if (hint) hint.hidden = true;
+    checkForUpdates(e.currentTarget);
   });
   $("factory-btn").addEventListener("click", async () => {
     if (frameState(currentDevice).cls !== "s-on") {
@@ -1060,11 +1672,10 @@ function wireAccount() {
     try { await api("/account/key", { method: "PUT", body: { openai_api_key: v } }); $("api-key").value = ""; setKeyMode("own"); toast("Saved your key"); }
     catch (e) { showError("key-err", e); }
   });
-  $("update-btn").addEventListener("click", async () => {
-    toast("Checking for updates…");
-    try { if ("serviceWorker" in navigator) { const reg = await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); } toast("Up to date — reloading…"); setTimeout(() => location.reload(), 700); }
-    catch { toast("Couldn't check for updates"); }
-  });
+  $("update-btn").addEventListener("click", (e) => checkForUpdates(e.currentTarget));
+  $("app-toast-refresh").addEventListener("click", () => location.reload());
+  $("app-toast-close").addEventListener("click", () => { $("app-toast").hidden = true; });
+  $("wake-toast-close").addEventListener("click", hideWakeToast);
   $("logout-btn").addEventListener("click", () => {
     if (!confirm("Log out of this account on this device?\n\nKeep your account token saved if you want to return.")) return;
     localStorage.removeItem(TOKEN_KEY); go("welcome");
@@ -1177,13 +1788,37 @@ function stopScan() {
 async function syncByCode(code) {
   try {
     const dev = await api("/devices/pair", { method: "POST", body: { pairing_code: code } });
-    await openFrame(dev.id);
-    toast("Paired! Tap Generate to make your first artwork");
+    await finishPair(dev);
   } catch (e) { await showHome(); go("connect"); $("pair-code").value = code; showError("pair-error", e); }
 }
 
 // Auto-follow the published backend URL so the app survives a server move.
 // Skipped if the user has pinned a server in Advanced.
+// On focus/visibility: refresh home art, then re-pull devices to resolve an
+// in-flight OTA and re-evaluate the update toast (dismiss if no longer needed).
+let _lastFocusRun = 0;
+async function onAppFocus() {
+  // visibilitychange + focus both fire when a tab returns — run once, not twice.
+  const now = Date.now();
+  if (now - _lastFocusRun < 1500) return;
+  _lastFocusRun = now;
+  refreshHomeArt();
+  try {
+    const r = await api("/devices");
+    // Merge by id — replacing the array wholesale would discard a drag-reorder's
+    // local order and desync devices[] from the DOM cards built from it.
+    for (const d of r.devices || r) {
+      const i = devices.findIndex((x) => x.id === d.id);
+      if (i >= 0) devices[i] = d; else devices.push(d);
+    }
+    if (otaWatch) {
+      const d = devices.find((x) => x.id === otaWatch.deviceId);
+      if (d && resolveOtaFrom(d)) return;   // finishOta already refreshes the toast
+    }
+    checkFirmwareUpdates();
+  } catch { /* offline — leave current state */ }
+}
+
 async function resolveServer() {
   if (localStorage.getItem(SERVER_MANUAL_KEY)) return;
   try {
@@ -1197,9 +1832,11 @@ async function resolveServer() {
 async function init() {
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
   wireWelcome(); wireConnect(); wireFrame(); wireArtwork(); wireSettings(); wireAccount(); wireInstall(); wireScanner(); wireLightbox(); wireUpdateToast();
-  // When the app/tab regains focus, make sure the home shows the latest artwork.
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshHomeArt(); });
-  window.addEventListener("focus", refreshHomeArt);
+  // When the app/tab regains focus, refresh the home art AND re-check firmware:
+  // this resolves an OTA that finished while the app was backgrounded (timers
+  // pause in the background) — showing "✓ updated" and dismissing the toast.
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") onAppFocus(); });
+  window.addEventListener("focus", onAppFocus);
   const params = new URLSearchParams(location.search);
   const server = params.get("server"); if (server) setServer(server);
   await resolveServer();   // published server.txt wins unless the user pinned one
@@ -1209,7 +1846,7 @@ async function init() {
     go("welcome");
     api("/account", { method: "POST", auth: false })
       .then(({ token: t }) => { localStorage.setItem(TOKEN_KEY, t); syncByCode(code); })
-      .catch((e) => { showError("welcome-error", e); $("server-details").open = true; });
+      .catch((e) => showError("welcome-error", e));
   } else go("welcome");
   if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 }

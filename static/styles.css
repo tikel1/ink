@@ -22,6 +22,8 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
+/* Suppress the browser's native pull-to-refresh everywhere — we provide our own. */
+html, body { overscroll-behavior-y: none; }
 /* A `hidden` element must always stay hidden — author rules like
    `.home-frame { display:flex }` would otherwise beat the UA [hidden] default
    and leak the inactive view under the active one. */
@@ -74,7 +76,7 @@ body.home-locked { overflow: hidden; height: 100dvh; overscroll-behavior-y: none
                  align-items: center; justify-content: center; text-align: center; }
 @media (prefers-reduced-motion: reduce) {
   .screen, .float, .bl, body::after,
-  .brand-word, .word, .btn-primary.busy, .spin-sm { animation: none !important; }
+  .brand-word, .word, .btn-primary.busy, .spin-sm, .gen-step, .pull-spinner.engaged { animation: none !important; }
 }
 
 /* ── Typography ───────────────────────────────────────────────────────── */
@@ -140,10 +142,16 @@ button { font-family: inherit; }
   font-size: 15px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--ink);
   transition: transform .12s var(--ease), box-shadow .2s, background .2s, opacity .2s;
 }
+/* Keyboard affordance: one consistent focus ring, everywhere (invisible for
+   mouse/touch — :focus-visible only). */
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 4px;
+}
+
 .btn-primary { background: var(--ink); color: var(--paper);
                box-shadow: var(--shadow), 0 8px 26px -10px rgba(var(--glow), .45); }
-.btn-primary:hover { box-shadow: var(--shadow-lg); }
-.btn-primary:active { transform: scale(.978); }
+.btn-primary:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); }
+.btn-primary:active { transform: scale(.978); box-shadow: var(--shadow); }
 .btn-ghost { background: transparent; color: var(--ink); }
 .btn-ghost:hover { background: rgba(27,24,19,.05); }
 .btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
@@ -157,9 +165,18 @@ button { font-family: inherit; }
   padding: max(12px, env(safe-area-inset-top)) 14px 12px;
   background: #14110d; color: #fff;
   box-shadow: var(--shadow-lg);
-  animation: fw-drop .32s var(--ease) both;
+  /* Fade in only — a translateY slide-in could get stuck in its start state
+     (translateY(-100%)) and leave the toast above the viewport with the X
+     unreachable. Opacity can't push it off-screen, so the toast (and its close
+     button) is always in place. */
+  animation: fw-fade .25s var(--ease) both;
 }
-@keyframes fw-drop { from { transform: translateY(-100%); } to { transform: none; } }
+@keyframes fw-fade { from { opacity: 0; } to { opacity: 1; } }
+/* If several pinned toasts show at once, stack them instead of overlapping. */
+#fw-toast:not([hidden]) ~ #app-toast { top: 64px; }
+#fw-toast:not([hidden]) ~ #wake-toast,
+#app-toast:not([hidden]) ~ #wake-toast { top: 64px; }
+#fw-toast:not([hidden]) ~ #app-toast:not([hidden]) ~ #wake-toast { top: 128px; }
 .fw-toast-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
 .fw-toast-text strong { font-weight: 700; font-size: 15px; }
 .fw-toast-sub { font-size: 12.5px; opacity: .82; font-variant-numeric: tabular-nums; }
@@ -181,7 +198,11 @@ button { font-family: inherit; }
   background-image: linear-gradient(100deg, var(--ink) 35%, #4a3d2c 50%, var(--ink) 65%);
   background-size: 220% 100%;
   animation: ink-sheen 1.3s linear infinite;
+  white-space: nowrap;
 }
+/* Each generation step gently fades in as the label changes. */
+.gen-step { display: inline-block; animation: gen-fade .34s var(--ease) both; }
+@keyframes gen-fade { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
 button.inline { width: auto; white-space: nowrap; padding: 0 16px; }
 
 /* Transient "✓ Saved" confirmation shown on the save button itself. */
@@ -310,8 +331,21 @@ input:focus, select:focus { outline: none; border-color: var(--ink);
 .actions { margin: 22px 0 8px; }
 .actions-row { display: flex; gap: 12px; margin-top: 26px; }
 /* Frame controls: circular icon buttons (Refresh, Sleep) flanking Regenerate. */
-.frame-controls { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 26px; }
-.frame-controls .btn-primary { flex: 1; max-width: 260px; margin: 0; }
+/* Generate is the hero (full width); Refresh + Sleep sit under it as two equal
+   labeled buttons — labeled, because bare icon circles read as decoration. */
+.frame-controls { display: flex; flex-direction: column; gap: 10px; margin-top: 26px; }
+.frame-controls .btn-primary { margin: 0; }
+.frame-subactions { display: flex; gap: 10px; }
+.btn-sub { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+           padding: 11px 14px; border-radius: var(--radius-sm); background: var(--paper-2);
+           border: 1.5px solid var(--line); font: inherit; font-size: 14px; font-weight: 600;
+           color: var(--ink-soft); cursor: pointer;
+           transition: background .2s, box-shadow .2s, transform .12s var(--ease), opacity .2s; }
+.btn-sub svg { width: 17px; height: 17px; flex: none; }
+.btn-sub:hover { background: var(--paper); box-shadow: var(--shadow); }
+.btn-sub:active { transform: scale(.97); }
+.btn-sub:disabled { opacity: .4; cursor: default; box-shadow: none; }
+.btn-sub.busy svg { animation: spin 1s linear infinite; }
 .icon-action { flex: none; width: 52px; height: 52px; border-radius: 50%; cursor: pointer;
                border: 1.5px solid var(--line); background: var(--paper-2); color: var(--ink);
                display: inline-flex; align-items: center; justify-content: center;
@@ -335,6 +369,7 @@ input:focus, select:focus { outline: none; border-color: var(--ink);
 .nav-row:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
 .nav-row:active { transform: scale(.99); }
 .nav-ico { font-size: 20px; width: 26px; text-align: center; }
+.nav-ico svg { width: 20px; height: 20px; display: block; margin: 0 auto; color: var(--ink-soft); }
 .nav-col { flex: 1; display: flex; flex-direction: column; }
 .nav-t { font-family: "Fraunces"; font-size: 16px; font-weight: 600; }
 .nav-s { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
@@ -376,6 +411,11 @@ input:focus, select:focus { outline: none; border-color: var(--ink);
                    transition: transform .22s var(--ease); }
 .toggle input:checked + i { background: var(--ink); }
 .toggle input:checked + i::after { transform: translateX(18px); }
+/* A master toggle sitting in a card's title row; collapses the card when off. */
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.card-head h3 { margin: 0; }
+.title-toggle { margin: 0; width: auto; flex: none; }
+#loc-weather-body, #interests-body { margin-top: 4px; }
 
 /* ── Sticky save ─────────────────────────────────────────────────────── */
 .sticky-save { position: sticky; bottom: 0; padding: 14px 0 calc(14px + env(safe-area-inset-bottom));
@@ -457,9 +497,12 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .scan-hint { color: var(--muted); font-size: 13px; margin: 10px 0; }
 .scanner .btn-ghost { max-width: 200px; margin: 0 auto; }
 
-.returning-hint { color: var(--muted); font-size: 13px; margin: 16px 0 0; }
-.inline-link { font: inherit; font-size: 13px; color: var(--ink); font-weight: 600;
-               background: none; border: none; cursor: pointer; padding: 0; text-decoration: underline; }
+/* Welcome-screen settings gear (no account yet → server address lives here). */
+#screen-welcome { position: relative; }
+.welcome-gear { position: absolute; top: max(14px, env(safe-area-inset-top)); right: 14px; z-index: 2; margin-left: 0; }
+
+/* "Name your frame" modal — Save under the input, full width. */
+.name-modal-save { margin-top: 16px; }
 
 /* ═══════════════════════ v2 — home as a hung work of art ═══════════════ */
 .home { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
@@ -471,6 +514,14 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .home-top .inkmark-anim { margin-left: 4px; }
 /* Home: a larger ink blob sitting close to the "Ink" wordmark. */
 .home .inkmark-anim { width: 60px; height: 60px; margin-left: -8px; }
+/* Frame-screen alert (e.g. "couldn't update this morning"). */
+.frame-alert { margin: 2px 0 6px; padding: 9px 13px; border-radius: var(--radius-sm);
+               background: rgba(155,59,47,.10); border: 1px solid rgba(155,59,47,.28);
+               color: var(--danger); font-size: 13px; line-height: 1.4; text-align: center; }
+.frame-alert.info { background: rgba(27,24,19,.05); border-color: var(--line); color: var(--ink-soft); }
+.frame-alert[hidden] { display: none; }
+.home-actions { margin-left: auto; display: flex; align-items: center; gap: 0; }
+.home-actions .gear-btn { margin-left: 0; }
 .gear-btn { margin-left: auto; background: none; border: none; cursor: pointer; padding: 8px;
             border-radius: 50%; color: var(--ink-soft); transition: background .2s, color .2s; }
 .gear-btn:hover { background: rgba(27,24,19,.07); color: var(--ink); }
@@ -481,23 +532,81 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
    stays put; only the spinner descends + a warm glow blooms from the top edge. */
 .home { position: relative; }
 .home, .home * { touch-action: none; }
-.pull-spinner { position: absolute; top: 16px; left: 50%; margin-left: -18px; z-index: 6;
-  width: 36px; height: 36px; border-radius: 50%; color: var(--ink-soft);
+/* Frame screen, collapsed (the pull-to-refresh state): own every touch gesture
+   like home, so the vertical pull engages reliably on Android Chrome instead of
+   fighting the browser's default gesture handling. The gallery keeps native
+   horizontal swipe; when expanded for "Read more", normal scrolling resumes. */
+/* Frame scrolls natively (pan-y on .frame-screen); the gallery keeps horizontal
+   swipe; the pull-to-refresh only engages at scrollTop 0 (see attachPullToRefresh). */
+.frame-screen .gallery, .frame-screen .gallery * { touch-action: pan-x; }
+/* Shared pull-to-refresh spinner. Absolute within #app (which is position:
+   relative) — more reliable on mobile than `fixed`, which jitters under the
+   dynamic address bar / status bar (e.g. Pixel Chrome). */
+.pull-spinner { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 50%; margin-left: -18px;
+  z-index: 60; width: 36px; height: 36px; border-radius: 50%; color: var(--ink-soft);
   background: var(--paper-2); border: 1.5px solid var(--line); box-shadow: var(--shadow);
   display: grid; place-items: center; opacity: 0; transform: translateY(-16px) scale(.7);
   pointer-events: none; }
 .pull-spinner.spin svg { animation: spin .9s linear infinite; }
+/* Release flourish: when let go past the threshold, the pill pops once, then
+   springs back. */
+.pull-spinner.engaged { animation: pull-engage .5s var(--ease) both; }
+@keyframes pull-engage {
+  0%   { transform: translateY(38px) scale(.82); opacity: 1; }
+  42%  { transform: translateY(48px) scale(1.18); opacity: 1; }
+  100% { transform: translateY(38px) scale(1); opacity: 1; }
+}
 .frame-screen .home-top .back { font-size: 26px; line-height: 1; padding: 0 6px 0 0; color: var(--ink-soft); }
 
 /* Sit the artwork toward the top (just below the header) rather than vertically
    centered — otherwise a short landscape frame leaves a big gap up top. */
 .home-frame { flex: 1; min-height: 0; display: flex; flex-direction: column;
-              justify-content: flex-start; align-items: center; gap: 8px; }
+              justify-content: flex-start; align-items: stretch; gap: 8px; }
+/* Horizontal carousel of frames — one card per device, native scroll-snap (same
+   pattern as the Frame-screen gallery). Vertical pull-to-refresh coexists (it
+   yields to horizontal swipes). */
+.home-carousel { flex: 1; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden;
+                 scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+                 scrollbar-width: none; scroll-behavior: smooth; }
+.home-carousel::-webkit-scrollbar { display: none; }
+.home-carousel.reordering { scroll-snap-type: none; scroll-behavior: auto; touch-action: none; }
+.home-card { flex: 0 0 100%; min-width: 0; scroll-snap-align: center;
+             display: flex; flex-direction: column; justify-content: flex-start;
+             /* Breathing room inside the carousel's overflow clip so the frame's
+                wall shadow + grounded ellipse aren't sheared off at the edges. */
+             padding: 6px 16px 20px;
+             transition: transform .18s var(--ease), opacity .18s var(--ease);
+             animation: card-settle .5s var(--ease) both; }
+@keyframes card-settle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+/* Gentle gallery-wall hover on pointer devices: the framed print lifts a touch. */
+@media (hover: hover) {
+  .home-card .gallery-frame { transition: transform .25s var(--ease); }
+  .home-card .gallery-frame:hover { transform: translateY(-2px); }
+}
+.home-card.dragging { transform: scale(1.04); opacity: .92; z-index: 2;
+                      filter: drop-shadow(0 14px 28px rgba(27,24,19,.28)); }
+.home-card.shift-left { transform: translateX(-8%); }
+.home-card.shift-right { transform: translateX(8%); }
+/* Swipe affordance shown only with 2+ frames. */
+.swipe-hint { font-family: "Inter"; font-size: 11.5px; font-weight: 600; color: var(--muted);
+              letter-spacing: .06em; text-transform: uppercase; text-align: center;
+              margin: 0 0 2px; opacity: .8; transition: opacity .6s var(--ease); }
+.swipe-hint.seen { opacity: 0; }          /* fades away once the user has swiped */
+.swipe-hint[hidden] { display: none; }
 
 /* Fine-art print frame — slim walnut molding, wide white mat, soft wall shadow
    (inspired by gallery print mockups). */
 .gallery-frame { display: flex; justify-content: center; margin: clamp(8px, 3vh, 24px) auto 4px;
-                 cursor: pointer; padding: 0; background: none; border: none; max-width: 100%; }
+                 cursor: pointer; padding: 0; background: none; border: none; max-width: 100%;
+                 position: relative; }
+/* Grounded penumbra: a soft ellipse hugging the bottom edge, like the diffuse
+   shadow a frame throws on the wall right beneath it. Box-shadows can't make
+   this elliptical falloff, and it's what sells the "hanging on a wall" depth. */
+.gallery-frame::after {
+  content: ""; position: absolute; z-index: -1; left: 7%; right: 7%;
+  bottom: -9px; height: 16px; border-radius: 50%;
+  background: rgba(27,24,19,.30); filter: blur(9px); pointer-events: none;
+}
 /* Walnut molding — real wood-grain photo, beveled with inner light/shade. */
 .gframe-wood {
   display: inline-block; position: relative;
@@ -507,14 +616,14 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
     inset 0 2px 3px rgba(255,255,255,.20),   /* top molding highlight */
     inset 0 -4px 8px rgba(0,0,0,.45),         /* bottom molding shade (rounded look) */
     inset 0 0 0 1px rgba(0,0,0,.35),          /* crisp outer edge */
-    /* Realistic wall shadow: a faint contact halo right at the frame, then a
-       penumbra that grows + fades downward, as if lit from above. */
-    0 0 1px rgba(27,24,19,.12),
-    0 2px 4px rgba(27,24,19,.20),
-    0 6px 9px -1px rgba(27,24,19,.16),
-    0 13px 22px -5px rgba(27,24,19,.15),
-    0 24px 40px -10px rgba(27,24,19,.16),
-    0 42px 70px -18px rgba(27,24,19,.22);
+    /* Realistic wall shadow: the frame hangs nearly flush to the wall, so the
+       shadow stays TIGHT — a crisp contact line under the molding, then a short
+       penumbra biased down-right (light from the upper left). The old huge
+       far-flung layers read as "floating off the wall". */
+    0 1px 1px rgba(27,24,19,.32),
+    1px 3px 4px -1px rgba(27,24,19,.26),
+    2px 7px 10px -3px rgba(27,24,19,.20),
+    3px 14px 20px -8px rgba(27,24,19,.16);
 }
 /* Wide white mat inside the molding. */
 .gframe-mat {
@@ -532,19 +641,21 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .gallery-frame:active { transform: scale(.99); }
 
 /* Landscape: image capped by width + height so the whole home fits one screen. */
-.home-frame:not(.is-portrait) .gframe-mat img {
+.home-card:not(.is-portrait) .gframe-mat img {
   display: block; opacity: 0; transition: opacity .5s var(--ease); border-radius: 1px;
-  /* Cap by viewport width MINUS the mat+molding chrome (~64px) + #app padding,
-     so the whole landscape frame fits and isn't clipped sideways. */
-  width: auto; height: auto; max-width: min(500px, calc(100vw - 112px)); max-height: 47dvh;
+  /* Cap by viewport width MINUS the mat+molding chrome (~68px), the #app padding
+     (40px) and the card's shadow padding (32px), with headroom, so the whole
+     wooden frame AND its shadow fit unclipped. Height capped so frame + placard
+     + button fit the locked home viewport. */
+  width: auto; height: auto; max-width: min(440px, calc(100vw - 150px)); max-height: 40dvh;
 }
 /* Portrait: served PNG is the panel buffer (landscape px); show it upright by
    swapping dims via container-query units + rotating 90° clockwise. */
-.home-frame.is-portrait .gframe-mat { container-type: size; aspect-ratio: 480 / 800; height: 52dvh; }
+.home-card.is-portrait .gframe-mat { container-type: size; aspect-ratio: 480 / 800; height: 52dvh; }
 /* Portrait: sit the frame higher (smaller top margin) so the caption below has
    more breathing room. */
-.home-frame.is-portrait .gallery-frame { margin-top: clamp(4px, 1.5vh, 14px); }
-.home-frame.is-portrait .gframe-mat img {
+.home-card.is-portrait .gallery-frame { margin-top: clamp(4px, 1.5vh, 14px); }
+.home-card.is-portrait .gframe-mat img {
   position: absolute; top: 50%; left: 50%; opacity: 0; transition: opacity .5s var(--ease);
   width: 100cqh; height: 100cqw; max-width: none;
   transform: translate(-50%, -50%) rotate(90deg); transform-origin: center;
@@ -552,8 +663,8 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 /* The orientation rules above set opacity:0 and outrank the generic
    `.gframe-mat img.loaded` rule, so the loaded image never faded in. Re-assert
    opacity:1 at higher specificity for both orientations. */
-.home-frame:not(.is-portrait) .gframe-mat img.loaded,
-.home-frame.is-portrait .gframe-mat img.loaded { opacity: 1; }
+.home-card:not(.is-portrait) .gframe-mat img.loaded,
+.home-card.is-portrait .gframe-mat img.loaded { opacity: 1; }
 
 .home-meta { text-align: center; padding: 0 10px; }
 /* Museum placard: title + hairline + artistic caption. */
@@ -565,7 +676,7 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
                line-height: 1.45; margin: 8px auto 12px; max-width: 38ch;
                display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 /* Landscape leaves more vertical room, so allow a 4th caption line. */
-.home-frame:not(.is-portrait) .art-caption { -webkit-line-clamp: 4; }
+.home-card:not(.is-portrait) .art-caption { -webkit-line-clamp: 4; }
 .open-chip { display: inline-flex; align-items: center; justify-content: center; width: auto;
              padding: 9px 30px; background: var(--ink); color: var(--paper); border: none;
              border-radius: 999px; font-family: "Fraunces"; font-weight: 600; font-size: 15px;
@@ -612,20 +723,25 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .art-card.is-portrait img { position: absolute; top: 50%; left: 50%; width: 100cqh; height: 100cqw;
             max-width: none; transform: translate(-50%, -50%) rotate(90deg); transform-origin: center; }
 .art-empty { color: var(--muted); text-align: center; font-size: 14px; line-height: 1.6; padding: 40px 18px; }
-.dots { display: flex; justify-content: center; gap: 6px; margin: 10px 0 4px; min-height: 6px; }
-.dot-i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: all .25s var(--ease); }
-.dot-i.on { background: var(--ink); width: 18px; border-radius: 3px; }
+.dots { display: flex; justify-content: center; gap: 7px; margin: 10px 0 4px; min-height: 6px; }
+.dot-i { width: 6px; height: 6px; border-radius: 999px; background: var(--line);
+         transition: width .3s var(--ease), background .3s var(--ease); }
+.dot-i.on { background: var(--ink); width: 20px; }
 
-/* ── Frame screen: one fixed viewport ─────────────────────────────────
-   The gallery flexes and its artwork shrinks to fit, so status, placard,
-   controls + nav stay on screen. The daily description is clamped to 4 lines;
-   "Read more" expands it and unlocks the screen so the rest is reachable. */
-.frame-screen { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
-.frame-screen .gallery { flex: 1 1 auto; min-height: 0; align-items: center; margin: 4px -20px 0; padding: 6px 0; }
-.frame-screen .slide { height: 100%; }
-.frame-screen .art-card { max-height: 100%; }
-.frame-screen .art-card:not(.is-portrait) img { max-height: 100%; max-width: 100%; width: auto; height: auto; }
-.frame-screen .art-card.is-portrait { height: 100%; max-height: 100%; }
+/* ── Frame screen: a big preview + a page that scrolls ─────────────────
+   The artwork gets a large fixed size; status, placard, "also", controls + nav
+   flow below and the page scrolls when it's taller than the viewport. Vertical
+   pan is native scrolling; the pull-to-refresh engages only at scrollTop 0. */
+.frame-screen { display: flex; flex-direction: column; touch-action: pan-y; }
+/* flex:0 0 auto → the gallery is exactly as tall as the artwork; it never grows
+   to fill leftover height (which would float a short landscape card in a big gap). */
+.frame-screen .gallery { flex: 0 0 auto; align-items: center; margin: 4px -20px 0; padding: 6px 0; touch-action: pan-x; }
+.frame-screen .slide { height: auto; }
+/* Portrait: tall image. Landscape: fills the card width (short + centered). Each
+   orientation sizes itself — nothing is forced to portrait proportions. */
+.frame-screen .art-card.is-portrait { height: 66dvh; }
+.frame-screen .art-card:not(.is-portrait) { width: 100%; }
+.frame-screen .art-card:not(.is-portrait) img { display: block; width: 100%; height: auto; max-height: 72dvh; margin: 0 auto; }
 .frame-screen .artframe { margin: 4px 0 12px; }
 .status-line { display: flex; align-items: center; justify-content: center; gap: 8px;
                font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin: 6px 0 8px; }
@@ -639,10 +755,28 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .nav-list.compact .nav-row { padding: 11px 14px; }
 .nav-list.compact .nav-t { font-family: "Fraunces"; font-size: 15px; font-weight: 600; flex: 1; }
 
-/* Expanded: full description, screen scrolls (the #app lock is also removed). */
-.frame-screen.expanded { height: auto; min-height: 100%; overflow: visible; }
-.frame-screen.expanded .gallery { flex: none; }
+/* Read more: reveal the full description text (the page already scrolls). */
 .frame-screen.expanded .placard-body { -webkit-line-clamp: unset; overflow: visible; display: block; }
+
+/* "Also on this day" — collapsed runner-up events. */
+.also { flex: none; margin: 12px 6px 0; }
+.also[hidden] { display: none; }
+.also-toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+               width: 100%; padding: 11px 14px; background: var(--paper-2); border: 1.5px solid var(--line);
+               border-radius: var(--radius-sm); font: inherit; font-size: 13.5px; font-weight: 600;
+               color: var(--ink-soft); cursor: pointer; }
+.also-title { font-family: "Fraunces"; }
+.also-chev { transition: transform .2s var(--ease); font-size: 18px; line-height: 1; }
+.also[open] .also-chev, .also-toggle[aria-expanded="true"] .also-chev { transform: rotate(90deg); }
+.also-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.also-list[hidden] { display: none; }
+.also-item { display: flex; align-items: flex-start; gap: 10px;
+             padding: 11px 14px; background: var(--paper); border: 1px solid var(--line);
+             border-radius: var(--radius-sm); font-size: 14px; line-height: 1.5; color: var(--ink); }
+/* Line icons inherit the muted ink tone so they sit inside the beige scheme. */
+.also-ico { flex: none; color: var(--ink-soft); opacity: .85; margin-top: 1px; }
+.also-ico svg { display: block; width: 17px; height: 17px; }
+.also-text { flex: 1; min-width: 0; }
 
 /* ── Radio groups ────────────────────────────────────────────────────── */
 .radios { border: none; padding: 0; margin: 14px 0 0; }
@@ -657,6 +791,40 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .radio input:checked + span { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .radios.orient .radio span { flex-direction: column; padding: 12px 22px; }
 .ori { width: 30px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+
+/* Date-format live preview + custom field with a "?" popover of format codes. */
+.date-preview { margin: 10px 0 0; font-size: 14px; font-weight: 600; color: var(--ink); }
+.field-label-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.field-label { font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+.help-btn { flex: none; width: 19px; height: 19px; padding: 0; border-radius: 50%;
+            border: 1.5px solid var(--line); background: var(--paper); color: var(--ink-soft);
+            font-size: 12px; font-weight: 700; line-height: 1; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center; transition: all .15s var(--ease); }
+.help-btn:hover, .help-btn:focus-visible { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+/* Centered modal listing the format codes (overlay, so it never grows the card). */
+.modal-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center;
+                 justify-content: center; padding: 24px; background: rgba(20,18,14,.42); }
+.modal-card { width: min(340px, 100%); max-height: 80vh; overflow-y: auto; padding: 18px 20px;
+              background: var(--paper); border-radius: var(--radius); box-shadow: 0 20px 50px rgba(0,0,0,.3); }
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.modal-head h4 { margin: 0; font-size: 16px; font-weight: 700; }
+.modal-close { flex: none; width: 30px; height: 30px; padding: 0; border: none; border-radius: 50%;
+               background: var(--paper-2); color: var(--ink-soft); font-size: 21px; line-height: 1; cursor: pointer; }
+.modal-close:hover { background: var(--line); color: var(--ink); }
+.modal-card dl { display: grid; grid-template-columns: auto 1fr; gap: 9px 14px; margin: 0; font-size: 14px; }
+.modal-card dt { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; color: var(--ink); }
+.modal-card dd { margin: 0; color: var(--ink-soft); }
+
+/* Wi-Fi signal strength as four ascending bars (filled = current level). */
+.wifi-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 13px;
+             margin-right: 7px; vertical-align: -2px; }
+.wifi-bars i { width: 3px; background: var(--line); border-radius: 1px; }
+.wifi-bars i:nth-child(1) { height: 25%; }
+.wifi-bars i:nth-child(2) { height: 50%; }
+.wifi-bars i:nth-child(3) { height: 75%; }
+.wifi-bars i:nth-child(4) { height: 100%; }
+.wifi-bars i.on { background: var(--ink); }
 
 /* ── Location field ──────────────────────────────────────────────────── */
 .field-label { display: block; font-size: 13px; font-weight: 600;
@@ -704,10 +872,10 @@ h4.sub { font-size: 13px; font-weight: 600; color: var(--muted); margin: 18px 0 
 .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom));
          transform: translateX(-50%) translateY(20px); z-index: 50;
          background: var(--ink); color: var(--paper); padding: 13px 20px; border-radius: 999px;
-         font-size: 14px; font-weight: 500; box-shadow: var(--shadow-lg); opacity: 0;
+         font-size: 14px; font-weight: 500; box-shadow: var(--shadow-lg),
+         inset 0 0 0 1px rgba(255,255,255,.06); opacity: 0; pointer-events: none;
          transition: opacity .3s, transform .3s var(--ease); max-width: 90vw; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-.toast[hidden] { display: block; }
 
 /* ── Lightbox (zoom an artwork) ───────────────────────────────────────── */
 .lightbox { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center;

@@ -15,7 +15,8 @@ from datetime import date as date_cls
 from typing import NamedTuple
 
 from .. import prompts
-from ..constants import DATE_FORMATS
+from . import metrics
+from ..constants import format_date
 from ..devicecfg import DeviceConfig
 from ..settings import Settings
 from ..timeutil import now_in_tz
@@ -27,9 +28,12 @@ logger = logging.getLogger(__name__)
 class EventPick(NamedTuple):
     """An event chosen for the day: `caption` is the human text (caption +
     narration); `visual` is the iconic image the artwork should depict (may be
-    empty, in which case the caption itself is the drawing subject)."""
+    empty, in which case the caption itself is the drawing subject); `now_tie` is
+    an optional note on how the event connects to something happening today — it
+    does NOT affect selection, only enriches the narration when present."""
     caption: str
     visual: str = ""
+    now_tie: str = ""
 
 
 _EMPTY_PICK = EventPick("", "")
@@ -43,14 +47,35 @@ class ArtworkResult:
     event_text_en: str | None
     event_text_he: str | None
     weather_summary: str
+    image_prompt: str = ""        # the full prompt sent to the image model (for debug/admin)
+    event_caption: str = ""       # the chosen event
+    event_visual: str = ""        # the iconic visual depicted ('' = abstract)
+    # Date-verified runner-up events considered by the curator but not chosen, so
+    # the app can show "also on this day". Each: {"caption": str, "visual": str}.
+    other_events: tuple = ()
+    # Full-detail original (grayscale JPEG of the raw provider image) for app
+    # zoom / admin preview — the frame itself only ever sees the panel PNG.
+    original_jpg: bytes = b""
 
 
-async def generate_artwork(settings: Settings, config: DeviceConfig) -> ArtworkResult:
-    """Run the full pipeline for one device and return the dithered PNG."""
+async def generate_artwork(settings: Settings, config: DeviceConfig, on_phase=None) -> ArtworkResult:
+    """Run the full pipeline for one device and return the dithered PNG.
+
+    `on_phase(name)` (optional) is called as each stage begins, so the app can
+    show the real progress: discover → research → compose → paint → finish.
+    """
+    def phase(name: str) -> None:
+        if on_phase:
+            try:
+                on_phase(name)
+            except Exception:  # noqa: BLE001 — progress reporting must never break generation
+                pass
+
     today = now_in_tz(config.tz).date()
     date_str = today.isoformat()
 
     # Weather + holidays are independent — fetch concurrently.
+    phase("discover")
     wx, holiday_ctx = await asyncio.gather(
         weather.fetch_weather(config.lat, config.lon),
         holidays.fetch_holidays(
@@ -61,18 +86,35 @@ async def generate_artwork(settings: Settings, config: DeviceConfig) -> ArtworkR
         ),
     )
 
-    pick = await _select_event(settings, config, today, holiday_ctx)
-    if pick.caption and not pick.visual:
-        pick = pick._replace(visual=await _derive_visual(settings, pick.caption))
-    image_prompt = _build_image_prompt(config, wx, today, pick)
+    # The daily event is optional: when the device turns it off, the artwork is a
+    # pure abstract composition with no historical subject or caption.
+    pick = _EMPTY_PICK
+    other_events: list[dict] = []
+    if config.use_event:
+        phase("research")
+        pick, other_events = await _select_event(settings, config, today, holiday_ctx)
+        if pick.caption and not pick.visual:
+            pick = pick._replace(visual=await _derive_visual(settings, pick.caption))
+    phase("compose")
+    image_prompt, must_include, extra_rules = _build_image_prompt(config, wx, today, pick)
 
     # The image render dominates latency; run narration alongside it so the
     # app-triggered path is as quick as the image call itself.
-    raw_png, (narration_en, narration_he) = await asyncio.gather(
-        generation_client.generate_image(settings, image_prompt, config.orientation),
-        _narrate(settings, config, pick.caption),
+    phase("paint")
+    image_result, (narration_en, narration_he) = await asyncio.gather(
+        generation_client.generate_image(
+            settings, image_prompt, config.orientation,
+            must_include=must_include, extra_rules=extra_rules),
+        _narrate(settings, config, pick.caption, pick.now_tie),
     )
-    dithered = imaging.to_eink_image(raw_png, fmt="PNG", orientation=config.orientation)
+    phase("finish")
+    dithered = imaging.to_eink_image(image_result.png, fmt="PNG", orientation=config.orientation)
+    original_jpg = imaging.to_display_original(image_result.png)
+    # Keep the rewrite (what the image model actually saw) with the brief for
+    # debugging — the admin `show` command surfaces it per creation.
+    stored_prompt = image_prompt
+    if image_result.revised_prompt:
+        stored_prompt += "\n\n--- revised by the responses flow ---\n" + image_result.revised_prompt
 
     return ArtworkResult(
         device_id=config.id,
@@ -80,7 +122,12 @@ async def generate_artwork(settings: Settings, config: DeviceConfig) -> ArtworkR
         image_png=dithered,
         event_text_en=narration_en,
         event_text_he=narration_he,
-        weather_summary=wx.as_text(config.temp_unit),
+        weather_summary=wx.as_text(config.temp_unit) if config.use_weather else "",
+        image_prompt=stored_prompt,
+        event_caption=pick.caption,
+        event_visual=pick.visual,
+        other_events=tuple(other_events),
+        original_jpg=original_jpg,
     )
 
 
@@ -104,72 +151,135 @@ async def _derive_visual(settings: Settings, caption: str) -> str:
     try:
         v = await generation_client.generate_text(
             settings, prompts.VISUAL_PROMPT.format(event=caption))
-        return v.strip().strip('"').splitlines()[0][:120]
+        v = v.strip().strip('"').splitlines()[0][:120] if v.strip() else ""
+        # The model opts out with NONE when the event has no recognizable icon —
+        # keep the visual empty so the artwork stays abstract instead of forcing a
+        # weird literal shape (the caption text still names the event).
+        if v.strip().upper().startswith("NONE"):
+            return ""
+        return v
     except Exception:  # noqa: BLE001
         return ""
 
 
-async def _search_event(settings: Settings, date_label: str, interest: str) -> EventPick | None:
-    """One web search returns 3-5 date-verified candidates; a cheap no-search
-    curator then picks the most iconic. Returns an EventPick or None."""
+# All interest categories go into ONE grounded search call (the model runs several
+# internal searches and returns 2-3 events per topic), so the curator sees the full
+# breadth of the day at the cost of a single search. Capped only as a safety net
+# against a pathologically long interests list (keeps the prompt bounded).
+_MAX_SEARCH_INTERESTS = 12
+
+
+def _pick_interests(interests: list[str], today: date_cls) -> list[str]:
+    """The categories to search today — all of them, unless the list is absurdly
+    long, in which case rotate a _MAX_SEARCH_INTERESTS-sized window by day so every
+    category still cycles through over several days."""
+    if len(interests) <= _MAX_SEARCH_INTERESTS:
+        return interests
+    start = today.toordinal() % len(interests)
+    ordered = interests[start:] + interests[:start]
+    return ordered[:_MAX_SEARCH_INTERESTS]
+
+
+async def _search_candidates(
+    settings: Settings, date_label: str, interests: list[str]
+) -> list[dict]:
+    """One web search across ALL categories → date-verified candidates, each tagged
+    with the category it belongs to in '_interest'. [] on failure."""
+    interests_block = "\n".join(f"- {i}" for i in interests)
     try:
         raw = await generation_client.generate_text_with_search(
-            settings, prompts.SEARCH_EVENT_PROMPT.format(date=date_label, interest=interest))
-    except Exception:  # noqa: BLE001 — search is best-effort; fall back to the model
-        logger.warning("web search failed for %s", interest, exc_info=True)
-        return None
-
+            settings, prompts.SEARCH_EVENT_PROMPT.format(date=date_label, interests=interests_block))
+    except Exception:  # noqa: BLE001 — search is best-effort
+        logger.warning("web search failed", exc_info=True)
+        return []
     candidates = _extract_json(raw, array=True) or []
-    on_date = [c for c in candidates
-               if isinstance(c, dict) and c.get("on_date") and (c.get("event") or "").strip()]
-    if not on_date:
-        return None
-    if len(on_date) == 1:
-        c = on_date[0]
-        return EventPick(c["event"].strip(), (c.get("iconic_visual") or "").strip())
+    return [
+        {**c, "_interest": (c.get("category") or "").strip()}
+        for c in candidates
+        if isinstance(c, dict) and c.get("on_date") and (c.get("event") or "").strip()
+    ]
 
-    # Curate the most iconic one (cheap, no search). The curator returns an INDEX
-    # so we keep the original candidate's iconic_visual intact.
+
+async def _curate_pool(
+    settings: Settings, date_label: str, pool: list[dict]
+) -> tuple[EventPick | None, list[dict]]:
+    """Rank a cross-category candidate pool by significance. Returns the winner
+    (#1) as an EventPick plus the ordered runner-ups (#2, #3, …) as
+    {"caption","visual"} dicts — so "also on this day" shows the genuinely
+    next-best events, not one arbitrary pick per category. (None, []) if empty."""
+    if not pool:
+        return None, []
+
+    def _pick(c: dict) -> EventPick:
+        return EventPick(c["event"].strip(), (c.get("iconic_visual") or "").strip(),
+                         (c.get("now_tie") or "").strip())
+
+    def _other(c: dict) -> dict:
+        return {"caption": c["event"].strip(), "visual": (c.get("iconic_visual") or "").strip(),
+                "category": (c.get("_interest") or "").strip().lower()}
+
+    if len(pool) == 1:
+        return _pick(pool[0]), []
+
+    # Deliberately omit now_tie from the listing: ranking must be objective
+    # (significance only). The winner's tie enriches the narration but must never
+    # bias the order.
     listing = "\n".join(
-        f'{i+1}. {c["event"].strip()}  [visual: {(c.get("iconic_visual") or "").strip()}]'
-        for i, c in enumerate(on_date))
-    chosen = on_date[0]
+        f'{i+1}. [{c.get("_interest", "")}] {c["event"].strip()}'
+        f'  (visual: {(c.get("iconic_visual") or "").strip()})'
+        for i, c in enumerate(pool))
+    order = list(range(len(pool)))   # fallback: pool order (search's own ranking)
     try:
         reply = await generation_client.generate_text(
-            settings, prompts.CURATE_EVENT_PROMPT.format(date=date_label, candidates=listing))
-        m = re.search(r"\d+", reply)
-        if m:
-            idx = int(m.group(0))
-            if 1 <= idx <= len(on_date):
-                chosen = on_date[idx - 1]
-    except Exception:  # noqa: BLE001 — curation is best-effort; keep first candidate
-        logger.warning("event curation failed; using first candidate", exc_info=True)
-    return EventPick(chosen["event"].strip(), (chosen.get("iconic_visual") or "").strip())
+            settings, prompts.POOL_CURATE_EVENT_PROMPT.format(date=date_label, candidates=listing))
+        ranked, seen = [], set()
+        for n in re.findall(r"\d+", reply):
+            idx = int(n) - 1
+            if 0 <= idx < len(pool) and idx not in seen:
+                seen.add(idx)
+                ranked.append(idx)
+        # Append any candidate the model left out, keeping its original order.
+        ranked += [i for i in range(len(pool)) if i not in seen]
+        if ranked:
+            order = ranked
+    except Exception:  # noqa: BLE001 — ranking is best-effort; keep pool order
+        logger.warning("event ranking failed; using pool order", exc_info=True)
+    return _pick(pool[order[0]]), [_other(pool[i]) for i in order[1:]]
+
+
+_MAX_OTHER_EVENTS = 4   # show #2–#5
 
 
 async def _select_event(
     settings: Settings, config: DeviceConfig, today: date_cls, holiday_ctx
-) -> EventPick:
-    """Pick a date-verified, interest-matched event for today.
+) -> tuple[EventPick, list[dict]]:
+    """Pick a date-verified, interest-matched event for today, plus up to
+    `_MAX_OTHER_EVENTS` date-verified runner-ups from the same pool (the ones the
+    curator considered but didn't choose) for the app's "also on this day".
 
-    1) Web search the day's interest (grounds the date in reality + returns the
-       iconic visual to draw). 2) If search yields nothing, force the topic via
-       the model per interest. 3) Then the general selector, then a generic
-       event. If all fail, return an empty pick (no event drawn) rather than a
-       fabricated one.
+    1) Web search several interest categories (grounds dates in reality + returns
+       iconic visuals), pool the candidates, and curate the single most meaningful
+       one. 2) If search yields nothing, force the topic via the model per
+       interest. 3) Then the general selector, then a generic event. If all fail,
+       return an empty pick (no event drawn) rather than a fabricated one.
     """
     date_label = today.strftime("%B %d")
     interests = [i.strip() for i in config.interests if i and i.strip()]
 
-    # 1) Web-search the day's focus interest (rotated by day). One search per run.
+    # 1) Web-search a few interest categories concurrently, pool every verified
+    #    candidate, then pick the single most meaningful across all of them. This
+    #    gives the curator breadth (no single-category tunnel vision) plus a real
+    #    significance bar, so a routine release can't win over a landmark moment.
     if interests:
-        start = today.toordinal() % len(interests)
-        ordered = interests[start:] + interests[:start]
-        for interest in ordered:
-            pick = await _search_event(settings, date_label, interest)
+        chosen = _pick_interests(interests, today)
+        pool = await _search_candidates(settings, date_label, chosen)
+        if pool:
+            logger.info("web search pooled %d candidates across %s",
+                        len(pool), ", ".join(chosen))
+            pick, ranked_others = await _curate_pool(settings, date_label, pool)
             if pick:
-                logger.info("web-search picked %s event: %s", interest, pick.caption)
-                return pick
+                logger.info("curated event: %s", pick.caption)
+                return pick, ranked_others[:_MAX_OTHER_EVENTS]
 
     # 2) Model-only topic-forced fallback (no search), rotated by day.
     if interests:
@@ -181,7 +291,7 @@ async def _select_event(
             if event.strip().upper().startswith("NONE") or not event.strip():
                 continue
             if await _is_real_event(settings, event):
-                return EventPick(event, "")
+                return EventPick(event, ""), []
             logger.info("%s event looked fabricated: %s", interest, event)
 
     # 3) General interest-aware selector.
@@ -193,9 +303,11 @@ async def _select_event(
         date=date_label, holiday_context=holiday_block, interests=interest_str,
     )
     for attempt in range(_EVENT_ATTEMPTS):
+        if attempt:
+            metrics.record_retry()
         event = await generation_client.generate_text(settings, prompt)
         if await _fact_check(settings, event, date_label):
-            return EventPick(event, "")
+            return EventPick(event, ""), []
         logger.info("event failed fact-check (try %d/%d): %s",
                     attempt + 1, _EVENT_ATTEMPTS, event)
 
@@ -203,9 +315,9 @@ async def _select_event(
     generic = await generation_client.generate_text(
         settings, prompts.GENERIC_EVENT_PROMPT.format(date=date_label))
     if await _fact_check(settings, generic, date_label):
-        return EventPick(generic, "")
+        return EventPick(generic, ""), []
     logger.warning("%s: all events failed fact-check — drawing without an event", config.id)
-    return _EMPTY_PICK
+    return _EMPTY_PICK, []
 
 
 async def _is_real_event(settings: Settings, event: str) -> bool:
@@ -234,14 +346,20 @@ async def _fact_check(settings: Settings, event: str, date_label: str) -> bool:
     return verdict.strip().upper().startswith("ACCURATE")
 
 
-def _build_image_prompt(config: DeviceConfig, wx, today: date_cls, pick: EventPick) -> str:
+def _build_image_prompt(
+    config: DeviceConfig, wx, today: date_cls, pick: EventPick
+) -> tuple[str, list[str], str]:
+    """Returns (prompt, must_include, extra_rules): the assembled brief; the text
+    fragments that must survive VERBATIM through any prompt rewriting (exact date,
+    exact temperature incl. unit, signature — validated); and non-validated guard
+    lines telling the rewriter how to treat the weather icon and signature."""
     template = config.custom_prompt_override or prompts.ARTWORK_PROMPT
     symbol = "°F" if config.temp_unit == "f" else "°C"
     temp_str = f"{wx.temperature(config.temp_unit)}{symbol}"
-    date_str = today.strftime(
-        DATE_FORMATS.get(config.date_format, DATE_FORMATS["weekday"]))
+    date_str = format_date(today, config.date_format)
     data_block = prompts.build_data_block(
-        config.show_weather, config.show_date, wx.condition, temp_str, date_str,
+        config.use_weather, config.show_date,
+        wx.condition, temp_str, date_str,
         event=pick.caption, visual=pick.visual,
     )
     resolution = ("480x800 (vertical)" if config.orientation == "portrait"
@@ -255,21 +373,59 @@ def _build_image_prompt(config: DeviceConfig, wx, today: date_cls, pick: EventPi
     # and partial placeholders never raise.
     for key, value in tokens.items():
         template = template.replace("{" + key + "}", str(value))
-    return template
+    must_include: list[str] = []
+    if config.show_date:
+        must_include.append(date_str)
+    if config.use_weather:
+        must_include.append(temp_str)
+    if config.signature:
+        must_include.append(config.signature)
+    # Rewriter guidance that must NOT be validated as verbatim artwork text.
+    # (Putting the condition in must_include made the model carve the literal
+    # words "mostly clear" into the art instead of drawing an icon.)
+    extra_rules: list[str] = []
+    if config.use_weather and wx.condition:
+        extra_rules.append(
+            f'- Weather: depict "{wx.condition}" as a naive, irregular hand-cut ICON '
+            "(sun / cloud / raindrops as fits) carved into the shapes — the weather "
+            "words themselves must NEVER appear as text in the artwork.")
+    if config.signature:
+        extra_rules.append(
+            f'- The signature "{config.signature}" is hand-written in a bold brush '
+            "style, clearly legible (roughly 2% of the image height), tucked near "
+            "an edge — never tiny, never faint.")
+    return template, must_include, "\n".join(extra_rules)
+
+
+def _connection_clauses(now_tie: str) -> tuple[str, str]:
+    """Build the EN/HE narration clauses that weave a present-day tie into the
+    description. Empty when the event has no current connection (most events), so
+    the narration stays a plain explanation."""
+    tie = (now_tie or "").strip()
+    if not tie:
+        return "", ""
+    en = (f"This event connects to the present: {tie}. Weave that contemporary link "
+          "into the sentence so it bridges past and present (e.g. \"Before becoming "
+          "the all-time World Cup top scorer, Messi scored his 700th goal…\"). ")
+    he = (f"האירוע מתקשר להווה: {tie}. שזור את הקשר העכשווי הזה במשפט כך שיחבר בין "
+          "העבר להווה. ")
+    return en, he
 
 
 async def _narrate(
-    settings: Settings, config: DeviceConfig, event: str
+    settings: Settings, config: DeviceConfig, event: str, now_tie: str = ""
 ) -> tuple[str | None, str | None]:
-    """Best-effort narration text; failures degrade to None."""
+    """Best-effort narration text; failures degrade to None. When the event has a
+    present-day tie, it's woven into the description (it never affects selection)."""
     if not event or not event.strip():
         return None, None
+    conn_en, conn_he = _connection_clauses(now_tie)
     try:
         tasks = [generation_client.generate_text(
-            settings, prompts.NARRATION_EN_PROMPT.format(event=event))]
+            settings, prompts.NARRATION_EN_PROMPT.format(event=event, connection=conn_en))]
         if config.language == "he":
             tasks.append(generation_client.generate_text(
-                settings, prompts.NARRATION_HE_PROMPT.format(event=event)))
+                settings, prompts.NARRATION_HE_PROMPT.format(event=event, connection=conn_he)))
         results = await asyncio.gather(*tasks)
         return results[0], (results[1] if len(results) > 1 else None)
     except Exception:  # noqa: BLE001

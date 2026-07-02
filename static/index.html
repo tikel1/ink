@@ -4,6 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#e7dfce" />
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <link rel="manifest" href="manifest.webmanifest" />
   <title>Ink</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -33,20 +37,24 @@
 
   <main id="app">
 
+    <!-- Shared pull-to-refresh spinner (overlays whichever screen is pulling). -->
+    <div class="pull-spinner" id="pull-spinner" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 12a9 9 0 0 1 15.5-6.2L21 8" /><path d="M21 3v5h-5" />
+        <path d="M21 12a9 9 0 0 1-15.5 6.2L3 16" /><path d="M3 21v-5h5" />
+      </svg>
+    </div>
+
     <!-- ───────────────────────── Welcome ────────────────────────────────── -->
     <section id="screen-welcome" class="screen center">
+      <button class="gear-btn welcome-gear" id="welcome-settings-btn" aria-label="Server settings" title="Server settings">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8.4 4a6.5 6.5 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a6.4 6.4 0 00-2-1.2l-.4-2.6H9.5L9 5.8a6.4 6.4 0 00-2 1.2l-2.4-1-2 3.4 2 1.6A6.5 6.5 0 003.6 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2l.4 2.6h5l.4-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+      </button>
       <div class="inkmark inkmark-lg" aria-hidden="true"><svg viewBox="0 0 160 160"><use href="#inkblob" /></svg></div>
-      <p class="eyebrow">A daily work of art</p>
       <h1 class="word">Ink</h1>
       <hr class="rule" />
-      <p class="tagline">A new work of art each morning — woven from the date, your weather, and a moment in history.</p>
+      <p class="tagline">Every day, a new original work of art, created just for you</p>
       <button id="start-btn" class="btn-primary">Get started</button>
-      <details id="server-details" class="disclosure">
-        <summary>Ink server address</summary>
-        <label>Server URL<input id="server-url" placeholder="https://your-ink-server" /></label>
-        <button id="server-save" type="button" class="btn-ghost">Save server</button>
-      </details>
-      <p class="returning-hint">Already set up a frame? <button type="button" id="restore-open" class="link inline-link">Restore your account ›</button></p>
       <details class="disclosure" id="restore-details">
         <summary>I already have an account</summary>
         <label>Account token<input id="restore-token" placeholder="paste your token" /></label>
@@ -55,20 +63,38 @@
       <p id="welcome-error" class="error" hidden></p>
     </section>
 
+    <!-- ─────────────── Settings before sign-in (welcome gear) ───────────── -->
+    <section id="screen-setup" class="screen" hidden>
+      <header class="topbar">
+        <button class="link back" id="setup-back">‹ Back</button>
+        <span class="brand-text">Settings</span><span class="spacer"></span>
+      </header>
+
+      <div class="card">
+        <h3>Ink server</h3>
+        <p class="hint">The address this app talks to. Leave it alone unless you run your own Ink server.</p>
+        <label>Server URL<input id="server-url" placeholder="https://your-ink-server" /></label>
+        <button id="server-save" type="button" class="btn-ghost wide">Save server</button>
+      </div>
+
+      <dl class="spec">
+        <div><dt>App version</dt><dd id="setup-version" class="mono">—</dd></div>
+      </dl>
+    </section>
+
     <!-- ───────────────────────────── Home ───────────────────────────────── -->
     <section id="screen-home" class="screen home" hidden>
-      <div class="pull-spinner" id="pull-spinner" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 12a9 9 0 0 1 15.5-6.2L21 8" /><path d="M21 3v5h-5" />
-          <path d="M21 12a9 9 0 0 1-15.5 6.2L3 16" /><path d="M3 21v-5h5" />
-        </svg>
-      </div>
       <header class="home-top">
         <span class="brand-word">Ink</span>
         <span class="inkmark inkmark-anim" aria-hidden="true"><svg viewBox="0 0 160 160"><use href="#inkblob" /></svg></span>
-        <button class="gear-btn" id="app-settings-btn" aria-label="App settings">
-          <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8.4 4a6.5 6.5 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a6.4 6.4 0 00-2-1.2l-.4-2.6H9.5L9 5.8a6.4 6.4 0 00-2 1.2l-2.4-1-2 3.4 2 1.6A6.5 6.5 0 003.6 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2l.4 2.6h5l.4-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
-        </button>
+        <span class="home-actions">
+          <button class="gear-btn" id="add-frame-btn" aria-label="Add a frame" title="Add a frame">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <button class="gear-btn" id="app-settings-btn" aria-label="App settings">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8.4 4a6.5 6.5 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a6.4 6.4 0 00-2-1.2l-.4-2.6H9.5L9 5.8a6.4 6.4 0 00-2 1.2l-2.4-1-2 3.4 2 1.6A6.5 6.5 0 003.6 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2l.4 2.6h5l.4-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          </button>
+        </span>
       </header>
 
       <!-- Empty: no frame connected -->
@@ -82,26 +108,34 @@
         <button id="empty-connect-btn" class="btn-primary">Connect a frame</button>
       </div>
 
-      <!-- Connected: the primary frame as a hung work of art -->
+      <!-- Connected: a swipeable carousel of frames, each a hung work of art -->
       <div id="home-frame" class="home-frame" hidden>
-        <button class="gallery-frame" id="home-art-btn" aria-label="Open frame">
-          <span class="gframe-wood">
-            <span class="gframe-mat">
-              <span class="skeleton" id="home-skeleton"></span>
-              <img id="home-art-img" alt="current artwork" />
-            </span>
-          </span>
-        </button>
-        <figcaption class="home-meta">
-          <h2 class="art-title">
-            <span id="home-frame-name">My frame</span>
-            <svg class="title-moon" id="home-sleep-moon" viewBox="0 0 24 24" width="16" height="16" aria-label="Asleep" hidden><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" fill="currentColor"/></svg>
-          </h2>
-          <p class="art-caption" id="home-explain">—</p>
-          <button class="open-chip" id="home-more">Open</button>
-        </figcaption>
-        <div class="frame-switch" id="frame-switch" hidden></div>
+        <div class="home-carousel" id="home-carousel"></div>
+        <div class="dots" id="home-dots" hidden></div>
+        <p class="swipe-hint" id="home-swipe-hint" hidden>Swipe to switch · hold to reorder</p>
       </div>
+      <!-- One card per frame, cloned into #home-carousel (classes, not ids, so
+           multiple cards can coexist). -->
+      <template id="home-card-tpl">
+        <div class="home-card">
+          <button class="gallery-frame home-art-btn" type="button" aria-label="Open frame">
+            <span class="gframe-wood">
+              <span class="gframe-mat">
+                <span class="skeleton home-skeleton"></span>
+                <img class="home-art-img" alt="current artwork" />
+              </span>
+            </span>
+          </button>
+          <figcaption class="home-meta">
+            <h2 class="art-title">
+              <span class="home-frame-name">My frame</span>
+              <svg class="title-moon home-sleep-moon" viewBox="0 0 24 24" width="16" height="16" aria-label="Asleep" hidden><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" fill="currentColor"/></svg>
+            </h2>
+            <p class="art-caption home-explain">—</p>
+            <button class="open-chip home-more" type="button">Open</button>
+          </figcaption>
+        </div>
+      </template>
     </section>
 
     <!-- ───────────────────────── Connect a frame ────────────────────────── -->
@@ -129,8 +163,6 @@
         <summary>Enter the code instead</summary>
         <form id="pair-form" class="pair-form">
           <input id="pair-code" inputmode="numeric" maxlength="6" placeholder="000000" class="code-input" />
-          <label>Name this frame <span class="optional">(optional)</span>
-            <input id="pair-name" maxlength="40" placeholder="e.g. Living room" /></label>
           <button type="submit" class="btn-primary">Pair frame</button>
           <p id="pair-error" class="error" hidden></p>
         </form>
@@ -150,6 +182,8 @@
 
       <div class="status-line"><span class="dot" id="fr-dot"></span><span id="fr-status">—</span></div>
 
+      <div class="frame-alert" id="frame-alert" hidden></div>
+
       <section class="placard">
         <p class="placard-eyebrow" id="ev-meta">On view today</p>
         <p class="placard-body" id="ev-text">—</p>
@@ -157,20 +191,38 @@
         <p class="placard-sign" id="ev-sign" hidden></p>
       </section>
 
+      <section class="also" id="other-events" hidden>
+        <button type="button" id="also-toggle" class="also-toggle" aria-expanded="false" aria-controls="also-list">
+          <span class="also-title">Also on this day</span>
+          <span class="also-chev" aria-hidden="true">›</span>
+        </button>
+        <ul class="also-list" id="also-list" hidden></ul>
+      </section>
+
       <div class="frame-controls">
-        <button id="refresh-btn" type="button" class="icon-action" aria-label="Refresh the frame" title="Refresh the frame">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-.9 4.5M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
         <button id="regen-btn" type="button" class="btn-primary">Generate</button>
-        <button id="sleep-btn" type="button" class="icon-action" aria-label="Sleep the frame" title="Sleep the frame">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
+        <div class="frame-subactions">
+          <button id="refresh-btn" type="button" class="btn-sub" title="Refresh the frame">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-.9 4.5M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Refresh</span>
+          </button>
+          <button id="sleep-btn" type="button" class="btn-sub" title="Sleep the frame">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Sleep</span>
+          </button>
+        </div>
       </div>
       <p id="refresh-hint" class="sleep-hint center-text" hidden></p>
 
       <nav class="nav-list compact">
-        <button class="nav-row" id="goto-artwork"><span class="nav-ico">🎨</span><span class="nav-t">Artwork</span><span class="nav-chev">›</span></button>
-        <button class="nav-row" id="goto-settings"><span class="nav-ico">⚙︎</span><span class="nav-t">Frame settings</span><span class="nav-chev">›</span></button>
+        <button class="nav-row" id="goto-artwork">
+          <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-.8 2-1.9 0-1.3-1.2-1.6-1.2-2.6 0-.9.8-1.5 1.9-1.5H17a4 4 0 0 0 4-4C21 6.6 17 3 12 3z"/><circle cx="7.6" cy="10.4" r=".4"/><circle cx="10.6" cy="7" r=".4"/><circle cx="14.6" cy="7.4" r=".4"/></svg></span>
+          <span class="nav-t">Artwork</span><span class="nav-chev">›</span>
+        </button>
+        <button class="nav-row" id="goto-settings">
+          <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8.4 4a6.5 6.5 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a6.4 6.4 0 00-2-1.2l-.4-2.6H9.5L9 5.8a6.4 6.4 0 00-2 1.2l-2.4-1-2 3.4 2 1.6A6.5 6.5 0 003.6 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2l.4 2.6h5l.4-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/></svg></span>
+          <span class="nav-t">Frame settings</span><span class="nav-chev">›</span>
+        </button>
       </nav>
     </section>
 
@@ -183,7 +235,11 @@
       <form id="artwork-form">
 
         <div class="card">
-          <h3>Location &amp; weather</h3>
+          <div class="card-head">
+            <h3>Location &amp; weather</h3>
+            <label class="toggle title-toggle" title="Use location &amp; weather"><input type="checkbox" id="use_weather" /><i></i></label>
+          </div>
+          <div id="loc-weather-body">
           <span class="field-label">Location</span>
           <div class="loc-view" id="loc-view">
             <span id="city-display" class="loc-text"></span>
@@ -217,33 +273,56 @@
               <label>Longitude<input id="lon" type="number" step="0.0001" /></label>
             </div>
           </div>
-          <label class="toggle"><span>Show the weather</span><input type="checkbox" id="show_weather" /><i></i></label>
           <fieldset class="radios" id="unit-radios">
             <legend>Temperature units</legend>
             <label class="radio"><input type="radio" name="unit" value="c" /><span>°C</span></label>
             <label class="radio"><input type="radio" name="unit" value="f" /><span>°F</span></label>
           </fieldset>
-          <label class="toggle"><span>Show the date</span><input type="checkbox" id="show_date" /><i></i></label>
-          <label id="date-format-row">Date format
-            <select id="date-format">
-              <option value="weekday">Sun, Jun 28</option>
-              <option value="month_day">June 28</option>
-              <option value="abbr_year">Jun 28, 2026</option>
-              <option value="dmy">28/06/2026</option>
-              <option value="mdy">06/28/2026</option>
-            </select>
-          </label>
+          </div><!-- /loc-weather-body -->
         </div>
 
         <div class="card">
-          <h3>Interests</h3>
-          <p class="hint">What the daily work draws inspiration from.</p>
-          <fieldset class="chips" id="interest-chips"></fieldset>
-          <label>Anything else<input id="interest-other" placeholder="e.g. jazz, sailing, poetry" /></label>
-          <h4 class="sub">Holidays</h4>
-          <label class="toggle"><span>Jewish</span><input type="checkbox" id="h-jewish" /><i></i></label>
-          <label class="toggle"><span>Israeli</span><input type="checkbox" id="h-israeli" /><i></i></label>
-          <label class="toggle"><span>Global</span><input type="checkbox" id="h-global" /><i></i></label>
+          <div class="card-head">
+            <h3>Date</h3>
+            <label class="toggle title-toggle" title="Show the date"><input type="checkbox" id="show_date" /><i></i></label>
+          </div>
+          <label id="date-format-row">Date format
+            <select id="date-format"></select>
+          </label>
+          <div id="date-custom-wrap" hidden>
+            <div class="field-label-row">
+              <span class="field-label">Custom format</span>
+              <button type="button" id="date-help-btn" class="help-btn" aria-label="Show format codes">?</button>
+            </div>
+            <input id="date-custom" type="text" maxlength="40" placeholder="ddd MMM Do" autocapitalize="none" autocomplete="off" spellcheck="false" />
+            <p id="date-preview" class="date-preview"></p>
+          </div>
+        </div>
+
+        <div id="date-help-modal" class="modal-overlay" hidden>
+          <div class="modal-card" role="dialog" aria-modal="true" aria-label="Date format codes">
+            <div class="modal-head">
+              <h4>Format codes</h4>
+              <button type="button" id="date-help-close" class="modal-close" aria-label="Close">&times;</button>
+            </div>
+            <dl id="date-token-list"></dl>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3>Interests</h3>
+            <label class="toggle title-toggle" title="Draw from a moment in history"><input type="checkbox" id="use_event" /><i></i></label>
+          </div>
+          <div id="interests-body">
+            <p class="hint">Topics the daily moment is chosen from.</p>
+            <fieldset class="chips" id="interest-chips"></fieldset>
+            <label>Anything else<input id="interest-other" placeholder="e.g. jazz, sailing, poetry" /></label>
+            <h4 class="sub">Holidays</h4>
+            <label class="toggle"><span>Jewish</span><input type="checkbox" id="h-jewish" /><i></i></label>
+            <label class="toggle"><span>Israeli</span><input type="checkbox" id="h-israeli" /><i></i></label>
+            <label class="toggle"><span>Global</span><input type="checkbox" id="h-global" /><i></i></label>
+          </div>
         </div>
 
         <div class="card">
@@ -295,13 +374,13 @@
 
       <div class="card">
         <h3>Power</h3>
-        <fieldset class="radios" id="power-radios">
-          <legend>How is this frame powered?</legend>
-          <label class="radio"><input type="radio" name="power" value="usb" /><span>Plugged in (always on)</span></label>
-          <label class="radio"><input type="radio" name="power" value="battery" /><span>Battery (sleeps)</span></label>
+        <fieldset class="radios" id="sleep-radios">
+          <legend>When idle</legend>
+          <label class="radio"><input type="radio" name="sleepmode" value="always_on" /><span>Always on</span></label>
+          <label class="radio"><input type="radio" name="sleepmode" value="sleep" /><span>Sleep after a while</span></label>
         </fieldset>
-        <label id="sleep-row" hidden>Stay awake after update (minutes)<input id="sleep-after" type="number" min="1" max="240" /></label>
-        <p class="hint">On battery the frame wakes at the update time, shows the new work, then sleeps to save power. Plugged in, it stays on.</p>
+        <label id="sleep-after-row" hidden>Sleep after (minutes)<input id="sleep-after" type="number" min="1" max="240" /></label>
+        <p class="hint">Always on keeps the picture up and refreshes through the day — best when plugged in. Sleep wakes at the update time, shows the new work, then sleeps to save power — best on battery.</p>
       </div>
 
       <div class="card">
@@ -313,7 +392,6 @@
       <dl class="spec">
         <div><dt>Connection</dt><dd id="spec-conn">—</dd></div>
         <div><dt>Wi‑Fi signal</dt><dd id="spec-wifi">—</dd></div>
-        <div><dt>Battery</dt><dd id="spec-batt">—</dd></div>
         <div><dt>Firmware</dt><dd id="spec-fw">—</dd></div>
         <div><dt>Frame ID</dt><dd id="spec-id" class="mono">—</dd></div>
       </dl>
@@ -400,7 +478,9 @@
     </div>
   </div>
 
-  <div id="toast" class="toast" hidden></div>
+  <!-- Visibility is opacity-driven (.show); no [hidden] — the global
+       [hidden]{display:none!important} would defeat the fade transition. -->
+  <div id="toast" class="toast" aria-live="polite"></div>
 
   <!-- Firmware-update toast: pinned to the top, black on white text. Re-checked
        on every app launch; "Close" dismisses it for this session only. -->
@@ -413,10 +493,39 @@
     <button id="fw-toast-close" type="button" class="fw-toast-x" aria-label="Close">✕</button>
   </div>
 
+  <!-- App (PWA) update — mirrors the firmware toast; Refresh reloads the new build. -->
+  <div id="app-toast" class="fw-toast" hidden role="status">
+    <div class="fw-toast-text">
+      <strong>App update available</strong>
+      <span class="fw-toast-sub">A new version of Ink is ready.</span>
+    </div>
+    <button id="app-toast-refresh" type="button" class="fw-toast-btn">Refresh</button>
+    <button id="app-toast-close" type="button" class="fw-toast-x" aria-label="Close">✕</button>
+  </div>
+
+  <!-- Artwork-waiting toast: a new work was generated but the frame is asleep/
+       offline, so it can't fetch it until it's back. Persists (no remote wake). -->
+  <div id="wake-toast" class="fw-toast" hidden role="status">
+    <div class="fw-toast-text">
+      <strong>New artwork ready</strong>
+      <span id="wake-toast-sub" class="fw-toast-sub">Wake the frame to show it.</span>
+    </div>
+    <button id="wake-toast-close" type="button" class="fw-toast-x" aria-label="Close">✕</button>
+  </div>
+
   <!-- Zoom lightbox: tap an artwork in the gallery to view it large -->
   <div id="lightbox" class="lightbox" hidden>
     <button id="lb-close" class="lb-close" aria-label="Close">✕</button>
     <div class="lb-frame"><img id="lb-img" alt="artwork" /></div>
+  </div>
+
+  <!-- Name-your-frame modal, shown right after a successful pairing. -->
+  <div id="name-modal" class="modal-overlay" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Name your frame">
+      <div class="modal-head"><h4>Name your frame</h4></div>
+      <label>Frame name<input id="name-modal-input" maxlength="40" value="My Ink" autocomplete="off" /></label>
+      <button id="name-modal-save" type="button" class="btn-primary name-modal-save">Save</button>
+    </div>
   </div>
 
   <script src="jsqr.js"></script>

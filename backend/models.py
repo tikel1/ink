@@ -17,9 +17,11 @@ class Account:
     use_own_key: bool
     key_required: bool
     created_at: str
+    suspended: bool = False
 
     @staticmethod
     def from_row(row: sqlite3.Row) -> "Account":
+        keys = row.keys()
         return Account(
             id=row["id"],
             token_hash=row["token_hash"],
@@ -28,6 +30,7 @@ class Account:
             use_own_key=bool(row["use_own_key"]),
             key_required=bool(row["key_required"]),
             created_at=row["created_at"],
+            suspended=bool(row["suspended"]) if "suspended" in keys else False,
         )
 
 
@@ -55,12 +58,16 @@ class Device:
     show_date: bool
     date_format: str
     show_weather: bool
+    use_weather: bool
+    use_event: bool
     city_name: str
     auto_timezone: bool
     schedule: str
     schedule_days: str
     power_source: str
     sleep_after_minutes: int
+    plugged_sleep_minutes: int
+    battery_sleep_minutes: int
     sleeping: bool
     last_auto_gen: str
     custom_prompt_override: Optional[str]
@@ -69,7 +76,9 @@ class Device:
     battery: Optional[float]
     wifi_rssi: Optional[int]
     fw_version: Optional[str]
-    created_at: str
+    ota_error: str = ""
+    display_order: int = 0
+    created_at: str = ""
 
     @staticmethod
     def from_row(row: sqlite3.Row) -> "Device":
@@ -96,12 +105,16 @@ class Device:
             show_date=bool(row["show_date"]),
             date_format=row["date_format"],
             show_weather=bool(row["show_weather"]),
+            use_weather=bool(row["use_weather"]),
+            use_event=bool(row["use_event"]),
             city_name=row["city_name"],
             auto_timezone=bool(row["auto_timezone"]),
             schedule=row["schedule"],
             schedule_days=row["schedule_days"],
             power_source=row["power_source"],
             sleep_after_minutes=row["sleep_after_minutes"],
+            plugged_sleep_minutes=row["plugged_sleep_minutes"] if "plugged_sleep_minutes" in row.keys() else 0,
+            battery_sleep_minutes=row["battery_sleep_minutes"] if "battery_sleep_minutes" in row.keys() else 10,
             sleeping=bool(row["sleeping"]),
             last_auto_gen=row["last_auto_gen"],
             custom_prompt_override=row["custom_prompt_override"],
@@ -110,6 +123,8 @@ class Device:
             battery=row["battery"],
             wifi_rssi=row["wifi_rssi"],
             fw_version=row["fw_version"],
+            ota_error=row["ota_error"] if "ota_error" in row.keys() else "",
+            display_order=row["display_order"] if "display_order" in row.keys() else 0,
             created_at=row["created_at"],
         )
 
@@ -134,6 +149,8 @@ class Device:
             show_date=self.show_date,
             date_format=self.date_format,
             show_weather=self.show_weather,
+            use_weather=self.use_weather,
+            use_event=self.use_event,
             custom_prompt_override=self.custom_prompt_override,
             enabled=self.enabled,
         )
