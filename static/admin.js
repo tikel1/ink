@@ -17,7 +17,7 @@ let allAccounts = [];
 // The global filter bar state. `start`/`end` are the resolved YYYY-MM-DD window
 // (derived from `range`, or the custom pickers cstart/cend). Sent on every load.
 const filters = { range: "30d", start: "", end: "", cstart: "", cend: "",
-                  status: "active", device: "", account: "" };
+                  status: "active", device: "", account: "", test: "" };
 
 // ── helpers ─────────────────────────────────────────────────────────────
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
@@ -138,6 +138,7 @@ function filterQS() {
   const add = (k, v) => { if (v) p.push(k + "=" + encodeURIComponent(v)); };
   add("start", filters.start); add("end", filters.end);
   add("device", filters.device); add("account", filters.account); add("status", filters.status);
+  add("test", filters.test);
   return p.join("&");
 }
 // Append the active filters to a request path (endpoints ignore params they
@@ -161,6 +162,8 @@ function renderFilterBar() {
       <input type="date" id="fb-start" value="${esc(filters.cstart)}" aria-label="Start date" />–<input type="date" id="fb-end" value="${esc(filters.cend)}" aria-label="End date" /></span>
     <span class="fb-label">Status</span>
     <select id="fb-status">${opts([["active", "Active"], ["", "Any status"], ["online", "Online"], ["sleep", "Sleep"], ["offline", "Offline"], ["deactivated", "Deactivated"]], filters.status)}</select>
+    <span class="fb-label">Traffic</span>
+    <select id="fb-test">${opts([["", "All"], ["real", "Real only"], ["test", "Test only"]], filters.test)}</select>
     <span class="fb-label">Frame</span>
     <select id="fb-frame">${frameOpts}</select>
     <span class="fb-label">Account</span>
@@ -168,13 +171,14 @@ function renderFilterBar() {
     <button class="btn ghost sm fb-reset" id="fb-reset" type="button">Reset</button>`;
   $("fb-range").addEventListener("change", (e) => { filters.range = e.target.value; renderFilterBar(); applyFiltersGlobal(); });
   $("fb-status").addEventListener("change", (e) => { filters.status = e.target.value; applyFiltersGlobal(); });
+  $("fb-test").addEventListener("change", (e) => { filters.test = e.target.value; applyFiltersGlobal(); });
   $("fb-frame").addEventListener("change", (e) => { filters.device = e.target.value; applyFiltersGlobal(); });
   $("fb-account").addEventListener("change", (e) => { filters.account = e.target.value; applyFiltersGlobal(); });
   const s = $("fb-start"), en = $("fb-end");
   if (s) s.addEventListener("change", (e) => { filters.cstart = e.target.value; if (filters.range === "custom") applyFiltersGlobal(); });
   if (en) en.addEventListener("change", (e) => { filters.cend = e.target.value; if (filters.range === "custom") applyFiltersGlobal(); });
   $("fb-reset").addEventListener("click", () => {
-    Object.assign(filters, { range: "30d", status: "active", device: "", account: "", cstart: "", cend: "" });
+    Object.assign(filters, { range: "30d", status: "active", device: "", account: "", cstart: "", cend: "", test: "" });
     renderFilterBar(); applyFiltersGlobal();
   });
 }
@@ -259,7 +263,8 @@ function openFrame(id) {
       ["Created", fr.created_at ? fr.created_at.slice(0, 10) : ""],
     ]) +
     section("Status", [
-      ["State", statePill(fr.state) + (fr.enabled === false ? ` <span class="pill fail">deactivated</span>` : "")],
+      ["State", statePill(fr.state) + (fr.enabled === false ? ` <span class="pill fail">deactivated</span>` : "") + testPill(fr.test)],
+      ["Test frame", fr.test ? (fr.account_is_test && !fr.is_test ? "yes — via test account" : "yes") : "no"],
       ["Battery", fr.battery != null ? fr.battery.toFixed(2) + " V" : "—"],
       ["Wi-Fi", wifiLabel(fr.wifi_rssi)],
       ["Firmware", esc(fr.fw_version || "—") + (fr.update_available ? ` → ${esc(fr.latest_fw)} available` : "")],
@@ -281,12 +286,24 @@ function openFrame(id) {
     <button class="rowbtn" data-nav="api" data-q="${esc(fr.id)}">API log ›</button></div>`;
   const frameBtn = `<button class="rowbtn ${fr.enabled === false ? "" : "danger"}" data-fa="frame" data-id="${esc(fr.id)}" data-to="${fr.enabled === false ? "1" : "0"}">${fr.enabled === false ? "Activate frame" : "Deactivate frame"}</button>`;
   const acctBtn = fr.account_id ? `<button class="rowbtn ${fr.account_suspended ? "" : "danger"}" data-fa="acct" data-id="${esc(fr.account_id)}" data-to="${fr.account_suspended ? "0" : "1"}">${fr.account_suspended ? "Reactivate account" : "Deactivate account"}</button>` : "";
-  $("frame-actions").innerHTML = nav + frameBtn + acctBtn;
+  const testBtn = `<button class="rowbtn" data-ftest="1" data-id="${esc(fr.id)}" data-to="${fr.is_test ? "0" : "1"}">${fr.is_test ? "Unmark test frame" : "Mark as test frame"}</button>`;
+  $("frame-actions").innerHTML = nav + frameBtn + testBtn + acctBtn;
   $("frame-actions").querySelectorAll("[data-nav]").forEach((b) => b.addEventListener("click", () => openTabFor(b.dataset.nav, b.dataset.q)));
   $("frame-actions").querySelectorAll("[data-fa]").forEach((b) => b.addEventListener("click", onFrameModalAction));
+  $("frame-actions").querySelectorAll("[data-ftest]").forEach((b) => b.addEventListener("click", onFrameTestToggle));
   $("frame-modal").hidden = false;
 }
 const closeFrame = () => { $("frame-modal").hidden = true; };
+async function onFrameTestToggle(e) {
+  const b = e.currentTarget, to = b.dataset.to === "1";
+  b.disabled = true;
+  try {
+    await apiSend(`/frames/${encodeURIComponent(b.dataset.id)}/test?test=${to}`, "POST");
+    closeFrame(); await loadSelectors(); await loadTab("frames");
+  } catch (err) {
+    if (err.message !== "403") { alert("Action failed: " + err.message); b.disabled = false; }
+  }
+}
 async function onFrameModalAction(e) {
   const b = e.currentTarget, to = b.dataset.to === "1", frame = b.dataset.fa === "frame";
   if (!to) {  // deactivating — confirm
@@ -383,12 +400,14 @@ function costCard(c) {
         `<dt>${esc(li.name)}</dt><dd class="mono">${usd(li.usd)}</dd>`).join("")}</dl></details>`
     : "";
   const scoped = real.scope === "key";
+  const testEst = c.test_estimate_usd || 0;
+  const estSub = testEst > 0 ? `real ${usd(c.real_estimate_usd)} · test ${usd(testEst)}` : "";
   const note = real.available
-    ? `Actual is ${scoped ? "the Ink generation key's" : "org-wide"} OpenAI billing, cached hourly. Estimate is from tracked calls.`
+    ? `Actual is ${scoped ? "the Ink generation key's" : "org-wide"} OpenAI billing (includes test frames — the key is shared), cached hourly. The estimate splits real vs test from tracked runs.`
     : `Actual OpenAI $ needs an Admin key — ${esc(real.note || "set OPENAI_ADMIN_KEY")}. Estimate is from tracked calls.`;
   return `<div class="card"><h3>Cost · ${esc(rangeLabel())}</h3>
     <div class="coststats">
-      ${cstat("Est. OpenAI", usd(c.total_usd))}
+      ${cstat("Est. OpenAI", usd(c.total_usd), estSub)}
       ${cstat("Actual OpenAI", real.available ? usd(real.total_usd) : "—", real.available ? (scoped ? "Ink key" : "org-wide") : "")}
       ${cstat("Fly infra", usd(c.fly_monthly_usd) + `<small>/mo</small>`)}
     </div>
@@ -433,6 +452,7 @@ function renderOverview(d) {
 }
 
 function statePill(s) { return `<span class="pill ${s}">${s}</span>`; }
+const testPill = (on) => on ? ` <span class="pill test">test</span>` : "";
 
 function renderFrames(d) {
   framesData = d.frames;
@@ -444,7 +464,7 @@ function renderFrames(d) {
     const s = [fr.name, fr.id, fr.state, fr.fw_version, fr.account_id, fr.last_art_caption, fr.ota_error,
       ...(fr.interests_preset || []), ...(fr.interests_custom || [])].join(" ").toLowerCase();
     return `<tr class="frow" data-fid="${esc(fr.id)}" data-search="${esc(s)}" data-state="${esc(fr.state)}" data-enabled="${fr.enabled === false ? "0" : "1"}">
-      <td>${statePill(fr.state)}${off}${otaBad}</td>
+      <td>${statePill(fr.state)}${off}${otaBad}${testPill(fr.test)}</td>
       <td><span class="linkname">${esc(displayName(fr.name))}</span>
         <div class="mono" style="color:var(--muted)">${esc(frameCode(fr.id))}</div></td>
       <td>${relTime(fr.last_seen)}</td>
@@ -467,7 +487,7 @@ async function loadGenerations() {
   const d = await api(withF("/generations?limit=300"));
   const rows = d.runs.map((r) => `<tr data-ts="${tsOf(r.created_at)}" data-trigger="${esc(r.trigger)}" data-result="${r.ok ? "ok" : "fail"}" data-search="${esc([r.device_id, r.trigger, r.ok ? "ok" : "fail failed", r.provider, r.phase, r.error].join(" ").toLowerCase())}">
     <td>${relTime(r.created_at)}</td>
-    <td class="mono">${esc(frameCode(r.device_id))}</td>
+    <td class="mono">${esc(frameCode(r.device_id))}${testPill(r.test)}</td>
     <td><span class="pill ${r.trigger}">${esc(r.trigger)}</span></td>
     <td><span class="pill ${r.ok ? "ok" : "fail"}">${r.ok ? "ok" : "fail"}</span></td>
     <td>${r.duration_ms ? (r.duration_ms / 1000).toFixed(1) + "s" : "—"}</td>
@@ -495,7 +515,7 @@ async function loadGallery() {
     const search = [it.device_name, it.device_id, it.date, it.caption, it.event_visual, it.image_prompt].join(" ").toLowerCase();
     return `<div class="shot ${it.orientation === "portrait" ? "portrait" : "landscape"}" data-i="${i}" data-ts="${tsOf(it.created_at || it.date)}" data-search="${esc(search)}">
       <img loading="lazy" src="${esc(BASE + it.image_url)}" alt="${esc(it.caption || "")}" />
-      <div class="cap"><div class="d">${esc(it.device_name || frameCode(it.device_id))} · ${esc(it.date)}</div>
+      <div class="cap"><div class="d">${esc(it.device_name || frameCode(it.device_id))} · ${esc(it.date)}${testPill(it.test)}</div>
         <div class="c">${esc(it.caption || "—")}</div></div></div>`;
   }).join("");
   $("tab-gallery").innerHTML = `<div class="card"><h3 class="hrow">Gallery <span class="filter-count-h">(${d.items.length})</span> ${filterBox("Filter by device, event, prompt…")}</h3>
@@ -517,14 +537,15 @@ async function loadAccounts() {
   const rows = d.accounts.map((a) => {
     const st = acctStatus(a);
     const pill = st === "active" ? "online" : st === "suspended" ? "fail" : "sleep";
-    return `<tr data-astatus="${st}" data-search="${esc([a.email, a.id, st].join(" ").toLowerCase())}">
+    return `<tr data-astatus="${st}" data-search="${esc([a.email, a.id, st, a.is_test ? "test" : ""].join(" ").toLowerCase())}">
       <td>${esc(a.email || "—")}<div class="mono" style="color:var(--muted)">${esc(shortId(a.id))}</div></td>
-      <td><span class="pill ${pill}">${st}</span></td>
+      <td><span class="pill ${pill}">${st}</span>${testPill(a.is_test)}</td>
       <td>${a.device_count}</td>
       <td>${a.last_active ? relTime(a.last_active) : "never"}</td>
       <td>${a.created_at ? dayLabel(a.created_at.slice(0, 10)) : "—"}</td>
       <td>${a.has_own_key ? "own key" : "platform"}</td>
       <td style="text-align:right">
+        <button class="rowbtn" data-act="test" data-id="${esc(a.id)}" data-to="${a.is_test ? "0" : "1"}">${a.is_test ? "Untag test" : "Mark test"}</button>
         <button class="rowbtn" data-act="suspend" data-id="${esc(a.id)}" data-to="${a.suspended ? "0" : "1"}">${a.suspended ? "Reactivate" : "Deactivate"}</button>
         <button class="rowbtn danger" data-act="delete" data-id="${esc(a.id)}" data-label="${esc(a.email || shortId(a.id))}">Delete</button>
       </td></tr>`;
@@ -556,7 +577,8 @@ async function onAccountAction(e) {
   }
   b.disabled = true;
   try {
-    if (b.dataset.act === "suspend") await apiSend(`/accounts/${encodeURIComponent(id)}/suspend?suspended=${b.dataset.to === "1"}`, "POST");
+    if (b.dataset.act === "test") await apiSend(`/accounts/${encodeURIComponent(id)}/test?test=${b.dataset.to === "1"}`, "POST");
+    else if (b.dataset.act === "suspend") await apiSend(`/accounts/${encodeURIComponent(id)}/suspend?suspended=${b.dataset.to === "1"}`, "POST");
     else await apiSend(`/accounts/${encodeURIComponent(id)}`, "DELETE");
     await loadSelectors();
     await loadAccounts();

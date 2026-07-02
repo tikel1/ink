@@ -18,6 +18,7 @@ class Account:
     key_required: bool
     created_at: str
     suspended: bool = False
+    is_test: bool = False
 
     @staticmethod
     def from_row(row: sqlite3.Row) -> "Account":
@@ -31,6 +32,7 @@ class Account:
             key_required=bool(row["key_required"]),
             created_at=row["created_at"],
             suspended=bool(row["suspended"]) if "suspended" in keys else False,
+            is_test=bool(row["is_test"]) if "is_test" in keys else False,
         )
 
 
@@ -78,6 +80,7 @@ class Device:
     fw_version: Optional[str]
     ota_error: str = ""
     display_order: int = 0
+    is_test: bool = False
     created_at: str = ""
 
     @staticmethod
@@ -125,6 +128,7 @@ class Device:
             fw_version=row["fw_version"],
             ota_error=row["ota_error"] if "ota_error" in row.keys() else "",
             display_order=row["display_order"] if "display_order" in row.keys() else 0,
+            is_test=bool(row["is_test"]) if "is_test" in row.keys() else False,
             created_at=row["created_at"],
         )
 

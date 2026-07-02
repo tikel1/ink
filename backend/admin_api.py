@@ -74,6 +74,31 @@ def _filter_devices(devices, device_id=None, account_id=None, status=None):
     return out
 
 
+# Map the console's ?test= query value to the tri-state used by the repo layer.
+_TEST_MODES = {"test": True, "real": False}
+
+
+def _test_flag(test: str | None):
+    return _TEST_MODES.get(test)  # None (all) for anything unrecognised
+
+
+def _test_ids() -> tuple[set, set]:
+    """(test account ids, test device ids). A device counts as test if flagged
+    itself OR owned by a test account, so callers get one authoritative set."""
+    accts = {a.id for a in repositories.list_accounts(limit=1000) if a.is_test}
+    devs = {d.id for d in repositories.list_all_devices()
+            if d.is_test or (d.account_id in accts)}
+    return accts, devs
+
+
+def _apply_test(devices, flag, test_device_ids):
+    if flag is True:
+        return [d for d in devices if d.id in test_device_ids]
+    if flag is False:
+        return [d for d in devices if d.id not in test_device_ids]
+    return devices
+
+
 def _frame(device, latest) -> dict:
     return {
         "id": device.id,
@@ -90,6 +115,7 @@ def _frame(device, latest) -> dict:
         "update_available": firmware_repo.update_available(device.fw_version),
         "ota_error": device.ota_error,
         "enabled": device.enabled,
+        "is_test": device.is_test,
         "orientation": device.orientation,
         "wake_hour": device.wake_hour,
         "wake_minute": device.wake_minute,
@@ -104,19 +130,30 @@ def _frame(device, latest) -> dict:
 
 @router.get("/overview")
 async def overview(start: str | None = None, end: str | None = None,
-                   device: str | None = None, account: str | None = None) -> dict:
+                   device: str | None = None, account: str | None = None,
+                   test: str | None = None) -> dict:
+    tflag = _test_flag(test)
+    tacc, tdev = _test_ids()
     all_devices = repositories.list_all_devices()
-    # Fleet counts honor the frame/account filters (not date — they're live state).
-    devices = _filter_devices(all_devices, device_id=device, account_id=account)
+    # Fleet counts honor the frame/account/test filters (not date — they're live state).
+    devices = _apply_test(_filter_devices(all_devices, device_id=device, account_id=account),
+                          tflag, tdev)
     active = [d for d in devices if d.enabled]        # deactivated frames excluded from the live buckets
     states = [_state(d) for d in active]
     # "Active" = enabled and checked in within 48h (online frames poll ~1/min;
     # healthy sleepers wake daily) — a single health number instead of 3 buckets.
     active_48h = sum(1 for d in active
                      if (_age_seconds(d.last_seen) or 1e12) < 48 * 3600)
-    gen = monitoring_repo.generation_stats(start=start, end=end,
-                                            device_id=device, account_id=account)
-    api = monitoring_repo.api_call_stats(start=start, end=end, device_id=device)
+    tkw = {"test_account_ids": tacc, "test_device_ids": tdev}
+    gen = monitoring_repo.generation_stats(start=start, end=end, device_id=device,
+                                            account_id=account, test=tflag, **tkw)
+    api = monitoring_repo.api_call_stats(start=start, end=end, device_id=device,
+                                         test=tflag, test_device_ids=tdev)
+    # Real-vs-test cost split over the same window, shown regardless of the filter.
+    gen_real = monitoring_repo.generation_stats(start=start, end=end, device_id=device,
+                                                account_id=account, test=False, **tkw)["totals"]
+    gen_test = monitoring_repo.generation_stats(start=start, end=end, device_id=device,
+                                                account_id=account, test=True, **tkw)["totals"]
     art = artwork_repo.counts()
     t = gen["totals"]
     runs = t.get("runs") or 0
@@ -151,6 +188,9 @@ async def overview(start: str | None = None, end: str | None = None,
             "by_day": gen["by_day"],
         },
         "costs": {**_cost_breakdown(t),
+                  "real_estimate_usd": _cost_breakdown(gen_real)["total_usd"],
+                  "test_estimate_usd": _cost_breakdown(gen_test)["total_usd"],
+                  "test_runs": gen_test.get("runs") or 0,
                   "openai_actual": await openai_costs.fetch(start=start, end=end),
                   "fly_monthly_usd": get_settings().fly_monthly_usd},
         "api": api,
@@ -181,14 +221,20 @@ def _cost_breakdown(totals: dict) -> dict:
 
 @router.get("/frames")
 async def frames(device: str | None = None, account: str | None = None,
-                 status: str | None = None) -> dict:
-    suspended = {a.id: a.suspended for a in repositories.list_accounts(limit=500)}
-    devices = _filter_devices(repositories.list_all_devices(),
-                              device_id=device, account_id=account, status=status)
+                 status: str | None = None, test: str | None = None) -> dict:
+    accounts = repositories.list_accounts(limit=500)
+    suspended = {a.id: a.suspended for a in accounts}
+    test_accts = {a.id for a in accounts if a.is_test}
+    tflag = _test_flag(test)
+    _, tdev = _test_ids()
+    devices = _apply_test(_filter_devices(repositories.list_all_devices(),
+                          device_id=device, account_id=account, status=status), tflag, tdev)
     out = []
     for d in devices:
         fr = _frame(d, artwork_repo.latest_ready(d.id))
         fr["account_suspended"] = suspended.get(d.account_id) if d.account_id else None
+        fr["account_is_test"] = (d.account_id in test_accts) if d.account_id else False
+        fr["test"] = d.is_test or fr["account_is_test"]
         out.append(fr)
     return {"frames": out}
 
@@ -196,19 +242,28 @@ async def frames(device: str | None = None, account: str | None = None,
 @router.get("/generations")
 async def generations(limit: int = 100, device: str | None = None,
                       failed: bool = False, start: str | None = None,
-                      end: str | None = None, account: str | None = None) -> dict:
-    return {"runs": monitoring_repo.list_generation_runs(
+                      end: str | None = None, account: str | None = None,
+                      test: str | None = None) -> dict:
+    tacc, tdev = _test_ids()
+    runs = monitoring_repo.list_generation_runs(
         limit=min(limit, 500), device_id=device, only_failed=failed,
-        start=start, end=end, account_id=account)}
+        start=start, end=end, account_id=account, test=_test_flag(test),
+        test_account_ids=tacc, test_device_ids=tdev)
+    for r in runs:  # badge each row so the console can flag test runs in "All" mode
+        r["test"] = r.get("device_id") in tdev or r.get("account_id") in tacc
+    return {"runs": runs}
 
 
 @router.get("/gallery")
 async def gallery(limit: int = 120, start: str | None = None, end: str | None = None,
-                  device: str | None = None, account: str | None = None) -> dict:
+                  device: str | None = None, account: str | None = None,
+                  test: str | None = None) -> dict:
     all_devices = {d.id: d for d in repositories.list_all_devices()}
-    # Which device ids pass the frame/account filter (gallery has no status concept).
-    allowed = {d.id for d in _filter_devices(list(all_devices.values()),
-                                             device_id=device, account_id=account)}
+    _, tdev = _test_ids()
+    # Which device ids pass the frame/account/test filter (gallery has no status concept).
+    allowed = {d.id for d in _apply_test(_filter_devices(list(all_devices.values()),
+                                         device_id=device, account_id=account),
+                                         _test_flag(test), tdev)}
     items = []
     for a in artwork_repo.list_all_ready(limit=min(limit, 500)):
         if a.device_id not in allowed:
@@ -223,6 +278,7 @@ async def gallery(limit: int = 120, start: str | None = None, end: str | None = 
         dev = all_devices.get(a.device_id)
         items.append({
             "device_id": a.device_id,
+            "test": a.device_id in tdev,
             "device_name": (dev.name if dev else "") or "",
             **(_interests(dev) if dev else {}),
             "date": a.date,
@@ -245,12 +301,18 @@ async def gallery(limit: int = 120, start: str | None = None, end: str | None = 
 
 
 @router.get("/api-calls")
-async def api_calls(limit: int = 200, start: str | None = None,
-                    end: str | None = None, device: str | None = None) -> dict:
+async def api_calls(limit: int = 200, start: str | None = None, end: str | None = None,
+                    device: str | None = None, test: str | None = None) -> dict:
+    tflag = _test_flag(test)
+    _, tdev = _test_ids()
+    calls = monitoring_repo.list_api_calls(limit=min(limit, 1000), start=start, end=end,
+                                           device_id=device, test=tflag, test_device_ids=tdev)
+    for c in calls:  # badge each row so the console can flag test traffic
+        c["test"] = c.get("device_id") in tdev
     return {
-        "calls": monitoring_repo.list_api_calls(limit=min(limit, 1000), start=start,
-                                                end=end, device_id=device),
-        "stats": monitoring_repo.api_call_stats(start=start, end=end, device_id=device),
+        "calls": calls,
+        "stats": monitoring_repo.api_call_stats(start=start, end=end, device_id=device,
+                                                test=tflag, test_device_ids=tdev),
     }
 
 
@@ -268,6 +330,7 @@ async def accounts() -> dict:
             "email": a.email,
             "created_at": a.created_at,
             "suspended": a.suspended,
+            "is_test": a.is_test,
             "device_count": len(devices),
             "last_active": last,
             "has_own_key": a.use_own_key,
@@ -295,6 +358,26 @@ async def set_frame_enabled(device_id: str, enabled: bool = True) -> dict:
         raise HTTPException(status_code=404, detail="frame not found")
     repositories.update_device_config(device_id, enabled=enabled)
     return {"device_id": device_id, "enabled": enabled}
+
+
+@router.post("/frames/{device_id}/test")
+async def set_frame_test(device_id: str, test: bool = True) -> dict:
+    """Flag/unflag a single frame as a dev/test frame (its runs + calls are then
+    split out of the real-cost views)."""
+    if repositories.get_device(device_id) is None:
+        raise HTTPException(status_code=404, detail="frame not found")
+    repositories.set_device_test(device_id, test)
+    return {"device_id": device_id, "is_test": test}
+
+
+@router.post("/accounts/{account_id}/test")
+async def set_account_test(account_id: str, test: bool = True) -> dict:
+    """Flag/unflag an account as a dev/test account — every frame it owns is then
+    treated as test traffic in the admin views."""
+    if repositories.get_account(account_id) is None:
+        raise HTTPException(status_code=404, detail="account not found")
+    repositories.set_account_test(account_id, test)
+    return {"account_id": account_id, "is_test": test}
 
 
 @router.post("/accounts/{account_id}/suspend")

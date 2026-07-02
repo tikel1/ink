@@ -78,6 +78,25 @@ def set_account_suspended(account_id: str, suspended: bool) -> None:
         )
 
 
+def set_account_test(account_id: str, is_test: bool) -> None:
+    """Flag an account as a dev/test account so its traffic + cost can be split
+    out from real usage in the admin views."""
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE accounts SET is_test = ? WHERE id = ?",
+            (1 if is_test else 0, account_id),
+        )
+
+
+def set_device_test(device_id: str, is_test: bool) -> None:
+    """Flag a single frame as a dev/test frame (independent of its account)."""
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE devices SET is_test = ? WHERE id = ?",
+            (1 if is_test else 0, device_id),
+        )
+
+
 def set_account_token_hash(account_id: str, token_hash: str) -> None:
     """Replace the account's bearer-token hash (used to mint a recovery token).
     Caller hashes the plaintext via auth.hash_token to avoid leaking it here."""

@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     use_own_key     INTEGER NOT NULL DEFAULT 0,
     key_required    INTEGER NOT NULL DEFAULT 0,  -- force own key (flip remotely)
     suspended       INTEGER NOT NULL DEFAULT 0,  -- admin can block an account
+    is_test         INTEGER NOT NULL DEFAULT 0,  -- dev/test account: excluded from real-cost views
     created_at      TEXT NOT NULL
 );
 
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS devices (
     battery_sleep_minutes INTEGER NOT NULL DEFAULT 10,  -- on battery: sleep after N min
     custom_prompt_override TEXT,
     enabled      INTEGER NOT NULL DEFAULT 1,
+    is_test      INTEGER NOT NULL DEFAULT 0,    -- dev/test frame: excluded from real-cost views
     display_order INTEGER NOT NULL DEFAULT 0,   -- user-arranged order on the home carousel
     last_seen    TEXT,
     battery      REAL,
@@ -135,11 +137,13 @@ _MIGRATIONS = {
     "last_auto_gen": "TEXT NOT NULL DEFAULT ''",  # date (YYYY-MM-DD) the scheduler last auto-generated
     "ota_error": "TEXT NOT NULL DEFAULT ''",   # last OTA failure code the frame reported ('' = none)
     "display_order": "INTEGER NOT NULL DEFAULT 0",  # home-carousel order
+    "is_test": "INTEGER NOT NULL DEFAULT 0",   # dev/test frame flag
 }
 
 # Columns added to the accounts table after the first release.
 _ACCOUNT_MIGRATIONS = {
     "suspended": "INTEGER NOT NULL DEFAULT 0",
+    "is_test": "INTEGER NOT NULL DEFAULT 0",   # dev/test account flag
 }
 
 # Columns added to the daily_artwork table after the first release.

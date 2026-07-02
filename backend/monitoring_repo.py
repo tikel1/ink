@@ -59,12 +59,32 @@ def _gen_conds(start, end, device_id, account_id) -> tuple[list, list]:
     return conds, params
 
 
+def _test_cond(test, test_account_ids, test_device_ids, has_account: bool) -> tuple[list, list]:
+    """Condition restricting rows to test (test=True) or real (test=False) traffic.
+    A row is 'test' when its device or account is flagged. Uses a CASE so a NULL
+    account_id can't three-value the row out. test=None adds no condition."""
+    if test is None:
+        return [], []
+    accts = list(test_account_ids or [])
+    devs = list(test_device_ids or [])
+    whens, params = [], []
+    if devs:
+        whens.append(f"device_id IN ({','.join('?' * len(devs))})"); params += devs
+    if has_account and accts:
+        whens.append(f"account_id IN ({','.join('?' * len(accts))})"); params += accts
+    expr = f"(CASE WHEN {' OR '.join(whens)} THEN 1 ELSE 0 END)" if whens else "0"
+    return [f"{expr} = {1 if test else 0}"], params
+
+
 def list_generation_runs(limit: int = 100, device_id: str | None = None,
                          only_failed: bool = False, start: str | None = None,
-                         end: str | None = None, account_id: str | None = None) -> list[dict]:
+                         end: str | None = None, account_id: str | None = None,
+                         test=None, test_account_ids=None, test_device_ids=None) -> list[dict]:
     conds, params = _gen_conds(start, end, device_id, account_id)
     if only_failed:
         conds.append("ok = 0")
+    tc, tp = _test_cond(test, test_account_ids, test_device_ids, has_account=True)
+    conds += tc; params += tp
     clause = ("WHERE " + " AND ".join(conds)) if conds else ""
     with get_connection() as conn:
         rows = conn.execute(
@@ -75,11 +95,13 @@ def list_generation_runs(limit: int = 100, device_id: str | None = None,
 
 
 def generation_stats(start: str | None = None, end: str | None = None,
-                     device_id: str | None = None,
-                     account_id: str | None = None) -> dict:
+                     device_id: str | None = None, account_id: str | None = None,
+                     test=None, test_account_ids=None, test_device_ids=None) -> dict:
     """Totals + per-day series over the given date window (all-time if unset).
     Both the totals and the series honor the window, so they never disagree."""
     conds, params = _gen_conds(start, end, device_id, account_id)
+    tc, tp = _test_cond(test, test_account_ids, test_device_ids, has_account=True)
+    conds += tc; params += tp
     where = ("WHERE " + " AND ".join(conds)) if conds else ""
     with get_connection() as conn:
         totals = conn.execute(
@@ -122,10 +144,13 @@ def record_api_call(method: str, path: str, kind: str, device_id: str | None,
 
 
 def list_api_calls(limit: int = 200, start: str | None = None,
-                   end: str | None = None, device_id: str | None = None) -> list[dict]:
+                   end: str | None = None, device_id: str | None = None,
+                   test=None, test_device_ids=None) -> list[dict]:
     conds, params = _date_conds("ts", start, end)
     if device_id:
         conds.append("device_id = ?"); params.append(device_id)
+    tc, tp = _test_cond(test, None, test_device_ids, has_account=False)
+    conds += tc; params += tp
     clause = ("WHERE " + " AND ".join(conds)) if conds else ""
     with get_connection() as conn:
         rows = conn.execute(
@@ -135,10 +160,12 @@ def list_api_calls(limit: int = 200, start: str | None = None,
 
 
 def api_call_stats(start: str | None = None, end: str | None = None,
-                   device_id: str | None = None) -> dict:
+                   device_id: str | None = None, test=None, test_device_ids=None) -> dict:
     conds, params = _date_conds("ts", start, end)
     if device_id:
         conds.append("device_id = ?"); params.append(device_id)
+    tc, tp = _test_cond(test, None, test_device_ids, has_account=False)
+    conds += tc; params += tp
     where = ("WHERE " + " AND ".join(conds)) if conds else ""
     with get_connection() as conn:
         totals = conn.execute(
