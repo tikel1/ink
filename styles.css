@@ -483,9 +483,12 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .scan-hint { color: var(--muted); font-size: 13px; margin: 10px 0; }
 .scanner .btn-ghost { max-width: 200px; margin: 0 auto; }
 
-.returning-hint { color: var(--muted); font-size: 13px; margin: 16px 0 0; }
-.inline-link { font: inherit; font-size: 13px; color: var(--ink); font-weight: 600;
-               background: none; border: none; cursor: pointer; padding: 0; text-decoration: underline; }
+/* Welcome-screen settings gear (no account yet → server address lives here). */
+#screen-welcome { position: relative; }
+.welcome-gear { position: absolute; top: max(14px, env(safe-area-inset-top)); right: 14px; z-index: 2; margin-left: 0; }
+
+/* "Name your frame" modal — Save under the input, full width. */
+.name-modal-save { margin-top: 16px; }
 
 /* ═══════════════════════ v2 — home as a hung work of art ═══════════════ */
 .home { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
@@ -577,7 +580,16 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 /* Fine-art print frame — slim walnut molding, wide white mat, soft wall shadow
    (inspired by gallery print mockups). */
 .gallery-frame { display: flex; justify-content: center; margin: clamp(8px, 3vh, 24px) auto 4px;
-                 cursor: pointer; padding: 0; background: none; border: none; max-width: 100%; }
+                 cursor: pointer; padding: 0; background: none; border: none; max-width: 100%;
+                 position: relative; }
+/* Grounded penumbra: a soft ellipse hugging the bottom edge, like the diffuse
+   shadow a frame throws on the wall right beneath it. Box-shadows can't make
+   this elliptical falloff, and it's what sells the "hanging on a wall" depth. */
+.gallery-frame::after {
+  content: ""; position: absolute; z-index: -1; left: 7%; right: 7%;
+  bottom: -9px; height: 16px; border-radius: 50%;
+  background: rgba(27,24,19,.30); filter: blur(9px); pointer-events: none;
+}
 /* Walnut molding — real wood-grain photo, beveled with inner light/shade. */
 .gframe-wood {
   display: inline-block; position: relative;
@@ -587,14 +599,14 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
     inset 0 2px 3px rgba(255,255,255,.20),   /* top molding highlight */
     inset 0 -4px 8px rgba(0,0,0,.45),         /* bottom molding shade (rounded look) */
     inset 0 0 0 1px rgba(0,0,0,.35),          /* crisp outer edge */
-    /* Realistic wall shadow: a faint contact halo right at the frame, then a
-       penumbra that grows + fades downward, as if lit from above. */
-    0 0 1px rgba(27,24,19,.12),
-    0 2px 4px rgba(27,24,19,.20),
-    0 6px 9px -1px rgba(27,24,19,.16),
-    0 13px 22px -5px rgba(27,24,19,.15),
-    0 24px 40px -10px rgba(27,24,19,.16),
-    0 42px 70px -18px rgba(27,24,19,.22);
+    /* Realistic wall shadow: the frame hangs nearly flush to the wall, so the
+       shadow stays TIGHT — a crisp contact line under the molding, then a short
+       penumbra biased down-right (light from the upper left). The old huge
+       far-flung layers read as "floating off the wall". */
+    0 1px 1px rgba(27,24,19,.32),
+    1px 3px 4px -1px rgba(27,24,19,.26),
+    2px 7px 10px -3px rgba(27,24,19,.20),
+    3px 14px 20px -8px rgba(27,24,19,.16);
 }
 /* Wide white mat inside the molding. */
 .gframe-mat {
