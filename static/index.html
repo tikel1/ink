@@ -200,19 +200,29 @@
       </section>
 
       <div class="frame-controls">
-        <button id="refresh-btn" type="button" class="icon-action" aria-label="Refresh the frame" title="Refresh the frame">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-.9 4.5M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
         <button id="regen-btn" type="button" class="btn-primary">Generate</button>
-        <button id="sleep-btn" type="button" class="icon-action" aria-label="Sleep the frame" title="Sleep the frame">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
+        <div class="frame-subactions">
+          <button id="refresh-btn" type="button" class="btn-sub" title="Refresh the frame">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-.9 4.5M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Refresh</span>
+          </button>
+          <button id="sleep-btn" type="button" class="btn-sub" title="Sleep the frame">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Sleep</span>
+          </button>
+        </div>
       </div>
       <p id="refresh-hint" class="sleep-hint center-text" hidden></p>
 
       <nav class="nav-list compact">
-        <button class="nav-row" id="goto-artwork"><span class="nav-ico">🎨</span><span class="nav-t">Artwork</span><span class="nav-chev">›</span></button>
-        <button class="nav-row" id="goto-settings"><span class="nav-ico">⚙︎</span><span class="nav-t">Frame settings</span><span class="nav-chev">›</span></button>
+        <button class="nav-row" id="goto-artwork">
+          <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-.8 2-1.9 0-1.3-1.2-1.6-1.2-2.6 0-.9.8-1.5 1.9-1.5H17a4 4 0 0 0 4-4C21 6.6 17 3 12 3z"/><circle cx="7.6" cy="10.4" r=".4"/><circle cx="10.6" cy="7" r=".4"/><circle cx="14.6" cy="7.4" r=".4"/></svg></span>
+          <span class="nav-t">Artwork</span><span class="nav-chev">›</span>
+        </button>
+        <button class="nav-row" id="goto-settings">
+          <span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8.4 4a6.5 6.5 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a6.4 6.4 0 00-2-1.2l-.4-2.6H9.5L9 5.8a6.4 6.4 0 00-2 1.2l-2.4-1-2 3.4 2 1.6A6.5 6.5 0 003.6 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2l.4 2.6h5l.4-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/></svg></span>
+          <span class="nav-t">Frame settings</span><span class="nav-chev">›</span>
+        </button>
       </nav>
     </section>
 
