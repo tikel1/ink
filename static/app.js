@@ -188,7 +188,13 @@ function wireWelcome() {
     try { const { token: t } = await api("/account", { method: "POST", auth: false }); localStorage.setItem(TOKEN_KEY, t); toast("New account created"); await showHome(); }
     catch (e) { showError("welcome-error", e); $("server-details").open = true; }
   });
-  $("restore-open").addEventListener("click", () => { $("restore-details").open = true; $("restore-token").focus(); });
+  // Gear on the welcome screen (no account yet): opens the server-address setting.
+  $("welcome-settings-btn").addEventListener("click", () => {
+    const d = $("server-details");
+    d.open = true;
+    d.scrollIntoView({ behavior: "smooth", block: "center" });
+    $("server-url").focus();
+  });
   $("restore-btn").addEventListener("click", async () => {
     const t = $("restore-token").value.trim(); if (!t) return;
     localStorage.setItem(TOKEN_KEY, t);
@@ -247,6 +253,35 @@ function buildHomeCards(preferId) {
     const card = track.children[idx];
     if (card) { const prev = track.style.scrollBehavior; track.style.scrollBehavior = "auto"; track.scrollLeft = card.offsetLeft; track.style.scrollBehavior = prev; }
   });
+  maybeNudgeCarousel();
+}
+
+// Teach the swipe with a physical nudge: the carousel briefly peeks the next
+// card and springs back. Shown only while the user hasn't yet swiped themselves
+// (which retires it for good), at most once per app session and 3 times ever —
+// visible enough to register, rare enough not to annoy.
+const NUDGE_MAX = 3, NUDGE_PX = 56, NUDGE_DELAY = 900, NUDGE_HOLD = 450;
+let nudgedThisSession = false;
+function maybeNudgeCarousel() {
+  if (devices.length < 2 || nudgedThisSession) return;
+  if (localStorage.getItem("ink.swipeHintSeen")) return;
+  const shown = parseInt(localStorage.getItem("ink.swipeNudges") || "0", 10);
+  if (shown >= NUDGE_MAX) return;
+  nudgedThisSession = true;
+  setTimeout(() => {
+    const track = $("home-carousel");
+    if (!track || currentScreen !== "home" || track.classList.contains("reordering")) return;
+    localStorage.setItem("ink.swipeNudges", String(shown + 1));
+    // Suspend snap so the browser doesn't fight the mid-card position.
+    const prevSnap = track.style.scrollSnapType;
+    track.style.scrollSnapType = "none";
+    const base = track.scrollLeft;
+    track.scrollTo({ left: base + NUDGE_PX, behavior: "smooth" });
+    setTimeout(() => {
+      track.scrollTo({ left: base, behavior: "smooth" });
+      setTimeout(() => { track.style.scrollSnapType = prevSnap; }, NUDGE_HOLD);
+    }, NUDGE_HOLD);
+  }, NUDGE_DELAY);
 }
 
 function fillHomeCard(card, d) {
@@ -761,13 +796,41 @@ function wireConnect() {
     e.preventDefault();
     try {
       const dev = await api("/devices/pair", { method: "POST", body: { pairing_code: $("pair-code").value.trim() } });
-      const nm = $("pair-name").value.trim();
-      if (nm) { try { await api(`/devices/${dev.id}/config`, { method: "PUT", body: { name: nm } }); } catch {} }
-      $("pair-code").value = ""; $("pair-name").value = "";
-      await openFrame(dev.id);
-      toast("Paired! Tap Generate to make your first artwork");
+      $("pair-code").value = "";
+      await finishPair(dev);
     } catch (e2) { showError("pair-error", e2); }
   });
+  // "Name your frame" modal: Save / Enter / backdrop all accept the current value.
+  $("name-modal-save").addEventListener("click", () => resolveFrameName());
+  $("name-modal-input").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); resolveFrameName(); } });
+  $("name-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) resolveFrameName(); });
+}
+
+// Onboarding: right after a successful pair (QR or manual code), ask what to call
+// the frame — prefilled "My Ink" — then land on the frame ready to Generate.
+const DEFAULT_FRAME_NAME = "My Ink";
+let _nameResolve = null;
+function askFrameName() {
+  return new Promise((resolve) => {
+    _nameResolve = resolve;
+    const input = $("name-modal-input");
+    input.value = DEFAULT_FRAME_NAME;
+    $("name-modal").hidden = false;
+    input.focus(); input.select();
+  });
+}
+function resolveFrameName() {
+  if (!_nameResolve) return;
+  const name = $("name-modal-input").value.trim() || DEFAULT_FRAME_NAME;
+  $("name-modal").hidden = true;
+  const r = _nameResolve; _nameResolve = null;
+  r(name);
+}
+async function finishPair(dev) {
+  const name = await askFrameName();
+  try { await api(`/devices/${dev.id}/config`, { method: "PUT", body: { name } }); } catch {}
+  await openFrame(dev.id);
+  toast("Paired! Tap Generate to make your first artwork");
 }
 
 // --------------------------------------------------------------------------
@@ -1660,8 +1723,7 @@ function stopScan() {
 async function syncByCode(code) {
   try {
     const dev = await api("/devices/pair", { method: "POST", body: { pairing_code: code } });
-    await openFrame(dev.id);
-    toast("Paired! Tap Generate to make your first artwork");
+    await finishPair(dev);
   } catch (e) { await showHome(); go("connect"); $("pair-code").value = code; showError("pair-error", e); }
 }
 
