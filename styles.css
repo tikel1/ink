@@ -599,14 +599,8 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .gallery-frame { display: flex; justify-content: center; margin: clamp(8px, 3vh, 24px) auto 4px;
                  cursor: pointer; padding: 0; background: none; border: none; max-width: 100%;
                  position: relative; }
-/* Grounded penumbra: a soft ellipse hugging the bottom edge, like the diffuse
-   shadow a frame throws on the wall right beneath it. Box-shadows can't make
-   this elliptical falloff, and it's what sells the "hanging on a wall" depth. */
-.gallery-frame::after {
-  content: ""; position: absolute; z-index: -1; left: 7%; right: 7%;
-  bottom: -9px; height: 16px; border-radius: 50%;
-  background: rgba(27,24,19,.30); filter: blur(9px); pointer-events: none;
-}
+/* (No grounded ellipse: the gallery-print look is a single soft ambient halo —
+   see the .gframe-wood wall shadow — with no distinct floor shadow.) */
 /* Walnut molding — real wood-grain photo, beveled with inner light/shade. */
 .gframe-wood {
   display: inline-block; position: relative;
@@ -616,26 +610,31 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
     inset 0 2px 3px rgba(255,255,255,.20),   /* top molding highlight */
     inset 0 -4px 8px rgba(0,0,0,.45),         /* bottom molding shade (rounded look) */
     inset 0 0 0 1px rgba(0,0,0,.35),          /* crisp outer edge */
-    /* Realistic wall shadow: the frame hangs nearly flush to the wall, so the
-       shadow stays TIGHT — a crisp contact line under the molding, then a short
-       penumbra biased down-right (light from the upper left). The old huge
-       far-flung layers read as "floating off the wall". */
-    0 1px 1px rgba(27,24,19,.32),
-    1px 3px 4px -1px rgba(27,24,19,.26),
-    2px 7px 10px -3px rgba(27,24,19,.20),
-    3px 14px 20px -8px rgba(27,24,19,.16);
+    /* Gallery-print wall shadow: one soft ambient halo, wide and faint, biased
+       gently downward — no hard contact line, no floor ellipse. Reads like a
+       professionally photographed framed print on a bright wall. */
+    0 1px 2px rgba(27,24,19,.12),
+    0 6px 14px rgba(27,24,19,.10),
+    0 16px 32px rgba(27,24,19,.11),
+    0 30px 60px rgba(27,24,19,.12);
 }
 /* Wide white mat inside the molding. */
 .gframe-mat {
   display: block; position: relative; background: #fcfbf8;
   padding: clamp(12px, 4.5vw, 26px); border-radius: 1px;
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,.05),
-              inset 0 2px 9px rgba(0,0,0,.12);   /* mat recessed below the molding lip */
+  /* Inner shadow: the molding's lip shades the recessed mat — a clear soft band
+     along the top (light from above), a faint wrap on the sides, and a hairline
+     seam all around. This inner depth is what makes the frame read as real. */
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.06),
+              inset 0 3px 6px rgba(0,0,0,.16),
+              inset 0 10px 18px -8px rgba(0,0,0,.12),
+              inset 2px 0 6px -3px rgba(0,0,0,.08),
+              inset -2px 0 6px -3px rgba(0,0,0,.08);
 }
 /* The mat "window": a crisp line + subtle bevel where the print meets the mat. */
 .gframe-mat::after { content: ""; position: absolute; inset: clamp(12px,4.5vw,26px);
-                     box-shadow: inset 0 0 0 1px rgba(0,0,0,.16),
-                                 inset 0 1px 4px rgba(0,0,0,.10); pointer-events: none; }
+                     box-shadow: inset 0 0 0 1px rgba(0,0,0,.15),
+                                 inset 0 2px 5px rgba(0,0,0,.12); pointer-events: none; }
 .gframe-mat img.loaded { opacity: 1; }
 .gframe-mat .skeleton { position: absolute; inset: clamp(12px,4.5vw,26px); }
 .gallery-frame:active { transform: scale(.99); }
