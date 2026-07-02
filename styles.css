@@ -759,7 +759,9 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .also-item { display: flex; align-items: flex-start; gap: 10px;
              padding: 11px 14px; background: var(--paper); border: 1px solid var(--line);
              border-radius: var(--radius-sm); font-size: 14px; line-height: 1.5; color: var(--ink); }
-.also-ico { flex: none; font-size: 16px; line-height: 1.3; }
+/* Line icons inherit the muted ink tone so they sit inside the beige scheme. */
+.also-ico { flex: none; color: var(--ink-soft); opacity: .85; margin-top: 1px; }
+.also-ico svg { display: block; width: 17px; height: 17px; }
 .also-text { flex: 1; min-width: 0; }
 
 /* ── Radio groups ────────────────────────────────────────────────────── */
