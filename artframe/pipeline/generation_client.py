@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import logging
+from typing import NamedTuple
 
 from openai import AsyncOpenAI
 
@@ -109,26 +110,118 @@ async def generate_text_with_search(settings: Settings, prompt: str) -> str:
     return await _openai_search(settings, prompt)
 
 
-async def generate_image(
-    settings: Settings, prompt: str, orientation: str = "landscape"
-) -> bytes:
-    """Return raw PNG bytes for the given prompt, sized per orientation."""
-    if settings.image_provider != "openai":
-        raise NotImplementedError(f"image provider {settings.image_provider}")
+class ImageResult(NamedTuple):
+    """Raw PNG bytes + the prompt the image model actually saw ('' = ours,
+    verbatim — the direct flow; non-empty = the responses-flow rewrite)."""
+    png: bytes
+    revised_prompt: str = ""
 
-    client = _require_openai(settings)
+
+# Instructions for the chat model that fronts the image tool in the responses
+# flow. It concretizes our long brief (which the image model renders better) but
+# is contractually forbidden from dropping the parts that must survive verbatim —
+# the exact failure mode of Home Assistant's equivalent flow (tiny captions,
+# converted temperature units).
+_REWRITE_GUARD = """You are an art director preparing a prompt for an image model.
+Rewrite the brief you receive into ONE concrete, visual, scene-first image prompt
+(about 150-250 words) and call the image generation tool exactly once.
+
+HARD REQUIREMENTS — your image prompt MUST:
+- Contain each of these text fragments VERBATIM, exact characters, never reworded,
+  never unit-converted:
+{must}
+- State that the caption along the bottom edge is in LARGE BOLD CAPITAL LETTERS
+  with wide letter-spacing, cap height at least 3% of the image height — never
+  describe the caption as small, thin, or subtle in size.
+- Keep: pure white background, deep matte black hand-cut paper shapes only, no
+  other colors, rough torn hand-cut edges, subtle paper texture.
+
+Preserve the brief's artistic intent (abstract Matisse cut-paper, data dissolved
+into the shapes as negative space); make the language concrete rather than meta."""
+
+
+def _revision_ok(revised: str, must_include: list[str]) -> bool:
+    """True if the rewrite kept every hard constraint (else we fall back)."""
+    if not revised:
+        return False
+    low = revised.lower()
+    if "bold" not in low:
+        return False
+    return all(fragment in revised for fragment in must_include)
+
+
+async def _openai_image_direct(
+    client: AsyncOpenAI, settings: Settings, prompt: str, size: str
+) -> ImageResult:
+    """Today's path: our prompt goes to the image model verbatim."""
     response = await client.images.generate(
         model=settings.openai_image_model,
         prompt=prompt,
-        size=_OPENAI_IMAGE_SIZE.get(orientation, _OPENAI_IMAGE_SIZE["landscape"]),
+        size=size,
         quality=settings.openai_image_quality,
         n=1,
     )
     metrics.record(metrics.IMAGE, "openai")
     payload = response.data[0]
     if getattr(payload, "b64_json", None):
-        return base64.b64decode(payload.b64_json)
+        return ImageResult(base64.b64decode(payload.b64_json))
     raise GenerationError("provider returned no inline image data")
+
+
+async def _openai_image_responses(
+    client: AsyncOpenAI, settings: Settings, prompt: str, size: str,
+    must_include: list[str],
+) -> ImageResult:
+    """HA-style path: a chat model rewrites the brief into concrete art direction
+    (guarded), then calls the image tool. Raises on any miss — caller falls back."""
+    must = "\n".join(f'  - "{s}"' for s in must_include) or "  (none)"
+    tool = {
+        "type": "image_generation",
+        "size": size,
+        "quality": settings.openai_image_quality,
+        "output_format": "png",
+    }
+    response = await client.responses.create(
+        model=settings.openai_text_model,
+        instructions=_REWRITE_GUARD.format(must=must),
+        input=prompt,
+        tools=[tool],
+        tool_choice="required",
+    )
+    image_b64, revised = None, ""
+    for item in getattr(response, "output", []) or []:
+        if getattr(item, "type", "") == "image_generation_call":
+            image_b64 = getattr(item, "result", None)
+            revised = getattr(item, "revised_prompt", "") or ""
+    if not image_b64:
+        raise GenerationError("responses flow returned no image")
+    if not _revision_ok(revised, must_include):
+        raise GenerationError(f"rewrite dropped a hard constraint: {revised[:160]!r}")
+    metrics.record(metrics.IMAGE, "openai")
+    return ImageResult(base64.b64decode(image_b64), revised)
+
+
+async def generate_image(
+    settings: Settings, prompt: str, orientation: str = "landscape",
+    must_include: list[str] | None = None,
+) -> ImageResult:
+    """Generate the artwork PNG. Prefers the responses flow (richer images from
+    concretized prompts) when enabled; any error or a rewrite that loses a hard
+    constraint falls back to the direct flow, so the worst case is exactly the
+    old behavior."""
+    if settings.image_provider != "openai":
+        raise NotImplementedError(f"image provider {settings.image_provider}")
+
+    client = _require_openai(settings)
+    size = _OPENAI_IMAGE_SIZE.get(orientation, _OPENAI_IMAGE_SIZE["landscape"])
+    if settings.openai_image_flow == "responses":
+        try:
+            return await _openai_image_responses(
+                client, settings, prompt, size, must_include or [])
+        except Exception:  # noqa: BLE001 — the direct path is always the safety net
+            logger.warning("responses image flow failed; falling back to direct",
+                           exc_info=True)
+    return await _openai_image_direct(client, settings, prompt, size)
 
 
 def panel_dimensions() -> tuple[int, int]:

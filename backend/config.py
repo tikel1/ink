@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # low|medium|high — "medium" (~$0.05/image) is the quality/cost sweet spot
     # for the framed art; "low" looked too soft, "high" (~$0.21) is overkill.
     openai_image_quality: str = "medium"
+    # "responses" (HA-style: chat model rewrites the brief into concrete art
+    # direction, guarded + validated, auto-fallback to direct) | "direct".
+    openai_image_flow: str = "responses"
     # Smart-but-cheap text model for event selection + fact-checking.
     openai_text_model: str = "gpt-5.4-mini"
     # Gemini (free tier) for text + grounded web search. When set, the pipeline

@@ -93,17 +93,23 @@ async def generate_artwork(settings: Settings, config: DeviceConfig, on_phase=No
         if pick.caption and not pick.visual:
             pick = pick._replace(visual=await _derive_visual(settings, pick.caption))
     phase("compose")
-    image_prompt = _build_image_prompt(config, wx, today, pick)
+    image_prompt, must_include = _build_image_prompt(config, wx, today, pick)
 
     # The image render dominates latency; run narration alongside it so the
     # app-triggered path is as quick as the image call itself.
     phase("paint")
-    raw_png, (narration_en, narration_he) = await asyncio.gather(
-        generation_client.generate_image(settings, image_prompt, config.orientation),
+    image_result, (narration_en, narration_he) = await asyncio.gather(
+        generation_client.generate_image(
+            settings, image_prompt, config.orientation, must_include=must_include),
         _narrate(settings, config, pick.caption, pick.now_tie),
     )
     phase("finish")
-    dithered = imaging.to_eink_image(raw_png, fmt="PNG", orientation=config.orientation)
+    dithered = imaging.to_eink_image(image_result.png, fmt="PNG", orientation=config.orientation)
+    # Keep the rewrite (what the image model actually saw) with the brief for
+    # debugging — the admin `show` command surfaces it per creation.
+    stored_prompt = image_prompt
+    if image_result.revised_prompt:
+        stored_prompt += "\n\n--- revised by the responses flow ---\n" + image_result.revised_prompt
 
     return ArtworkResult(
         device_id=config.id,
@@ -112,7 +118,7 @@ async def generate_artwork(settings: Settings, config: DeviceConfig, on_phase=No
         event_text_en=narration_en,
         event_text_he=narration_he,
         weather_summary=wx.as_text(config.temp_unit) if config.use_weather else "",
-        image_prompt=image_prompt,
+        image_prompt=stored_prompt,
         event_caption=pick.caption,
         event_visual=pick.visual,
         other_events=tuple(other_events),
@@ -333,7 +339,12 @@ async def _fact_check(settings: Settings, event: str, date_label: str) -> bool:
     return verdict.strip().upper().startswith("ACCURATE")
 
 
-def _build_image_prompt(config: DeviceConfig, wx, today: date_cls, pick: EventPick) -> str:
+def _build_image_prompt(
+    config: DeviceConfig, wx, today: date_cls, pick: EventPick
+) -> tuple[str, list[str]]:
+    """Returns (prompt, must_include): the assembled brief plus the text fragments
+    that must survive VERBATIM through any prompt rewriting (exact date, exact
+    temperature incl. unit, signature) — the responses flow validates on these."""
     template = config.custom_prompt_override or prompts.ARTWORK_PROMPT
     symbol = "°F" if config.temp_unit == "f" else "°C"
     temp_str = f"{wx.temperature(config.temp_unit)}{symbol}"
@@ -354,7 +365,18 @@ def _build_image_prompt(config: DeviceConfig, wx, today: date_cls, pick: EventPi
     # and partial placeholders never raise.
     for key, value in tokens.items():
         template = template.replace("{" + key + "}", str(value))
-    return template
+    must_include: list[str] = []
+    if config.show_date:
+        must_include.append(date_str)
+    if config.use_weather:
+        must_include.append(temp_str)
+        # The condition word too — otherwise the rewrite keeps the temperature but
+        # quietly drops the weather icon (observed: no sun on a "sunny" day).
+        if wx.condition:
+            must_include.append(str(wx.condition))
+    if config.signature:
+        must_include.append(config.signature)
+    return template, must_include
 
 
 def _connection_clauses(now_tie: str) -> tuple[str, str]:

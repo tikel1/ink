@@ -240,8 +240,10 @@ If the viewer can instantly read everything → it is too literal.
 ### Text & Signature (Detached Minimalism):
 
 - Caption (bottom edge, outside shapes):
-  → 3-7 words, **medium, bold, quiet, and visually detached** from composition
-  → Noticeable on small screens with low resolution
+  → 3-7 words in **LARGE BOLD CAPITAL LETTERS** with wide letter-spacing —
+    cap height at least 3% of the image height, so it stays clearly legible on a
+    small 7.5-inch display. Never small, never thin, never subtle in size —
+    quiet in placement, loud in weight.
   → If there is an event above, caption it in magazine-style copywriting (include
     the year for a historical event). If there is no event, omit the caption.
 - Signature: "{signature}" — **bold, subtle, pen or brush handwritten,

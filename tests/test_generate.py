@@ -31,10 +31,11 @@ async def test_generate_artwork_produces_panel_png(monkeypatch):
         captured["text_prompts"].append(prompt)
         return "Apollo 11 lands on the Moon"
 
-    async def fake_image(settings, prompt, orientation="landscape"):
+    async def fake_image(settings, prompt, orientation="landscape", must_include=None):
         captured["image_prompt"] = prompt
         captured["orientation"] = orientation
-        return _fake_png()
+        captured["must_include"] = must_include
+        return gen.generation_client.ImageResult(_fake_png())
 
     monkeypatch.setattr(gen.weather, "fetch_weather", fake_weather)
     monkeypatch.setattr(gen.holidays, "fetch_holidays", fake_holidays)

@@ -20,3 +20,7 @@ class Settings:
     # on any error/quota. Empty key = use OpenAI for text too.
     gemini_api_key: str = ""
     gemini_text_model: str = "gemini-2.5-flash"
+    # Image call route: "responses" = HA-style (a chat model rewrites the brief
+    # into concrete art direction, guarded so it can't drop hard constraints,
+    # with automatic fallback to direct) | "direct" = raw prompt to images API.
+    openai_image_flow: str = "responses"
