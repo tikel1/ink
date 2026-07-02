@@ -645,7 +645,11 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
      (40px) and the card's shadow padding (32px), with headroom, so the whole
      wooden frame AND its shadow fit unclipped. Height capped so frame + placard
      + button fit the locked home viewport. */
-  width: auto; height: auto; max-width: min(440px, calc(100vw - 150px));
+  /* Width: the app column caps at 560px, and app padding (40) + card padding (32)
+     + wood molding (40) + mat (52) eat 164px of it — so the IMAGE may use at most
+     396px or the frame's sides get sheared by the carousel clip (the desktop bug).
+     The vw term keeps the same accounting on narrow phones. */
+  width: auto; height: auto; max-width: min(396px, calc(100vw - 164px));
   /* Height: 40dvh on tall (phone) viewports, but on short desktop windows cap by
      what's actually left after the header, dots, placard + button (~430px), so
      the locked one-viewport home never clips the frame. Floor at 180px. */
