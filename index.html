@@ -56,17 +56,31 @@
       <hr class="rule" />
       <p class="tagline">A new work of art each morning — woven from the date, your weather, and a moment in history.</p>
       <button id="start-btn" class="btn-primary">Get started</button>
-      <details id="server-details" class="disclosure">
-        <summary>Ink server address</summary>
-        <label>Server URL<input id="server-url" placeholder="https://your-ink-server" /></label>
-        <button id="server-save" type="button" class="btn-ghost">Save server</button>
-      </details>
       <details class="disclosure" id="restore-details">
         <summary>I already have an account</summary>
         <label>Account token<input id="restore-token" placeholder="paste your token" /></label>
         <button id="restore-btn" class="btn-ghost">Restore</button>
       </details>
       <p id="welcome-error" class="error" hidden></p>
+    </section>
+
+    <!-- ─────────────── Settings before sign-in (welcome gear) ───────────── -->
+    <section id="screen-setup" class="screen" hidden>
+      <header class="topbar">
+        <button class="link back" id="setup-back">‹ Back</button>
+        <span class="brand-text">Settings</span><span class="spacer"></span>
+      </header>
+
+      <div class="card">
+        <h3>Ink server</h3>
+        <p class="hint">The address this app talks to. Leave it alone unless you run your own Ink server.</p>
+        <label>Server URL<input id="server-url" placeholder="https://your-ink-server" /></label>
+        <button id="server-save" type="button" class="btn-ghost wide">Save server</button>
+      </div>
+
+      <dl class="spec">
+        <div><dt>App version</dt><dd id="setup-version" class="mono">—</dd></div>
+      </dl>
     </section>
 
     <!-- ───────────────────────────── Home ───────────────────────────────── -->
