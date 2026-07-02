@@ -558,6 +558,9 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .home-carousel.reordering { scroll-snap-type: none; scroll-behavior: auto; touch-action: none; }
 .home-card { flex: 0 0 100%; min-width: 0; scroll-snap-align: center;
              display: flex; flex-direction: column; justify-content: flex-start;
+             /* Breathing room inside the carousel's overflow clip so the frame's
+                wall shadow + grounded ellipse aren't sheared off at the edges. */
+             padding: 6px 16px 20px;
              transition: transform .18s var(--ease), opacity .18s var(--ease);
              animation: card-settle .5s var(--ease) both; }
 @keyframes card-settle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -626,11 +629,11 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 /* Landscape: image capped by width + height so the whole home fits one screen. */
 .home-card:not(.is-portrait) .gframe-mat img {
   display: block; opacity: 0; transition: opacity .5s var(--ease); border-radius: 1px;
-  /* Cap by viewport width MINUS the mat+molding chrome (~68px) AND the #app
-     padding (40px), with headroom, so the whole wooden frame fits and is never
-     clipped sideways. Height is capped so the frame + placard + button fit the
-     locked home viewport without cropping the molding top/bottom. */
-  width: auto; height: auto; max-width: min(440px, calc(100vw - 132px)); max-height: 40dvh;
+  /* Cap by viewport width MINUS the mat+molding chrome (~68px), the #app padding
+     (40px) and the card's shadow padding (32px), with headroom, so the whole
+     wooden frame AND its shadow fit unclipped. Height capped so frame + placard
+     + button fit the locked home viewport. */
+  width: auto; height: auto; max-width: min(440px, calc(100vw - 150px)); max-height: 40dvh;
 }
 /* Portrait: served PNG is the panel buffer (landscape px); show it upright by
    swapping dims via container-query units + rotating 90° clockwise. */

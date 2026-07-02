@@ -852,6 +852,14 @@ async function openFrame(id) {
     updateRefreshState();
   } catch (e) { toast(e.message); }
   await loadGallery(id);
+  // A generation may already be running for this frame (started before the user
+  // left the screen, or before an app reload). Reflect it on the button instead
+  // of offering a fresh Generate — the backend refuses a second run anyway.
+  try {
+    const s = await api(`/devices/${id}/generation`);
+    if (s.state === "running") watchGeneration(id);
+    else if (genWatching !== id) setBusy(false);   // stale busy UI from a previous visit
+  } catch {}
 }
 
 function friendlyDate(iso) {
@@ -1137,10 +1145,25 @@ function wireFrame() {
   });
   $("regen-btn").addEventListener("click", async () => {
     const id = currentId; setBusy(true);
-    try { await api(`/devices/${id}/regenerate`, { method: "POST" }); await pollGeneration(id); }
-    catch (e) { toast(e.message); }
-    setBusy(false);
+    try { await api(`/devices/${id}/regenerate`, { method: "POST" }); }
+    catch (e) {
+      // 409 = a generation is already running (e.g. started before a reload) —
+      // don't error out, just attach to it. Anything else is a real failure.
+      if (e.status !== 409) { toast(e.message); setBusy(false); return; }
+    }
+    watchGeneration(id);
   });
+}
+
+// Follow a running generation for a device — singleton per device, so a click
+// and a screen re-entry never spawn two poll loops for the same job.
+let genWatching = null;
+async function watchGeneration(id) {
+  if (genWatching === id) { setBusy(true); return; }   // already following — just re-show busy
+  genWatching = id;
+  setBusy(true);
+  try { await pollGeneration(id); }
+  finally { genWatching = null; setBusy(false); }
 }
 
 // --------------------------------------------------------------------------
