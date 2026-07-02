@@ -254,7 +254,6 @@ If the viewer can instantly read everything → it is too literal.
 ### Technical Constraints:
 
 - Resolution: {resolution}
-- Low detail
 - High contrast
 - Focus on **shape language, negative space, and tactile imperfection**
 

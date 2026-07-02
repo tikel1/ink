@@ -133,9 +133,13 @@ HARD REQUIREMENTS — your image prompt MUST:
 - State that the caption along the bottom edge is in LARGE BOLD CAPITAL LETTERS
   with wide letter-spacing, cap height at least 3% of the image height — never
   describe the caption as small, thin, or subtle in size.
+- The caption is a 3-7 word magazine-style HEADLINE naming the achievement or
+  moment itself, ending with the year. Month names and day numbers are FORBIDDEN
+  in the caption — the full date already appears inside the artwork. Example:
+  write "INDEPENDENCE VOTED, 1776", never "JULY 2 1776 INDEPENDENCE VOTED".
 - Keep: pure white background, deep matte black hand-cut paper shapes only, no
   other colors, rough torn hand-cut edges, subtle paper texture.
-
+{extra}
 Preserve the brief's artistic intent (abstract Matisse cut-paper, data dissolved
 into the shapes as negative space); make the language concrete rather than meta."""
 
@@ -170,11 +174,12 @@ async def _openai_image_direct(
 
 async def _openai_image_responses(
     client: AsyncOpenAI, settings: Settings, prompt: str, size: str,
-    must_include: list[str],
+    must_include: list[str], extra_rules: str = "",
 ) -> ImageResult:
     """HA-style path: a chat model rewrites the brief into concrete art direction
     (guarded), then calls the image tool. Raises on any miss — caller falls back."""
     must = "\n".join(f'  - "{s}"' for s in must_include) or "  (none)"
+    extra = (extra_rules.rstrip() + "\n") if extra_rules else ""
     tool = {
         "type": "image_generation",
         "size": size,
@@ -183,7 +188,7 @@ async def _openai_image_responses(
     }
     response = await client.responses.create(
         model=settings.openai_text_model,
-        instructions=_REWRITE_GUARD.format(must=must),
+        instructions=_REWRITE_GUARD.format(must=must, extra=extra),
         input=prompt,
         tools=[tool],
         tool_choice="required",
@@ -203,12 +208,13 @@ async def _openai_image_responses(
 
 async def generate_image(
     settings: Settings, prompt: str, orientation: str = "landscape",
-    must_include: list[str] | None = None,
+    must_include: list[str] | None = None, extra_rules: str = "",
 ) -> ImageResult:
     """Generate the artwork PNG. Prefers the responses flow (richer images from
     concretized prompts) when enabled; any error or a rewrite that loses a hard
     constraint falls back to the direct flow, so the worst case is exactly the
-    old behavior."""
+    old behavior. `extra_rules` are per-generation guard lines (e.g. how to treat
+    the weather icon / signature) — instructions for the rewriter, not validated."""
     if settings.image_provider != "openai":
         raise NotImplementedError(f"image provider {settings.image_provider}")
 
@@ -217,7 +223,7 @@ async def generate_image(
     if settings.openai_image_flow == "responses":
         try:
             return await _openai_image_responses(
-                client, settings, prompt, size, must_include or [])
+                client, settings, prompt, size, must_include or [], extra_rules)
         except Exception:  # noqa: BLE001 — the direct path is always the safety net
             logger.warning("responses image flow failed; falling back to direct",
                            exc_info=True)

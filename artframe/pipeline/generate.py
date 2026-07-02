@@ -96,14 +96,15 @@ async def generate_artwork(settings: Settings, config: DeviceConfig, on_phase=No
         if pick.caption and not pick.visual:
             pick = pick._replace(visual=await _derive_visual(settings, pick.caption))
     phase("compose")
-    image_prompt, must_include = _build_image_prompt(config, wx, today, pick)
+    image_prompt, must_include, extra_rules = _build_image_prompt(config, wx, today, pick)
 
     # The image render dominates latency; run narration alongside it so the
     # app-triggered path is as quick as the image call itself.
     phase("paint")
     image_result, (narration_en, narration_he) = await asyncio.gather(
         generation_client.generate_image(
-            settings, image_prompt, config.orientation, must_include=must_include),
+            settings, image_prompt, config.orientation,
+            must_include=must_include, extra_rules=extra_rules),
         _narrate(settings, config, pick.caption, pick.now_tie),
     )
     phase("finish")
@@ -346,10 +347,11 @@ async def _fact_check(settings: Settings, event: str, date_label: str) -> bool:
 
 def _build_image_prompt(
     config: DeviceConfig, wx, today: date_cls, pick: EventPick
-) -> tuple[str, list[str]]:
-    """Returns (prompt, must_include): the assembled brief plus the text fragments
-    that must survive VERBATIM through any prompt rewriting (exact date, exact
-    temperature incl. unit, signature) — the responses flow validates on these."""
+) -> tuple[str, list[str], str]:
+    """Returns (prompt, must_include, extra_rules): the assembled brief; the text
+    fragments that must survive VERBATIM through any prompt rewriting (exact date,
+    exact temperature incl. unit, signature — validated); and non-validated guard
+    lines telling the rewriter how to treat the weather icon and signature."""
     template = config.custom_prompt_override or prompts.ARTWORK_PROMPT
     symbol = "°F" if config.temp_unit == "f" else "°C"
     temp_str = f"{wx.temperature(config.temp_unit)}{symbol}"
@@ -375,13 +377,23 @@ def _build_image_prompt(
         must_include.append(date_str)
     if config.use_weather:
         must_include.append(temp_str)
-        # The condition word too — otherwise the rewrite keeps the temperature but
-        # quietly drops the weather icon (observed: no sun on a "sunny" day).
-        if wx.condition:
-            must_include.append(str(wx.condition))
     if config.signature:
         must_include.append(config.signature)
-    return template, must_include
+    # Rewriter guidance that must NOT be validated as verbatim artwork text.
+    # (Putting the condition in must_include made the model carve the literal
+    # words "mostly clear" into the art instead of drawing an icon.)
+    extra_rules: list[str] = []
+    if config.use_weather and wx.condition:
+        extra_rules.append(
+            f'- Weather: depict "{wx.condition}" as a naive, irregular hand-cut ICON '
+            "(sun / cloud / raindrops as fits) carved into the shapes — the weather "
+            "words themselves must NEVER appear as text in the artwork.")
+    if config.signature:
+        extra_rules.append(
+            f'- The signature "{config.signature}" is hand-written in a bold brush '
+            "style, clearly legible (roughly 2% of the image height), tucked near "
+            "an edge — never tiny, never faint.")
+    return template, must_include, "\n".join(extra_rules)
 
 
 def _connection_clauses(now_tie: str) -> tuple[str, str]:
