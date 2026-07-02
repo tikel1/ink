@@ -917,7 +917,12 @@ function fitGalleryHeight() {
   if (!g || !frameItems.length) return;
   const idx = Math.max(0, Math.min(frameItems.length - 1, Math.round(g.scrollLeft / (g.clientWidth || 1))));
   const card = g.querySelectorAll(".art-card")[idx];
-  if (card) g.style.height = Math.ceil(card.getBoundingClientRect().height) + "px";
+  if (!card) return;
+  // Include the gallery's own vertical padding (shadow breathing room) — height
+  // is border-box, so pinning to the bare card height would crop the shadow.
+  const cs = getComputedStyle(g);
+  const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+  g.style.height = Math.ceil(card.getBoundingClientRect().height + pad) + "px";
 }
 
 // --------------------------------------------------------------------------
