@@ -215,7 +215,8 @@ async def _curate_pool(
                          (c.get("now_tie") or "").strip())
 
     def _other(c: dict) -> dict:
-        return {"caption": c["event"].strip(), "visual": (c.get("iconic_visual") or "").strip()}
+        return {"caption": c["event"].strip(), "visual": (c.get("iconic_visual") or "").strip(),
+                "category": (c.get("_interest") or "").strip().lower()}
 
     if len(pool) == 1:
         return _pick(pool[0]), []

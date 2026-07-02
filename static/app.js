@@ -966,7 +966,14 @@ function setPlacard(m) {
 }
 
 // "Also on this day": the date-verified runner-up events the curator didn't pick.
-// Captions come from the model → render as text (never innerHTML).
+// Captions come from the model → render as text (never innerHTML). Each event
+// carries its interest category; predefined ones get their icon, anything custom
+// (or legacy rows without a category) gets a generic spark.
+const ALSO_ICONS = {
+  israel: "🇮🇱", science: "🔬", history: "🏛️", sports: "🏆",
+  astronomy: "🔭", art: "🎨", music: "🎵", cinema: "🎬",
+};
+const ALSO_ICON_GENERIC = "✨";
 function renderOtherEvents(events) {
   const sec = $("other-events"), ul = $("also-list");
   const items = (Array.isArray(events) ? events : [])
@@ -976,7 +983,14 @@ function renderOtherEvents(events) {
   for (const e of items) {
     const li = document.createElement("li");
     li.className = "also-item";
-    li.textContent = e.caption.trim();
+    const ico = document.createElement("span");
+    ico.className = "also-ico";
+    ico.setAttribute("aria-hidden", "true");
+    ico.textContent = ALSO_ICONS[(e.category || "").trim().toLowerCase()] || ALSO_ICON_GENERIC;
+    const text = document.createElement("span");
+    text.className = "also-text";
+    text.textContent = e.caption.trim();
+    li.append(ico, text);
     ul.appendChild(li);
   }
   sec.hidden = false;
