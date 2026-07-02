@@ -34,6 +34,26 @@ def archive_image_path(device_id: str, date: str):
     return get_settings().archive_dir / _safe(device_id) / f"{date}.png"
 
 
+def archive_original_path(device_id: str, date: str):
+    """Full-detail original (grayscale JPEG) for app zoom / admin preview."""
+    return get_settings().archive_dir / _safe(device_id) / f"{date}.orig.jpg"
+
+
+_KEEP_ORIGINALS = 120   # most-recent originals kept per device (~25 MB); panel PNGs stay forever
+
+
+def _prune_originals(device_id: str) -> None:
+    """Bound the Fly volume: originals are ~10x a panel PNG, so keep only the
+    newest _KEEP_ORIGINALS per device (zoom falls back to the panel for older)."""
+    folder = get_settings().archive_dir / _safe(device_id)
+    try:
+        originals = sorted(folder.glob("*.orig.jpg"))
+        for stale in originals[:-_KEEP_ORIGINALS]:
+            stale.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("could not prune originals for %s", device_id, exc_info=True)
+
+
 async def generate_for_device(device: Device, on_phase=None, trigger: str = "manual") -> bool:
     """Generate today's artwork for a paired device. Returns success.
 
@@ -65,6 +85,9 @@ async def generate_for_device(device: Device, on_phase=None, trigger: str = "man
         result = await generate_artwork(settings, device.to_pipeline_config(), on_phase=_phase)
         save_image(result.image_png, current_image_path(device.id))
         save_image(result.image_png, archive_image_path(device.id, result.date))
+        if result.original_jpg:
+            save_image(result.original_jpg, archive_original_path(device.id, result.date))
+            _prune_originals(device.id)
         artwork_repo.upsert(
             DailyArtwork(
                 device_id=device.id,

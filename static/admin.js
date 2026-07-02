@@ -311,8 +311,22 @@ let galleryItems = [];
 function openArt(i) {
   const it = galleryItems[i]; if (!it) return;
   $("art-title").textContent = `${it.device_name || frameCode(it.device_id)} · ${it.date}`;
-  $("art-img").closest(".modal-body").classList.toggle("portrait", it.orientation === "portrait");
-  $("art-img").src = BASE + it.image_url;
+  const img = $("art-img"), body = img.closest(".modal-body");
+  // Prefer the full-detail original (saved upright — no rotation); fall back to
+  // the rotated panel PNG when the original was pruned / predates the feature.
+  if (it.image_full_url) {
+    body.classList.remove("portrait");
+    img.onerror = () => {
+      img.onerror = null;
+      body.classList.toggle("portrait", it.orientation === "portrait");
+      img.src = BASE + it.image_url;
+    };
+    img.src = BASE + it.image_full_url;
+  } else {
+    img.onerror = null;
+    body.classList.toggle("portrait", it.orientation === "portrait");
+    img.src = BASE + it.image_url;
+  }
   const row = (label, val, pre) => !val ? "" :
     `<dt>${esc(label)}</dt><dd>${pre ? `<pre>${esc(val)}</pre>` : esc(val)}</dd>`;
   $("art-detail").innerHTML =

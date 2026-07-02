@@ -9,7 +9,7 @@ from collections import deque
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from . import artwork_repo, auth, crypto, firmware_repo, jobs, keys, repositories, storage
+from . import artwork_repo, auth, crypto, firmware_repo, generation, jobs, keys, repositories, storage
 from .config import get_settings
 from .generation import generate_for_device
 from .models import Account, Device
@@ -164,6 +164,11 @@ async def archive(device_id: str, limit: int = 30, account: Account = auth.Accou
     return {"items": [{
         "date": a.date,
         "image_url": storage.archive_url(device_id, a.date),
+        # Full-detail original for the zoom view; None for older artworks whose
+        # original was pruned (zoom then falls back to the panel image).
+        "image_full_url": (storage.archive_original_url(device_id, a.date)
+                           if generation.archive_original_path(device_id, a.date).exists()
+                           else None),
         "event_text_en": a.event_text_en,
         "event_text_he": a.event_text_he,
         "weather_summary": a.weather_summary,

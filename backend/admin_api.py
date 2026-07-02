@@ -227,6 +227,10 @@ async def gallery(limit: int = 120, start: str | None = None, end: str | None = 
             **(_interests(dev) if dev else {}),
             "date": a.date,
             "image_url": storage.archive_url(a.device_id, a.date),
+            # Full-detail original for the preview modal (None once pruned).
+            "image_full_url": (storage.archive_original_url(a.device_id, a.date)
+                               if generation.archive_original_path(a.device_id, a.date).exists()
+                               else None),
             "caption": a.event_caption or a.event_text_en,
             "event_caption": a.event_caption,
             "event_visual": a.event_visual,

@@ -53,6 +53,9 @@ class ArtworkResult:
     # Date-verified runner-up events considered by the curator but not chosen, so
     # the app can show "also on this day". Each: {"caption": str, "visual": str}.
     other_events: tuple = ()
+    # Full-detail original (grayscale JPEG of the raw provider image) for app
+    # zoom / admin preview — the frame itself only ever sees the panel PNG.
+    original_jpg: bytes = b""
 
 
 async def generate_artwork(settings: Settings, config: DeviceConfig, on_phase=None) -> ArtworkResult:
@@ -105,6 +108,7 @@ async def generate_artwork(settings: Settings, config: DeviceConfig, on_phase=No
     )
     phase("finish")
     dithered = imaging.to_eink_image(image_result.png, fmt="PNG", orientation=config.orientation)
+    original_jpg = imaging.to_display_original(image_result.png)
     # Keep the rewrite (what the image model actually saw) with the brief for
     # debugging — the admin `show` command surfaces it per creation.
     stored_prompt = image_prompt
@@ -122,6 +126,7 @@ async def generate_artwork(settings: Settings, config: DeviceConfig, on_phase=No
         event_caption=pick.caption,
         event_visual=pick.visual,
         other_events=tuple(other_events),
+        original_jpg=original_jpg,
     )
 
 

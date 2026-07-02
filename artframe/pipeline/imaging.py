@@ -43,6 +43,19 @@ def to_eink_bmp(source: bytes) -> bytes:
     return to_eink_image(source, fmt="BMP")
 
 
+def to_display_original(source: bytes) -> bytes:
+    """Compress the raw generated image for app zoom / admin preview.
+
+    The provider PNG is ~2 MB (RGB + paper-grain noise). The art is monochrome,
+    so grayscale JPEG keeps the full 1024x1536 detail at ~a tenth of the size —
+    small enough to archive daily on the Fly volume."""
+    with Image.open(io.BytesIO(source)) as raw:
+        gray = raw.convert("L")
+        out = io.BytesIO()
+        gray.save(out, format="JPEG", quality=90, optimize=True)
+        return out.getvalue()
+
+
 # Pixels at/above this 0-255 luminance become white, below become black. A hard
 # threshold keeps flat paper-cut art crisp and the background pure white — unlike
 # Floyd-Steinberg dithering, which speckles every off-white pixel into noise.

@@ -203,3 +203,15 @@ async def archive(device_id: str, date: str) -> Response:
     if path.exists():
         return FileResponse(path, media_type=PNG)
     return Response(status_code=404)
+
+
+@router.get("/archive/{device_id}/{date}.orig.jpg")
+async def archive_original(device_id: str, date: str) -> Response:
+    """Full-detail original for app zoom / admin preview (kept for the newest
+    ~120 generations per device; older fall back to the panel PNG)."""
+    if not _DATE_RE.match(date):
+        return Response(status_code=404)
+    path = generation.archive_original_path(device_id, date)
+    if path.exists():
+        return FileResponse(path, media_type="image/jpeg")
+    return Response(status_code=404)
