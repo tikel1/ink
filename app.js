@@ -783,7 +783,13 @@ async function loadExplain(id, card) {
   try {
     const { items } = await api(`/devices/${id}/archive?limit=1`);
     const m = items && items[0];
-    cap.textContent = (m && m.event_text_en) ? m.event_text_en : "Today's work hasn't been created yet.";
+    if (m && m.event_text_en) cap.textContent = m.event_text_en;
+    else if (m) {
+      // Artwork exists but was generated without an event (use_event off) —
+      // describe the piece, don't claim nothing was created.
+      cap.textContent = ["A pure composition", friendlyDate(m.date), m.weather_summary]
+        .filter(Boolean).join("  ·  ");
+    } else cap.textContent = "Today's work hasn't been created yet.";
     if (m && m.orientation) card.classList.toggle("is-portrait", m.orientation === "portrait");
   } catch { cap.textContent = "—"; }
 }
@@ -955,10 +961,14 @@ function wireLightbox() {
 
 function setPlacard(m) {
   const eyebrow = $("ev-meta"), en = $("ev-text"), sign = $("ev-sign");
-  if (!m) { eyebrow.textContent = "On view today"; en.textContent = "Today's work hasn't been created yet."; sign.hidden = true; return; }
+  if (!m) { eyebrow.textContent = "On view today"; en.hidden = false; en.textContent = "Today's work hasn't been created yet."; sign.hidden = true; renderOtherEvents([]); return; }
   eyebrow.textContent = [friendlyDate(m.date), m.weather_summary].filter(Boolean).join("  ·  ");
-  en.textContent = m.event_text_en || "—";
-  const sig = currentDevice && currentDevice.signature;
+  // Generated without an event (use_event off) → no description, no dangling
+  // signature; the placard is just the date/weather line.
+  const hasEvent = !!(m.event_text_en || "").trim();
+  en.hidden = !hasEvent;
+  en.textContent = hasEvent ? m.event_text_en : "";
+  const sig = hasEvent && currentDevice && currentDevice.signature;
   if (sig) { sign.textContent = `— ${sig}`; sign.hidden = false; } else sign.hidden = true;
   renderOtherEvents(m.other_events);
   setAlsoOpen(false);          // each item starts with its runner-ups collapsed
@@ -1025,7 +1035,8 @@ function updateReadMore() {
   const ev = $("ev-text"), btn = $("ev-more");
   if (!btn) return;
   setFrameExpanded(false);                       // collapse + measure the clamped text
-  btn.hidden = ev.scrollHeight <= ev.clientHeight + 2;
+  // No description at all (event-less artwork) → nothing to expand.
+  btn.hidden = ev.hidden || ev.scrollHeight <= ev.clientHeight + 2;
 }
 
 function renderDots(active, total) {
