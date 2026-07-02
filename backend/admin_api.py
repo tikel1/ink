@@ -245,12 +245,16 @@ async def generations(limit: int = 100, device: str | None = None,
                       end: str | None = None, account: str | None = None,
                       test: str | None = None) -> dict:
     tacc, tdev = _test_ids()
+    orient = {d.id: d.orientation for d in repositories.list_all_devices()}
     runs = monitoring_repo.list_generation_runs(
         limit=min(limit, 500), device_id=device, only_failed=failed,
         start=start, end=end, account_id=account, test=_test_flag(test),
         test_account_ids=tacc, test_device_ids=tdev)
-    for r in runs:  # badge each row so the console can flag test runs in "All" mode
+    for r in runs:  # badge + attach the attempt thumbnail so the log can show it
         r["test"] = r.get("device_id") in tdev or r.get("account_id") in tacc
+        img = r.get("image_file")
+        r["image_url"] = storage.attempt_url(r["device_id"], img) if img else None
+        r["orientation"] = orient.get(r["device_id"], "landscape")
     return {"runs": runs}
 
 
@@ -258,24 +262,51 @@ async def generations(limit: int = 100, device: str | None = None,
 async def gallery(limit: int = 120, start: str | None = None, end: str | None = None,
                   device: str | None = None, account: str | None = None,
                   test: str | None = None) -> dict:
-    all_devices = {d.id: d for d in repositories.list_all_devices()}
-    _, tdev = _test_ids()
-    # Which device ids pass the frame/account/test filter (gallery has no status concept).
-    allowed = {d.id for d in _apply_test(_filter_devices(list(all_devices.values()),
-                                         device_id=device, account_id=account),
-                                         _test_flag(test), tdev)}
+    devices = {d.id: d for d in repositories.list_all_devices()}
+    tacc, tdev = _test_ids()
+    # One item per successful attempt (not per day) — honors every global filter.
+    runs = monitoring_repo.list_generation_runs(
+        limit=min(limit, 500), device_id=device, account_id=account, start=start,
+        end=end, test=_test_flag(test), test_account_ids=tacc, test_device_ids=tdev)
     items = []
+    seen = set()   # (device_id, date) already covered by a per-attempt image
+    for r in runs:
+        img = r.get("image_file")
+        if not r["ok"] or not img:
+            continue
+        # Skip attempts whose panel was pruned — they'd render as a broken thumbnail.
+        if not generation.attempt_image_path(r["device_id"], img).exists():
+            continue
+        dev = devices.get(r["device_id"])
+        items.append({
+            "device_id": r["device_id"],
+            "test": r["device_id"] in tdev or r.get("account_id") in tacc,
+            "device_name": (dev.name if dev else "") or "",
+            **(_interests(dev) if dev else {}),
+            "date": r["date"],
+            "image_url": storage.attempt_url(r["device_id"], img),
+            "caption": r.get("event_caption"),
+            "event_caption": r.get("event_caption"),
+            "image_prompt": r.get("image_prompt"),
+            "orientation": dev.orientation if dev else "landscape",
+            "trigger": r["trigger"],
+            "cost_usd": r["cost_usd"],
+            "duration_ms": r["duration_ms"],
+            "created_at": r["created_at"],
+        })
+        seen.add((r["device_id"], r["date"]))
+    # Fallback: the daily archive covers days generated before per-attempt images
+    # existed (or whose attempt panels were pruned), so history isn't lost.
+    allowed = {d.id for d in _apply_test(_filter_devices(list(devices.values()),
+                          device_id=device, account_id=account), _test_flag(test), tdev)}
     for a in artwork_repo.list_all_ready(limit=min(limit, 500)):
-        if a.device_id not in allowed:
+        if a.device_id not in allowed or (a.device_id, a.date) in seen:
             continue
-        if start and a.date < start:
+        if (start and a.date < start) or (end and a.date > end):
             continue
-        if end and a.date > end:
-            continue
-        # Skip rows whose image file is gone — they'd render as a broken thumbnail.
         if not generation.archive_image_path(a.device_id, a.date).exists():
             continue
-        dev = all_devices.get(a.device_id)
+        dev = devices.get(a.device_id)
         items.append({
             "device_id": a.device_id,
             "test": a.device_id in tdev,
@@ -283,7 +314,6 @@ async def gallery(limit: int = 120, start: str | None = None, end: str | None = 
             **(_interests(dev) if dev else {}),
             "date": a.date,
             "image_url": storage.archive_url(a.device_id, a.date),
-            # Full-detail original for the preview modal (None once pruned).
             "image_full_url": (storage.archive_original_url(a.device_id, a.date)
                                if generation.archive_original_path(a.device_id, a.date).exists()
                                else None),
@@ -297,6 +327,8 @@ async def gallery(limit: int = 120, start: str | None = None, end: str | None = 
             "orientation": a.orientation,
             "created_at": a.created_at,
         })
+    # Newest first across both sources.
+    items.sort(key=lambda it: it.get("created_at") or "", reverse=True)
     return {"items": items}
 
 

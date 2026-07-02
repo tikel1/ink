@@ -205,6 +205,21 @@ async def archive(device_id: str, date: str) -> Response:
     return Response(status_code=404)
 
 
+_STAMP_RE = re.compile(r"^\d{8}T\d{6}_\d{6}\.png$")
+
+
+@router.get("/attempt/{device_id}/{stamp}")
+async def attempt(device_id: str, stamp: str) -> Response:
+    """One generation attempt's archived panel (admin gallery/log thumbnails).
+    Strict stamp shape so a crafted value can't escape the attempts folder."""
+    if not _STAMP_RE.match(stamp):
+        return Response(status_code=404)
+    path = generation.attempt_image_path(device_id, stamp)
+    if path.exists():
+        return FileResponse(path, media_type=PNG)
+    return Response(status_code=404)
+
+
 @router.get("/archive/{device_id}/{date}.orig.jpg")
 async def archive_original(device_id: str, date: str) -> Response:
     """Full-detail original for app zoom / admin preview (kept for the newest

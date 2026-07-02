@@ -80,6 +80,9 @@ CREATE TABLE IF NOT EXISTS generation_runs (
     provider     TEXT NOT NULL DEFAULT '',
     phase        TEXT NOT NULL DEFAULT '',       -- last phase reached (failure locus)
     error        TEXT NOT NULL DEFAULT '',
+    image_file    TEXT,                          -- this attempt's archived image (stamp.png), null on failure
+    event_caption TEXT,                          -- the event this attempt depicted
+    image_prompt  TEXT,                          -- the prompt this attempt used
     created_at   TEXT NOT NULL
 );
 
@@ -146,6 +149,13 @@ _ACCOUNT_MIGRATIONS = {
     "is_test": "INTEGER NOT NULL DEFAULT 0",   # dev/test account flag
 }
 
+# Columns added to the generation_runs table after the first release.
+_GENERATION_MIGRATIONS = {
+    "image_file": "TEXT",      # per-attempt archived image (stamp.png)
+    "event_caption": "TEXT",   # the event this attempt depicted
+    "image_prompt": "TEXT",    # the prompt this attempt used
+}
+
 # Columns added to the daily_artwork table after the first release.
 _ARTWORK_MIGRATIONS = {
     "orientation": "TEXT",
@@ -168,6 +178,7 @@ def init_db() -> None:
         conn.executescript(SCHEMA)
         _migrate(conn, "devices", _MIGRATIONS)
         _migrate(conn, "accounts", _ACCOUNT_MIGRATIONS)
+        _migrate(conn, "generation_runs", _GENERATION_MIGRATIONS)
         _migrate(conn, "daily_artwork", _ARTWORK_MIGRATIONS)
         # Indexes for the hot lookups (token on every authed call, pairing code on
         # pair, account_id on every device list). All non-unique: enforcing UNIQUE

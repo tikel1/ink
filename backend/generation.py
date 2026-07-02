@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from datetime import datetime, timezone
 
 from artframe.pipeline import metrics as gen_metrics
 from artframe.pipeline.generate import generate_artwork
@@ -39,7 +40,30 @@ def archive_original_path(device_id: str, date: str):
     return get_settings().archive_dir / _safe(device_id) / f"{date}.orig.jpg"
 
 
+def attempts_dir(device_id: str):
+    """Per-device folder holding one panel PNG per generation attempt (admin
+    gallery/log). Separate from the daily {date}.png the frame + app rely on."""
+    return get_settings().archive_dir / _safe(device_id) / "attempts"
+
+
+def attempt_image_path(device_id: str, stamp: str):
+    return attempts_dir(device_id) / stamp
+
+
 _KEEP_ORIGINALS = 120   # most-recent originals kept per device (~25 MB); panel PNGs stay forever
+_KEEP_ATTEMPTS = 80     # most-recent attempt panels kept per device (small PNGs)
+
+
+def _prune_attempts(device_id: str) -> None:
+    """Bound disk: keep only the newest _KEEP_ATTEMPTS attempt panels per device.
+    Older rows still show in the log without a thumbnail (their file is gone)."""
+    folder = attempts_dir(device_id)
+    try:
+        panels = sorted(folder.glob("*.png"))
+        for stale in panels[:-_KEEP_ATTEMPTS]:
+            stale.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("could not prune attempts for %s", device_id, exc_info=True)
 
 
 def _prune_originals(device_id: str) -> None:
@@ -79,12 +103,19 @@ async def generate_for_device(device: Device, on_phase=None, trigger: str = "man
 
     started = time.monotonic()
     ok, error, date_str, quality = False, "", "", "medium"
+    attempt = {"file": None, "caption": None, "prompt": None}
     try:
         settings = keys.resolve_settings(account)
         quality = getattr(settings, "openai_image_quality", "medium")
         result = await generate_artwork(settings, device.to_pipeline_config(), on_phase=_phase)
         save_image(result.image_png, current_image_path(device.id))
         save_image(result.image_png, archive_image_path(device.id, result.date))
+        # Keep this attempt's own panel (the daily {date}.png is overwritten by the
+        # next regeneration; this one is immutable, so the admin sees every attempt).
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%f") + ".png"
+        save_image(result.image_png, attempt_image_path(device.id, stamp))
+        _prune_attempts(device.id)
+        attempt = {"file": stamp, "caption": result.event_caption, "prompt": result.image_prompt}
         if result.original_jpg:
             save_image(result.original_jpg, archive_original_path(device.id, result.date))
             _prune_originals(device.id)
@@ -123,11 +154,11 @@ async def generate_for_device(device: Device, on_phase=None, trigger: str = "man
     finally:
         _record_run(device, trigger, ok, error, date_str, quality,
                     "" if ok else last_phase["name"],
-                    int((time.monotonic() - started) * 1000), metric)
+                    int((time.monotonic() - started) * 1000), metric, attempt)
     return ok
 
 
-def _record_run(device, trigger, ok, error, date_str, quality, phase, duration_ms, metric) -> None:
+def _record_run(device, trigger, ok, error, date_str, quality, phase, duration_ms, metric, attempt) -> None:
     m = metric or gen_metrics.GenMetrics()
     cost = costs.estimate(quality, m.image_calls, m.text_calls, m.search_calls, m.text_tokens)
     try:
@@ -137,6 +168,8 @@ def _record_run(device, trigger, ok, error, date_str, quality, phase, duration_m
             retries=m.retries, image_calls=m.image_calls, text_calls=m.text_calls,
             search_calls=m.search_calls, text_tokens=m.text_tokens, cost_usd=cost,
             provider=m.provider_str(), phase=phase, error=error,
+            image_file=attempt.get("file"), event_caption=attempt.get("caption"),
+            image_prompt=attempt.get("prompt"),
         )
     except Exception:  # noqa: BLE001 — monitoring must never break generation.
         logger.exception("failed to record generation run for %s", device.id)

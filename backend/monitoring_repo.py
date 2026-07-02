@@ -24,7 +24,8 @@ def _now() -> str:
 def record_generation_run(**f: object) -> None:
     cols = ("device_id", "account_id", "date", "trigger", "ok", "duration_ms",
             "retries", "image_calls", "text_calls", "search_calls", "text_tokens",
-            "cost_usd", "provider", "phase", "error")
+            "cost_usd", "provider", "phase", "error",
+            "image_file", "event_caption", "image_prompt")
     values = [f.get(c) for c in cols]
     placeholders = ", ".join("?" for _ in cols) + ", ?"
     with get_connection() as conn:

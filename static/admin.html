@@ -207,6 +207,11 @@
     .modal-nav { flex-basis: 100%; display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
     .shot { cursor: pointer; }
     .shot:hover { border-color: var(--ink); }
+    /* Generation-log attempt thumbnail */
+    .thumb { width: 56px; height: 34px; object-fit: cover; border-radius: 5px; border: 1px solid var(--line);
+      background: #fff; cursor: pointer; display: block; vertical-align: middle; }
+    .thumb:hover { border-color: var(--ink); }
+    .thumb.portrait { transform: rotate(90deg); width: 34px; height: 56px; margin: -11px 11px; }
 
     /* Image preview lightbox */
     .modal-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center;

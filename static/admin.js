@@ -325,9 +325,22 @@ async function onFrameModalAction(e) {
 
 // ── gallery preview lightbox ──────────────────────────────────────────────
 let galleryItems = [];
-function openArt(i) {
-  const it = galleryItems[i]; if (!it) return;
-  $("art-title").textContent = `${it.device_name || frameCode(it.device_id)} · ${it.date}`;
+let genRuns = [];   // current generation-log rows (for thumbnail click-through)
+const clock = (iso) => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""; };
+// Adapt a generation-log row into the shape showArt() expects.
+const runItem = (r) => ({
+  device_id: r.device_id, date: r.date, created_at: r.created_at,
+  orientation: r.orientation, image_url: r.image_url,
+  event_caption: r.event_caption, image_prompt: r.image_prompt,
+  trigger: r.trigger, cost_usd: r.cost_usd, duration_ms: r.duration_ms,
+});
+function openArt(i) { showArt(galleryItems[i]); }
+// Render the preview lightbox from any item-like object (gallery shot or a
+// generation-log row), including per-attempt stats when present.
+function showArt(it) {
+  if (!it) return;
+  const t = clock(it.created_at);
+  $("art-title").textContent = `${it.device_name || frameCode(it.device_id)} · ${it.date || ""}${t ? " · " + t : ""}`;
   const img = $("art-img"), body = img.closest(".modal-body");
   // Prefer the full-detail original (saved upright — no rotation); fall back to
   // the rotated panel PNG when the original was pruned / predates the feature.
@@ -346,6 +359,9 @@ function openArt(i) {
   }
   const row = (label, val, pre) => !val ? "" :
     `<dt>${esc(label)}</dt><dd>${pre ? `<pre>${esc(val)}</pre>` : esc(val)}</dd>`;
+  const attempt = [it.trigger, it.cost_usd != null ? usd(it.cost_usd) : null,
+                   it.duration_ms ? (it.duration_ms / 1000).toFixed(1) + "s" : null]
+                   .filter(Boolean).join(" · ");
   $("art-detail").innerHTML =
     row("Event", it.event_caption) +
     row("Final description", it.event_text_en) +
@@ -353,6 +369,7 @@ function openArt(i) {
     row("Iconic visual", it.event_visual) +
     row("Weather", it.weather_summary) +
     row("Orientation", it.orientation) +
+    row("Attempt", attempt) +
     (interestChips(it) ? `<dt>Interests</dt><dd>${interestChips(it)}</dd>` : "") +
     row("Image prompt", it.image_prompt, true);
   $("art-modal").hidden = false;
@@ -485,7 +502,9 @@ function renderFrames(d) {
 async function loadGenerations() {
   $("tab-generations").innerHTML = `<p class="loading">Loading…</p>`;
   const d = await api(withF("/generations?limit=300"));
-  const rows = d.runs.map((r) => `<tr data-ts="${tsOf(r.created_at)}" data-trigger="${esc(r.trigger)}" data-result="${r.ok ? "ok" : "fail"}" data-search="${esc([r.device_id, r.trigger, r.ok ? "ok" : "fail failed", r.provider, r.phase, r.error].join(" ").toLowerCase())}">
+  genRuns = d.runs;
+  const rows = d.runs.map((r, i) => `<tr data-ts="${tsOf(r.created_at)}" data-trigger="${esc(r.trigger)}" data-result="${r.ok ? "ok" : "fail"}" data-search="${esc([r.device_id, r.trigger, r.ok ? "ok" : "fail failed", r.provider, r.phase, r.error].join(" ").toLowerCase())}">
+    <td>${r.image_url ? `<img class="thumb${r.orientation === "portrait" ? " portrait" : ""}" data-i="${i}" loading="lazy" src="${esc(BASE + r.image_url)}" alt="attempt" />` : ""}</td>
     <td>${relTime(r.created_at)}</td>
     <td class="mono">${esc(frameCode(r.device_id))}${testPill(r.test)}</td>
     <td><span class="pill ${r.trigger}">${esc(r.trigger)}</span></td>
@@ -501,9 +520,11 @@ async function loadGenerations() {
       ${selectFacet("trigger", [["", "Any trigger"], ["auto", "Auto"], ["manual", "Manual"]])}
       ${selectFacet("result", [["", "Any result"], ["ok", "OK"], ["fail", "Failed"]])} ${filterBox("Filter runs…")}</h3>
     <div class="tbl-wrap"><table><thead><tr>
-      <th>When</th><th>Device</th><th>Trigger</th><th>Result</th><th>Duration</th><th>Retries</th>
+      <th></th><th>When</th><th>Device</th><th>Trigger</th><th>Result</th><th>Duration</th><th>Retries</th>
       <th>Cost</th><th>Calls</th><th>Provider</th><th>Error</th>
-    </tr></thead><tbody>${rows || `<tr><td colspan="10" class="empty">No generation runs recorded yet.</td></tr>`}</tbody></table></div></div>`;
+    </tr></thead><tbody>${rows || `<tr><td colspan="11" class="empty">No generation runs recorded yet.</td></tr>`}</tbody></table></div></div>`;
+  $("tab-generations").querySelectorAll(".thumb").forEach((el) =>
+    el.addEventListener("click", () => showArt(runItem(genRuns[Number(el.dataset.i)]))));
   setupFilters("tab-generations");
 }
 
@@ -515,7 +536,7 @@ async function loadGallery() {
     const search = [it.device_name, it.device_id, it.date, it.caption, it.event_visual, it.image_prompt].join(" ").toLowerCase();
     return `<div class="shot ${it.orientation === "portrait" ? "portrait" : "landscape"}" data-i="${i}" data-ts="${tsOf(it.created_at || it.date)}" data-search="${esc(search)}">
       <img loading="lazy" src="${esc(BASE + it.image_url)}" alt="${esc(it.caption || "")}" />
-      <div class="cap"><div class="d">${esc(it.device_name || frameCode(it.device_id))} · ${esc(it.date)}${testPill(it.test)}</div>
+      <div class="cap"><div class="d">${esc(it.device_name || frameCode(it.device_id))} · ${esc(it.date)}${clock(it.created_at) ? " · " + esc(clock(it.created_at)) : ""}${testPill(it.test)}</div>
         <div class="c">${esc(it.caption || "—")}</div></div></div>`;
   }).join("");
   $("tab-gallery").innerHTML = `<div class="card"><h3 class="hrow">Gallery <span class="filter-count-h">(${d.items.length})</span> ${filterBox("Filter by device, event, prompt…")}</h3>
