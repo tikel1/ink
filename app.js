@@ -218,6 +218,7 @@ async function showHome(preferId) {
 // Build one card per frame into the carousel; focus the preferred (or first) one.
 function buildHomeCards(preferId) {
   const track = $("home-carousel");
+  if (track._resetReorder) track._resetReorder();   // never rebuild under a live drag
   track.innerHTML = "";
   const tpl = $("home-card-tpl");
   for (const d of devices) {
@@ -231,7 +232,10 @@ function buildHomeCards(preferId) {
 
   const multi = devices.length >= 2;
   $("home-dots").hidden = !multi;
-  $("home-swipe-hint").hidden = !multi;
+  // Teach the gesture once: the hint shows until the user has actually swiped,
+  // then fades for good (persisted) — a permanent caption is noise.
+  const hintSeen = localStorage.getItem("ink.swipeHintSeen");
+  $("home-swipe-hint").hidden = !multi || !!hintSeen;
 
   let idx = devices.findIndex((d) => d.id === preferId);
   if (idx < 0) idx = 0;
@@ -282,7 +286,15 @@ function onHomeScroll() {
   homeScrollRAF = requestAnimationFrame(() => {
     const i = activeHomeIndex();
     const d = devices[i];
-    if (d && d.id !== currentId) { currentId = d.id; currentDevice = d; }
+    if (d && d.id !== currentId) {
+      currentId = d.id; currentDevice = d;
+      // First real swipe → the user knows the gesture; retire the hint.
+      const hint = $("home-swipe-hint");
+      if (hint && !hint.hidden && !hint.classList.contains("seen")) {
+        hint.classList.add("seen");
+        localStorage.setItem("ink.swipeHintSeen", "1");
+      }
+    }
     renderHomeDots(i);
   });
 }
@@ -297,8 +309,24 @@ function attachReorder(track) {
   if (track._reorderWired) return;
   track._reorderWired = true;
   let timer = null, dragging = false, card = null, idx = 0, startX = 0, startY = 0;
+  let suppressClickUntil = 0;   // swallow the synthetic click that follows a drag
   const cardW = () => track.clientWidth || 1;
   const cancelHold = () => { if (timer) { clearTimeout(timer); timer = null; } };
+
+  // touchend's preventDefault can't reliably stop the browser's synthetic click
+  // (the touchstart is passive), so swallow clicks at capture for a beat after a
+  // drop — otherwise every completed drag "clicks" the card open.
+  track.addEventListener("click", (e) => {
+    if (Date.now() < suppressClickUntil) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+
+  // Let buildHomeCards abort a gesture before it replaces the cards — a drag
+  // holding a detached node would corrupt the swap indexes.
+  track._resetReorder = () => {
+    cancelHold(); dragging = false;
+    if (card) card.classList.remove("dragging");
+    card = null; track.classList.remove("reordering");
+  };
 
   const swap = (a, b) => {
     const t = devices[a]; devices[a] = devices[b]; devices[b] = t;
@@ -316,7 +344,7 @@ function attachReorder(track) {
   };
 
   track.addEventListener("touchstart", (e) => {
-    if (e.touches.length !== 1 || devices.length < 2) { card = null; return; }
+    if (dragging || e.touches.length !== 1 || devices.length < 2) { if (!dragging) card = null; return; }
     card = e.target.closest(".home-card");
     if (!card) return;
     idx = Array.prototype.indexOf.call(track.children, card);
@@ -346,7 +374,8 @@ function attachReorder(track) {
   const end = (e) => {
     cancelHold();
     if (!dragging || !card) { card = null; return; }
-    if (e && e.cancelable) e.preventDefault();   // suppress the click-through (don't open the frame)
+    if (e && e.cancelable) e.preventDefault();
+    suppressClickUntil = Date.now() + 400;   // the capture-phase listener eats the click-through
     const dropped = card, dropIdx = idx;
     dropped.style.transition = "transform .18s var(--ease)";
     dropped.style.transform = "";
@@ -374,19 +403,27 @@ async function refreshHomeArt() {
   const url = artworkUrl(currentId);
   const probe = new Image();
   probe.onload = () => { const el = card.querySelector(".home-art-img"); if (el) { el.src = url; el.classList.add("loaded"); } };
+  probe.onerror = () => { /* keep the last good image */ };
   probe.src = url;
   loadExplain(currentId, card);
-  // Also refresh the frame's STATUS so the Asleep moon updates on its own (no
-  // manual reload) — picks up the backend 'sleeping' flag, falling back to the
-  // last-seen timeout if the sleep ping didn't land.
+  // Refresh EVERY card's status (moon, name) — not just the active one — so
+  // swiping to a neighbor never shows stale state. Merge the fetch into the
+  // existing devices[] BY ID (never replace the array wholesale: a drag-reorder
+  // may have changed the local order, and the DOM cards are built from it).
   try {
     const r = await api("/devices");
-    const d = r && r.devices && r.devices.find((x) => x.id === currentId);
-    if (d) {
-      currentDevice = d;
-      const asleep = frameState(d).cls === "s-sleep";
-      const m = card.querySelector(".home-sleep-moon");
-      if (m) m.hidden = !asleep;
+    const track = $("home-carousel");
+    for (const d of (r && r.devices) || []) {
+      const i = devices.findIndex((x) => x.id === d.id);
+      if (i >= 0) devices[i] = d;
+      if (d.id === currentId) currentDevice = d;
+      const cardEl = track && track.querySelector(`.home-card[data-id="${d.id}"]`);
+      if (cardEl) {
+        const m = cardEl.querySelector(".home-sleep-moon");
+        if (m) m.hidden = frameState(d).cls !== "s-sleep";
+        const nm = cardEl.querySelector(".home-frame-name");
+        if (nm) nm.textContent = displayName(d);
+      }
     }
   } catch { /* keep the last-known status */ }
 }
@@ -428,6 +465,13 @@ function renderFrameStatus(d) {
 // "updating now" hint while it's catching up. Uses last_auto_gen (the date the
 // daily update last ran) + the wake time + reachability.
 function two(n) { return String(n).padStart(2, "0"); }
+// "Now" as a Date carrying the FRAME's local wall-clock — wake_hour and
+// last_auto_gen live in the device's timezone, so comparing them against the
+// phone's clock is wrong whenever the two differ (banner a day/hours off).
+function deviceNow(tz) {
+  try { return new Date(new Date().toLocaleString("en-US", { timeZone: tz || "UTC" })); }
+  catch { return new Date(); }   // unknown tz string → fall back to phone time
+}
 function scheduledToday(d, now) {
   if ((d.schedule || "daily") === "daily") return true;
   const days = (d.schedule_days || "").toLowerCase();
@@ -438,7 +482,7 @@ function scheduledToday(d, now) {
 function renderMorningStatus(d, st) {
   const el = $("frame-alert");
   if (!el) return;
-  const now = new Date();
+  const now = deviceNow(d.tz);
   const wakeH = d.wake_hour ?? 6, wakeM = d.wake_minute ?? 0;
   const wake = new Date(now); wake.setHours(wakeH, wakeM, 0, 0);
   const todayISO = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}`;
@@ -1625,11 +1669,21 @@ async function syncByCode(code) {
 // Skipped if the user has pinned a server in Advanced.
 // On focus/visibility: refresh home art, then re-pull devices to resolve an
 // in-flight OTA and re-evaluate the update toast (dismiss if no longer needed).
+let _lastFocusRun = 0;
 async function onAppFocus() {
+  // visibilitychange + focus both fire when a tab returns — run once, not twice.
+  const now = Date.now();
+  if (now - _lastFocusRun < 1500) return;
+  _lastFocusRun = now;
   refreshHomeArt();
   try {
     const r = await api("/devices");
-    devices = r.devices || r;
+    // Merge by id — replacing the array wholesale would discard a drag-reorder's
+    // local order and desync devices[] from the DOM cards built from it.
+    for (const d of r.devices || r) {
+      const i = devices.findIndex((x) => x.id === d.id);
+      if (i >= 0) devices[i] = d; else devices.push(d);
+    }
     if (otaWatch) {
       const d = devices.find((x) => x.id === otaWatch.deviceId);
       if (d && resolveOtaFrom(d)) return;   // finishOta already refreshes the toast

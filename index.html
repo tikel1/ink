@@ -97,7 +97,7 @@
       <div id="home-frame" class="home-frame" hidden>
         <div class="home-carousel" id="home-carousel"></div>
         <div class="dots" id="home-dots" hidden></div>
-        <p class="swipe-hint" id="home-swipe-hint" hidden>‹ swipe between frames · hold to reorder ›</p>
+        <p class="swipe-hint" id="home-swipe-hint" hidden>Swipe to switch · hold to reorder</p>
       </div>
       <!-- One card per frame, cloned into #home-carousel (classes, not ids, so
            multiple cards can coexist). -->
@@ -455,7 +455,9 @@
     </div>
   </div>
 
-  <div id="toast" class="toast" hidden></div>
+  <!-- Visibility is opacity-driven (.show); no [hidden] — the global
+       [hidden]{display:none!important} would defeat the fade transition. -->
+  <div id="toast" class="toast" aria-live="polite"></div>
 
   <!-- Firmware-update toast: pinned to the top, black on white text. Re-checked
        on every app launch; "Close" dismisses it for this session only. -->
