@@ -130,26 +130,38 @@ HARD REQUIREMENTS — your image prompt MUST:
 - Contain each of these text fragments VERBATIM, exact characters, never reworded,
   never unit-converted:
 {must}
-- State that the caption along the bottom edge is in LARGE BOLD CAPITAL LETTERS
-  with wide letter-spacing, cap height at least 3% of the image height — never
-  describe the caption as small, thin, or subtle in size.
-- The caption is a 3-7 word magazine-style HEADLINE naming the achievement or
-  moment itself, ending with the year. Month names and day numbers are FORBIDDEN
-  in the caption — the full date already appears inside the artwork. Example:
-  write "INDEPENDENCE VOTED, 1776", never "JULY 2 1776 INDEPENDENCE VOTED".
 - Keep: pure white background, deep matte black hand-cut paper shapes only, no
   other colors, rough torn hand-cut edges, subtle paper texture.
 {extra}
 Preserve the brief's artistic intent (abstract Matisse cut-paper, data dissolved
-into the shapes as negative space); make the language concrete rather than meta."""
+into the shapes as negative space); make the language concrete rather than meta.
+Never add subjects, events, captions, or symbols the brief does not ask for."""
 
 
-def _revision_ok(revised: str, must_include: list[str]) -> bool:
-    """True if the rewrite kept every hard constraint (else we fall back)."""
+# Caption rules — only when the brief actually has an event. Baking these into
+# the static guard forced a caption on event-less artworks, and the rewriter
+# INVENTED a historical event from the date to satisfy it.
+CAPTION_RULES = """- The caption along the bottom edge is in LARGE BOLD CAPITAL
+  LETTERS with wide letter-spacing, cap height at least 3% of the image height —
+  never small, thin, or subtle in size.
+- The caption is a 3-7 word magazine-style HEADLINE naming the achievement or
+  moment itself, ending with the year. Month names and day numbers are FORBIDDEN
+  in the caption — the full date already appears inside the artwork. Example:
+  write "INDEPENDENCE VOTED, 1776", never "JULY 2 1776 INDEPENDENCE VOTED"."""
+
+NO_CAPTION_RULES = """- There is NO event today: the artwork must contain NO
+  caption, NO headline, and NO event symbol. Do NOT invent a historical event
+  from the date. The only text in the artwork is the fragments listed above; the
+  composition is purely abstract shapes plus the dissolved date/weather data."""
+
+
+def _revision_ok(revised: str, must_include: list[str], expect_caption: bool) -> bool:
+    """True if the rewrite kept every hard constraint (else we fall back). The
+    bold-caption check only applies when the artwork should HAVE a caption —
+    an event-less brief legitimately has none."""
     if not revised:
         return False
-    low = revised.lower()
-    if "bold" not in low:
+    if expect_caption and "bold" not in revised.lower():
         return False
     return all(fragment in revised for fragment in must_include)
 
@@ -174,7 +186,7 @@ async def _openai_image_direct(
 
 async def _openai_image_responses(
     client: AsyncOpenAI, settings: Settings, prompt: str, size: str,
-    must_include: list[str], extra_rules: str = "",
+    must_include: list[str], extra_rules: str = "", expect_caption: bool = True,
 ) -> ImageResult:
     """HA-style path: a chat model rewrites the brief into concrete art direction
     (guarded), then calls the image tool. Raises on any miss — caller falls back."""
@@ -200,7 +212,7 @@ async def _openai_image_responses(
             revised = getattr(item, "revised_prompt", "") or ""
     if not image_b64:
         raise GenerationError("responses flow returned no image")
-    if not _revision_ok(revised, must_include):
+    if not _revision_ok(revised, must_include, expect_caption):
         raise GenerationError(f"rewrite dropped a hard constraint: {revised[:160]!r}")
     metrics.record(metrics.IMAGE, "openai")
     return ImageResult(base64.b64decode(image_b64), revised)
@@ -209,12 +221,14 @@ async def _openai_image_responses(
 async def generate_image(
     settings: Settings, prompt: str, orientation: str = "landscape",
     must_include: list[str] | None = None, extra_rules: str = "",
+    expect_caption: bool = True,
 ) -> ImageResult:
     """Generate the artwork PNG. Prefers the responses flow (richer images from
     concretized prompts) when enabled; any error or a rewrite that loses a hard
     constraint falls back to the direct flow, so the worst case is exactly the
     old behavior. `extra_rules` are per-generation guard lines (e.g. how to treat
-    the weather icon / signature) — instructions for the rewriter, not validated."""
+    the weather icon / signature) — instructions for the rewriter, not validated.
+    `expect_caption` is False for event-less artworks (no caption to validate)."""
     if settings.image_provider != "openai":
         raise NotImplementedError(f"image provider {settings.image_provider}")
 
@@ -223,7 +237,8 @@ async def generate_image(
     if settings.openai_image_flow == "responses":
         try:
             return await _openai_image_responses(
-                client, settings, prompt, size, must_include or [], extra_rules)
+                client, settings, prompt, size, must_include or [], extra_rules,
+                expect_caption)
         except Exception:  # noqa: BLE001 — the direct path is always the safety net
             logger.warning("responses image flow failed; falling back to direct",
                            exc_info=True)

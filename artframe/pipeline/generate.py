@@ -104,7 +104,8 @@ async def generate_artwork(settings: Settings, config: DeviceConfig, on_phase=No
     image_result, (narration_en, narration_he) = await asyncio.gather(
         generation_client.generate_image(
             settings, image_prompt, config.orientation,
-            must_include=must_include, extra_rules=extra_rules),
+            must_include=must_include, extra_rules=extra_rules,
+            expect_caption=bool(pick.caption)),
         _narrate(settings, config, pick.caption, pick.now_tie),
     )
     phase("finish")
@@ -394,6 +395,13 @@ def _build_image_prompt(
             f'- The signature "{config.signature}" is hand-written in a bold brush '
             "style, clearly legible (roughly 2% of the image height), tucked near "
             "an edge — never tiny, never faint.")
+    # Caption rules are conditional on an event actually existing — an
+    # unconditional caption demand made the rewriter INVENT an event from the
+    # date on event-less artworks ("REVOLUTION DECLARED, 1776").
+    if pick.caption:
+        extra_rules.append(generation_client.CAPTION_RULES)
+    else:
+        extra_rules.append(generation_client.NO_CAPTION_RULES)
     return template, must_include, "\n".join(extra_rules)
 
 
