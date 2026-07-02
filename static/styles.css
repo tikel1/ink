@@ -645,11 +645,19 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
      (40px) and the card's shadow padding (32px), with headroom, so the whole
      wooden frame AND its shadow fit unclipped. Height capped so frame + placard
      + button fit the locked home viewport. */
-  width: auto; height: auto; max-width: min(440px, calc(100vw - 150px)); max-height: 40dvh;
+  width: auto; height: auto; max-width: min(440px, calc(100vw - 150px));
+  /* Height: 40dvh on tall (phone) viewports, but on short desktop windows cap by
+     what's actually left after the header, dots, placard + button (~430px), so
+     the locked one-viewport home never clips the frame. Floor at 180px. */
+  max-height: clamp(180px, calc(100dvh - 430px), 40dvh);
 }
 /* Portrait: served PNG is the panel buffer (landscape px); show it upright by
    swapping dims via container-query units + rotating 90° clockwise. */
-.home-card.is-portrait .gframe-mat { container-type: size; aspect-ratio: 480 / 800; height: 52dvh; }
+/* Height: 52dvh on tall (phone) viewports; on short desktop windows cap by the
+   space left after header/dots/placard/button + wood chrome (~390px), floor 240px,
+   so the frame never gets cut off by the locked home. */
+.home-card.is-portrait .gframe-mat { container-type: size; aspect-ratio: 480 / 800;
+                                     height: clamp(240px, calc(100dvh - 390px), 52dvh); }
 /* Portrait: sit the frame higher (smaller top margin) so the caption below has
    more breathing room. */
 .home-card.is-portrait .gallery-frame { margin-top: clamp(4px, 1.5vh, 14px); }
