@@ -912,10 +912,23 @@ function fitGalleryHeight() {
 function openLightbox(item) {
   if (!item) return;
   const lb = $("lightbox"), img = $("lb-img");
-  lb.classList.toggle("is-portrait", isPortraitItem(item));
   img.classList.remove("loaded");
   img.onload = () => img.classList.add("loaded");
-  img.src = serverBase() + item.image_url + `?t=${Date.now()}`;
+  // Prefer the full-detail original (1024x1536 grayscale, saved upright — no
+  // rotation needed). Fall back to the rotated panel PNG when the original was
+  // pruned or predates this feature.
+  const showPanel = () => {
+    img.onerror = null;
+    lb.classList.toggle("is-portrait", isPortraitItem(item));
+    img.src = serverBase() + item.image_url + `?t=${Date.now()}`;
+  };
+  if (item.image_full_url) {
+    lb.classList.remove("is-portrait");   // original is already upright
+    img.onerror = showPanel;
+    img.src = serverBase() + item.image_full_url + `?t=${Date.now()}`;
+  } else {
+    showPanel();
+  }
   lb.hidden = false;
   // Push a history entry so the back button / Android back closes the lightbox.
   history.pushState({ screen: currentScreen, lightbox: 1 }, "");
