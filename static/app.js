@@ -38,7 +38,7 @@ let resolvedTz = null;     // tz from the latest geocode (used when auto-tz is o
 // --------------------------------------------------------------------------
 // Navigation
 // --------------------------------------------------------------------------
-const SCREENS = ["welcome", "home", "connect", "frame", "artwork", "settings", "account"];
+const SCREENS = ["welcome", "setup", "home", "connect", "frame", "artwork", "settings", "account"];
 let currentScreen = null;
 
 // Toggle which screen is visible (no history side effects).
@@ -181,26 +181,29 @@ function loadArtwork(imgEl, skelEl, id, onMissing) {
 // Welcome
 // --------------------------------------------------------------------------
 function wireWelcome() {
-  $("server-url").value = serverBase();
-  $("server-save").addEventListener("click", () => { setServer($("server-url").value); localStorage.setItem(SERVER_MANUAL_KEY, "1"); toast("Saved — now tap Get started"); });
+  $("server-save").addEventListener("click", () => { setServer($("server-url").value); localStorage.setItem(SERVER_MANUAL_KEY, "1"); toast("Server saved"); });
   $("start-btn").addEventListener("click", async () => {
     if (!confirm("Create a NEW Ink account?\n\nIf you've set up a frame before, tap Cancel and use “I already have an account” to restore it — a new account won't show your existing frame.")) return;
     try { const { token: t } = await api("/account", { method: "POST", auth: false }); localStorage.setItem(TOKEN_KEY, t); toast("New account created"); await showHome(); }
-    catch (e) { showError("welcome-error", e); $("server-details").open = true; }
+    catch (e) { showError("welcome-error", e); }
   });
-  // Gear on the welcome screen (no account yet): opens the server-address setting.
-  $("welcome-settings-btn").addEventListener("click", () => {
-    const d = $("server-details");
-    d.open = true;
-    d.scrollIntoView({ behavior: "smooth", block: "center" });
-    $("server-url").focus();
-  });
+  // Gear on the welcome screen (no account yet): a small settings screen with the
+  // server address — same pattern as the in-app settings screens.
+  $("welcome-settings-btn").addEventListener("click", showSetup);
+  $("setup-back").addEventListener("click", () => go("welcome"));
   $("restore-btn").addEventListener("click", async () => {
     const t = $("restore-token").value.trim(); if (!t) return;
     localStorage.setItem(TOKEN_KEY, t);
     try { await api("/account"); await showHome(); }
     catch (e) { localStorage.removeItem(TOKEN_KEY); showError("welcome-error", e); }
   });
+}
+
+// Pre-sign-in settings (welcome gear): server address + app version.
+function showSetup() {
+  $("server-url").value = serverBase();
+  $("setup-version").textContent = APP_VERSION;
+  go("setup");
 }
 
 // --------------------------------------------------------------------------
@@ -1781,7 +1784,7 @@ async function init() {
     go("welcome");
     api("/account", { method: "POST", auth: false })
       .then(({ token: t }) => { localStorage.setItem(TOKEN_KEY, t); syncByCode(code); })
-      .catch((e) => { showError("welcome-error", e); $("server-details").open = true; });
+      .catch((e) => showError("welcome-error", e));
   } else go("welcome");
   if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 }
