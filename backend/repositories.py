@@ -297,13 +297,23 @@ def clear_ota_result(device_id: str) -> None:
 
 
 def take_pending_command(device_id: str) -> str:
-    """Read + clear the pending command (delivered exactly once)."""
+    """Read + clear the pending command (delivered exactly once). The read+clear
+    runs inside one write transaction — the connection is otherwise autocommit, and
+    two overlapping polls could both read the command before either cleared it
+    (double-delivering e.g. a factory reset)."""
     with get_connection() as conn:
-        row = conn.execute("SELECT pending_command FROM devices WHERE id = ?",
-                           (device_id,)).fetchone()
-        cmd = (row["pending_command"] if row else "") or ""
-        if cmd:
-            conn.execute("UPDATE devices SET pending_command = '' WHERE id = ?", (device_id,))
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            row = conn.execute("SELECT pending_command FROM devices WHERE id = ?",
+                               (device_id,)).fetchone()
+            cmd = (row["pending_command"] if row else "") or ""
+            if cmd:
+                conn.execute("UPDATE devices SET pending_command = '' WHERE id = ?",
+                             (device_id,))
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
         return cmd
 
 

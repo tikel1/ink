@@ -165,6 +165,18 @@ def init_db() -> None:
         _migrate(conn, "devices", _MIGRATIONS)
         _migrate(conn, "accounts", _ACCOUNT_MIGRATIONS)
         _migrate(conn, "daily_artwork", _ARTWORK_MIGRATIONS)
+        # Indexes for the hot lookups (token on every authed call, pairing code on
+        # pair, account_id on every device list). All non-unique: enforcing UNIQUE
+        # retroactively would abort startup on any legacy DB with duplicate rows,
+        # and lookup speed doesn't need it.
+        conn.executescript("""
+            CREATE INDEX IF NOT EXISTS idx_accounts_token_hash ON accounts(token_hash);
+            CREATE INDEX IF NOT EXISTS idx_devices_pairing_code ON devices(pairing_code);
+            CREATE INDEX IF NOT EXISTS idx_devices_account_id ON devices(account_id);
+        """)
+        # WAL: readers don't block behind writers (frame polls + app requests
+        # overlap constantly). Sticky once set.
+        conn.execute("PRAGMA journal_mode=WAL;")
 
 
 @contextmanager

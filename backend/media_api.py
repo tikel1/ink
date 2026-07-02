@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from urllib.parse import quote
 
 from fastapi import APIRouter
@@ -37,6 +38,12 @@ async def _run_frame_generation(device) -> None:
         jobs.set_state(device.id, jobs.ERROR)
 
 
+# Strong references to in-flight generation tasks. asyncio only keeps a weak
+# reference to tasks, so a fire-and-forget create_task can be garbage-collected
+# mid-await — the generation would vanish silently with the job stuck RUNNING.
+_gen_tasks: dict[str, asyncio.Task] = {}
+
+
 def _maybe_start_generation(device) -> bool:
     """Frame-driven handshake: a paired frame that polls while its daily update is
     due kicks generation right then (proof it's awake + reachable). Deduped via the
@@ -46,7 +53,13 @@ def _maybe_start_generation(device) -> bool:
     if not _is_due(device, get_settings().generation_lead_minutes):
         return False
     jobs.set_state(device.id, jobs.RUNNING)
-    asyncio.create_task(_run_frame_generation(device))
+    try:
+        task = asyncio.create_task(_run_frame_generation(device))
+    except RuntimeError:  # event loop shutting down — don't leave RUNNING stuck
+        jobs.set_state(device.id, jobs.IDLE)
+        return False
+    _gen_tasks[device.id] = task
+    task.add_done_callback(lambda _t, _id=device.id: _gen_tasks.pop(_id, None))
     logger.info("frame-driven generation started for %s", device.id)
     return True
 
@@ -94,6 +107,14 @@ async def current_version(
     actually changed (avoids constant e-ink refreshes). Also counts as a check-in;
     the frame piggybacks its telemetry (battery V, Wi-Fi RSSI, firmware) as query
     params so the app can show them."""
+    # Sanitize telemetry: drop absurd values (NaN/inf/garbage) instead of storing
+    # them, but never reject the poll — the check-in itself must always land.
+    if bat is not None and not (0.0 <= bat <= 10.0):
+        bat = None
+    if rssi is not None and not (-150 <= rssi <= 20):
+        rssi = None
+    if fw is not None and len(fw) > 32:
+        fw = None
     repositories.update_telemetry(device_id, battery=bat, wifi_rssi=rssi, fw_version=fw)
     device = repositories.get_device(device_id)
     if device is not None and device.status != "paired":
@@ -170,8 +191,14 @@ async def report_ota_result(device_id: str, code: int = 0) -> Response:
     return Response(content="ok", media_type="text/plain")
 
 
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
 @router.get("/archive/{device_id}/{date}.png")
 async def archive(device_id: str, date: str) -> Response:
+    # Strict date shape — never let a crafted value reach the path builder.
+    if not _DATE_RE.match(date):
+        return Response(status_code=404)
     path = generation.archive_image_path(device_id, date)
     if path.exists():
         return FileResponse(path, media_type=PNG)

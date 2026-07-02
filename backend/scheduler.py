@@ -13,7 +13,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from artframe.timeutil import now_in_tz
 
-from . import artwork_repo, repositories
+from . import artwork_repo, jobs, repositories
 from .config import get_settings
 from .generation import generate_for_device
 
@@ -42,6 +42,13 @@ async def run_due_generations() -> None:
         try:
             if not _is_due(device, lead):
                 continue
+            # Mutual exclusion with the frame-driven path (media_api) via the shared
+            # job state: whoever flips RUNNING first owns the generation. Without
+            # this, a .ver poll landing while the scheduler is mid-await would start
+            # a SECOND generation for the same device — double image cost.
+            if jobs.get(device.id).get("state") == jobs.RUNNING:
+                logger.info("skip %s: a generation is already running", device.id)
+                continue
             if not _reachable(device):
                 # Due, but the frame isn't online — don't spend a generation on a
                 # frame that can't show it. We'll generate on a later tick once it
@@ -50,9 +57,17 @@ async def run_due_generations() -> None:
                             device.id, device.last_seen)
                 continue
             logger.info("generating for %s", device.id)
-            await generate_for_device(device, trigger="auto")
-            today = now_in_tz(device.tz).date().isoformat()
-            repositories.mark_auto_generated(device.id, today)
+            jobs.set_state(device.id, jobs.RUNNING)
+            ok = False
+            try:
+                ok = await generate_for_device(device, trigger="auto")
+            finally:
+                # Never leave RUNNING stuck (that would block all future runs and
+                # keep the frame awake) — settle the state whatever happened.
+                jobs.set_state(device.id, jobs.DONE if ok else jobs.ERROR)
+            if ok:
+                today = now_in_tz(device.tz).date().isoformat()
+                repositories.mark_auto_generated(device.id, today)
         except Exception:  # noqa: BLE001
             logger.exception("scheduler tick failed for %s", device.id)
 

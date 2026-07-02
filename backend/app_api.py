@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import json
+import secrets
+import time
+from collections import deque
 
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -64,8 +67,23 @@ class ConfigUpdate(BaseModel):
 # --------------------------------------------------------------------------- #
 # Accounts + keys
 # --------------------------------------------------------------------------- #
+# Light in-memory throttle on anonymous account minting (an open endpoint by
+# design — the app's "Get started"). Bounds DB-bloat/token-farming without a new
+# dependency; per-process is fine on the single Fly machine.
+_MINT_WINDOW_S = 3600
+_MINT_MAX_PER_WINDOW = 20
+_mint_times: deque[float] = deque()
+
+
 @router.post("/account")
 async def create_account():
+    now = time.monotonic()
+    while _mint_times and now - _mint_times[0] > _MINT_WINDOW_S:
+        _mint_times.popleft()
+    if len(_mint_times) >= _MINT_MAX_PER_WINDOW:
+        raise HTTPException(status_code=429,
+                            detail="Too many new accounts right now — try again later.")
+    _mint_times.append(now)
     account, token = auth.create_account()
     return {"account_id": account.id, "token": token}
 
@@ -165,10 +183,36 @@ def _parse_other_events(raw: str | None) -> list:
         return []
 
 
+# Manual regenerations are the one user action that spends real money. Cap them
+# per device per day (resets at local midnight with the date key) — generous for
+# real use, a wall against a stuck finger / a leaked token.
+_REGEN_DAILY_CAP = 20
+_regen_counts: dict[str, tuple[str, int]] = {}   # device_id -> (date, count)
+
+
+def _regen_allowed(device: Device) -> bool:
+    from artframe.timeutil import now_in_tz
+    today = now_in_tz(device.tz).date().isoformat()
+    date_key, count = _regen_counts.get(device.id, (today, 0))
+    if date_key != today:
+        count = 0
+    if count >= _REGEN_DAILY_CAP:
+        return False
+    _regen_counts[device.id] = (today, count + 1)
+    return True
+
+
 @router.post("/devices/{device_id}/regenerate")
 async def regenerate(device_id: str, background: BackgroundTasks,
                      account: Account = auth.AccountDep):
     device = _owned(device_id, account)
+    # One at a time: racing a second generation would double the image cost and
+    # the two would fight over the same output file.
+    if jobs.get(device.id).get("state") == jobs.RUNNING:
+        raise HTTPException(status_code=409, detail="Already creating — hang on.")
+    if not _regen_allowed(device):
+        raise HTTPException(status_code=429,
+                            detail="Daily generation limit reached — try again tomorrow.")
     jobs.set_state(device.id, jobs.RUNNING)
     background.add_task(_run_generation, device)
     return {"status": jobs.RUNNING,
@@ -230,13 +274,17 @@ async def unbind(device_id: str, account: Account = auth.AccountDep):
 # --------------------------------------------------------------------------- #
 # Admin (flip own-key-required remotely)
 # --------------------------------------------------------------------------- #
+def _check_admin(x_admin_token: str | None) -> None:
+    """Constant-time admin-token check (a plain != leaks timing information)."""
+    admin = getattr(get_settings(), "admin_token", "")
+    if not admin or not secrets.compare_digest(x_admin_token or "", admin):
+        raise HTTPException(status_code=403, detail="admin only")
+
+
 @router.post("/admin/accounts/{account_id}/require-own-key")
 async def require_own_key(account_id: str, required: bool = True,
                           x_admin_token: str | None = Header(default=None)):
-    settings = get_settings()
-    admin = getattr(settings, "admin_token", "")
-    if not admin or x_admin_token != admin:
-        raise HTTPException(status_code=403, detail="admin only")
+    _check_admin(x_admin_token)
     if repositories.get_account(account_id) is None:
         raise HTTPException(status_code=404, detail="account not found")
     repositories.set_key_required(account_id, required)
@@ -250,10 +298,7 @@ async def publish_firmware(version: str, request: Request,
     gated (disabled when ADMIN_TOKEN is unset). Body = the raw .bin; the md5 is
     computed server-side. Lets us push releases to a remote (e.g. Fly) over
     HTTPS without filesystem access."""
-    settings = get_settings()
-    admin = getattr(settings, "admin_token", "")
-    if not admin or x_admin_token != admin:
-        raise HTTPException(status_code=403, detail="admin only")
+    _check_admin(x_admin_token)
     if not version or len(version) > 32:
         raise HTTPException(status_code=400, detail="bad version")
     data = await request.body()

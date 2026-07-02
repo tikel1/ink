@@ -142,10 +142,16 @@ button { font-family: inherit; }
   font-size: 15px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--ink);
   transition: transform .12s var(--ease), box-shadow .2s, background .2s, opacity .2s;
 }
+/* Keyboard affordance: one consistent focus ring, everywhere (invisible for
+   mouse/touch — :focus-visible only). */
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 4px;
+}
+
 .btn-primary { background: var(--ink); color: var(--paper);
                box-shadow: var(--shadow), 0 8px 26px -10px rgba(var(--glow), .45); }
-.btn-primary:hover { box-shadow: var(--shadow-lg); }
-.btn-primary:active { transform: scale(.978); }
+.btn-primary:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); }
+.btn-primary:active { transform: scale(.978); box-shadow: var(--shadow); }
 .btn-ghost { background: transparent; color: var(--ink); }
 .btn-ghost:hover { background: rgba(27,24,19,.05); }
 .btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
@@ -549,14 +555,23 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .home-carousel.reordering { scroll-snap-type: none; scroll-behavior: auto; touch-action: none; }
 .home-card { flex: 0 0 100%; min-width: 0; scroll-snap-align: center;
              display: flex; flex-direction: column; justify-content: flex-start;
-             transition: transform .18s var(--ease), opacity .18s var(--ease); }
+             transition: transform .18s var(--ease), opacity .18s var(--ease);
+             animation: card-settle .5s var(--ease) both; }
+@keyframes card-settle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+/* Gentle gallery-wall hover on pointer devices: the framed print lifts a touch. */
+@media (hover: hover) {
+  .home-card .gallery-frame { transition: transform .25s var(--ease); }
+  .home-card .gallery-frame:hover { transform: translateY(-2px); }
+}
 .home-card.dragging { transform: scale(1.04); opacity: .92; z-index: 2;
                       filter: drop-shadow(0 14px 28px rgba(27,24,19,.28)); }
 .home-card.shift-left { transform: translateX(-8%); }
 .home-card.shift-right { transform: translateX(8%); }
 /* Swipe affordance shown only with 2+ frames. */
-.swipe-hint { font-family: "Inter"; font-size: 12px; font-weight: 600; color: var(--muted);
-              letter-spacing: .04em; text-align: center; margin: 0 0 2px; }
+.swipe-hint { font-family: "Inter"; font-size: 11.5px; font-weight: 600; color: var(--muted);
+              letter-spacing: .06em; text-transform: uppercase; text-align: center;
+              margin: 0 0 2px; opacity: .8; transition: opacity .6s var(--ease); }
+.swipe-hint.seen { opacity: 0; }          /* fades away once the user has swiped */
 .swipe-hint[hidden] { display: none; }
 
 /* Fine-art print frame — slim walnut molding, wide white mat, soft wall shadow
@@ -679,9 +694,10 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
 .art-card.is-portrait img { position: absolute; top: 50%; left: 50%; width: 100cqh; height: 100cqw;
             max-width: none; transform: translate(-50%, -50%) rotate(90deg); transform-origin: center; }
 .art-empty { color: var(--muted); text-align: center; font-size: 14px; line-height: 1.6; padding: 40px 18px; }
-.dots { display: flex; justify-content: center; gap: 6px; margin: 10px 0 4px; min-height: 6px; }
-.dot-i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: all .25s var(--ease); }
-.dot-i.on { background: var(--ink); width: 18px; border-radius: 3px; }
+.dots { display: flex; justify-content: center; gap: 7px; margin: 10px 0 4px; min-height: 6px; }
+.dot-i { width: 6px; height: 6px; border-radius: 999px; background: var(--line);
+         transition: width .3s var(--ease), background .3s var(--ease); }
+.dot-i.on { background: var(--ink); width: 20px; }
 
 /* ── Frame screen: a big preview + a page that scrolls ─────────────────
    The artwork gets a large fixed size; status, placard, "also", controls + nav
@@ -822,10 +838,10 @@ h4.sub { font-size: 13px; font-weight: 600; color: var(--muted); margin: 18px 0 
 .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom));
          transform: translateX(-50%) translateY(20px); z-index: 50;
          background: var(--ink); color: var(--paper); padding: 13px 20px; border-radius: 999px;
-         font-size: 14px; font-weight: 500; box-shadow: var(--shadow-lg); opacity: 0;
+         font-size: 14px; font-weight: 500; box-shadow: var(--shadow-lg),
+         inset 0 0 0 1px rgba(255,255,255,.06); opacity: 0; pointer-events: none;
          transition: opacity .3s, transform .3s var(--ease); max-width: 90vw; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-.toast[hidden] { display: block; }
 
 /* ── Lightbox (zoom an artwork) ───────────────────────────────────────── */
 .lightbox { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center;
