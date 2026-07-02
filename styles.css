@@ -331,8 +331,21 @@ input:focus, select:focus { outline: none; border-color: var(--ink);
 .actions { margin: 22px 0 8px; }
 .actions-row { display: flex; gap: 12px; margin-top: 26px; }
 /* Frame controls: circular icon buttons (Refresh, Sleep) flanking Regenerate. */
-.frame-controls { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 26px; }
-.frame-controls .btn-primary { flex: 1; max-width: 260px; margin: 0; }
+/* Generate is the hero (full width); Refresh + Sleep sit under it as two equal
+   labeled buttons — labeled, because bare icon circles read as decoration. */
+.frame-controls { display: flex; flex-direction: column; gap: 10px; margin-top: 26px; }
+.frame-controls .btn-primary { margin: 0; }
+.frame-subactions { display: flex; gap: 10px; }
+.btn-sub { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+           padding: 11px 14px; border-radius: var(--radius-sm); background: var(--paper-2);
+           border: 1.5px solid var(--line); font: inherit; font-size: 14px; font-weight: 600;
+           color: var(--ink-soft); cursor: pointer;
+           transition: background .2s, box-shadow .2s, transform .12s var(--ease), opacity .2s; }
+.btn-sub svg { width: 17px; height: 17px; flex: none; }
+.btn-sub:hover { background: var(--paper); box-shadow: var(--shadow); }
+.btn-sub:active { transform: scale(.97); }
+.btn-sub:disabled { opacity: .4; cursor: default; box-shadow: none; }
+.btn-sub.busy svg { animation: spin 1s linear infinite; }
 .icon-action { flex: none; width: 52px; height: 52px; border-radius: 50%; cursor: pointer;
                border: 1.5px solid var(--line); background: var(--paper-2); color: var(--ink);
                display: inline-flex; align-items: center; justify-content: center;
@@ -356,6 +369,7 @@ input:focus, select:focus { outline: none; border-color: var(--ink);
 .nav-row:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
 .nav-row:active { transform: scale(.99); }
 .nav-ico { font-size: 20px; width: 26px; text-align: center; }
+.nav-ico svg { width: 20px; height: 20px; display: block; margin: 0 auto; color: var(--ink-soft); }
 .nav-col { flex: 1; display: flex; flex-direction: column; }
 .nav-t { font-family: "Fraunces"; font-size: 16px; font-weight: 600; }
 .nav-s { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
