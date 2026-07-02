@@ -180,7 +180,15 @@
       <div class="gallery" id="gallery"></div>
       <div class="dots" id="gallery-dots"></div>
 
-      <div class="status-line"><span class="dot" id="fr-dot"></span><span id="fr-status">—</span></div>
+      <div class="status-line">
+        <button id="refresh-btn" type="button" class="mini-action" aria-label="Refresh the frame" title="Refresh the frame">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-.9 4.5M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <span class="status-cluster"><span class="dot" id="fr-dot"></span><span id="fr-status">—</span></span>
+        <button id="sleep-btn" type="button" class="mini-action" aria-label="Sleep the frame" title="Sleep the frame">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
 
       <div class="frame-alert" id="frame-alert" hidden></div>
 
@@ -201,16 +209,6 @@
 
       <div class="frame-controls">
         <button id="regen-btn" type="button" class="btn-primary">Generate</button>
-        <div class="frame-subactions">
-          <button id="refresh-btn" type="button" class="btn-sub" title="Refresh the frame">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-.9 4.5M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>Refresh</span>
-          </button>
-          <button id="sleep-btn" type="button" class="btn-sub" title="Sleep the frame">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>Sleep</span>
-          </button>
-        </div>
       </div>
       <p id="refresh-hint" class="sleep-hint center-text" hidden></p>
 

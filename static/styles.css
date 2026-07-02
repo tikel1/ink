@@ -331,21 +331,20 @@ input:focus, select:focus { outline: none; border-color: var(--ink);
 .actions { margin: 22px 0 8px; }
 .actions-row { display: flex; gap: 12px; margin-top: 26px; }
 /* Frame controls: circular icon buttons (Refresh, Sleep) flanking Regenerate. */
-/* Generate is the hero (full width); Refresh + Sleep sit under it as two equal
-   labeled buttons — labeled, because bare icon circles read as decoration. */
+/* Generate is the hero (full width); Refresh + Sleep live as small round icon
+   buttons flanking the status line right under the image. */
 .frame-controls { display: flex; flex-direction: column; gap: 10px; margin-top: 26px; }
 .frame-controls .btn-primary { margin: 0; }
-.frame-subactions { display: flex; gap: 10px; }
-.btn-sub { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-           padding: 11px 14px; border-radius: var(--radius-sm); background: var(--paper-2);
-           border: 1.5px solid var(--line); font: inherit; font-size: 14px; font-weight: 600;
-           color: var(--ink-soft); cursor: pointer;
-           transition: background .2s, box-shadow .2s, transform .12s var(--ease), opacity .2s; }
-.btn-sub svg { width: 17px; height: 17px; flex: none; }
-.btn-sub:hover { background: var(--paper); box-shadow: var(--shadow); }
-.btn-sub:active { transform: scale(.97); }
-.btn-sub:disabled { opacity: .4; cursor: default; box-shadow: none; }
-.btn-sub.busy svg { animation: spin 1s linear infinite; }
+.mini-action { flex: none; width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+               display: inline-flex; align-items: center; justify-content: center;
+               background: var(--paper-2); border: 1.5px solid var(--line); color: var(--ink-soft);
+               transition: background .2s, box-shadow .2s, transform .12s var(--ease), opacity .2s; }
+.mini-action svg { width: 16px; height: 16px; display: block; }
+.mini-action:hover { background: var(--paper); box-shadow: var(--shadow); }
+.mini-action:active { transform: scale(.92); }
+.mini-action:disabled { opacity: .4; cursor: default; box-shadow: none; }
+.mini-action.busy svg { animation: spin 1s linear infinite; }
+.status-cluster { display: inline-flex; align-items: center; gap: 8px; }
 .icon-action { flex: none; width: 52px; height: 52px; border-radius: 50%; cursor: pointer;
                border: 1.5px solid var(--line); background: var(--paper-2); color: var(--ink);
                display: inline-flex; align-items: center; justify-content: center;
@@ -733,16 +732,19 @@ label .optional { color: var(--muted); font-weight: 400; text-transform: none; l
    pan is native scrolling; the pull-to-refresh engages only at scrollTop 0. */
 .frame-screen { display: flex; flex-direction: column; touch-action: pan-y; }
 /* flex:0 0 auto → the gallery is exactly as tall as the artwork; it never grows
-   to fill leftover height (which would float a short landscape card in a big gap). */
-.frame-screen .gallery { flex: 0 0 auto; align-items: center; margin: 4px -20px 0; padding: 6px 0; touch-action: pan-x; }
-.frame-screen .slide { height: auto; }
-/* Portrait: tall image. Landscape: fills the card width (short + centered). Each
-   orientation sizes itself — nothing is forced to portrait proportions. */
-.frame-screen .art-card.is-portrait { height: 66dvh; }
+   to fill leftover height (which would float a short landscape card in a big gap).
+   Vertical padding gives the card's drop shadow room inside the overflow clip
+   (fitGalleryHeight adds it back when pinning the height). */
+.frame-screen .gallery { flex: 0 0 auto; align-items: center; margin: 4px -20px 0;
+                         padding: 10px 0 26px; touch-action: pan-x; }
+.frame-screen .slide { height: auto; padding: 0 26px; }
+/* Portrait: tall image (but not towering). Landscape: fills the card width
+   (short + centered). Each orientation sizes itself. */
+.frame-screen .art-card.is-portrait { height: 54dvh; }
 .frame-screen .art-card:not(.is-portrait) { width: 100%; }
 .frame-screen .art-card:not(.is-portrait) img { display: block; width: 100%; height: auto; max-height: 72dvh; margin: 0 auto; }
 .frame-screen .artframe { margin: 4px 0 12px; }
-.status-line { display: flex; align-items: center; justify-content: center; gap: 8px;
+.status-line { display: flex; align-items: center; justify-content: center; gap: 14px;
                font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin: 6px 0 8px; }
 .placard { padding: 0 6px; flex: none; }
 .placard-body { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
